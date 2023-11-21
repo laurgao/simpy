@@ -1,11 +1,15 @@
-from dataclasses import dataclass
+# TODO: tasks for the future:
+# - method to convert from our expression to sympy for testing
+
+from dataclasses import dataclass, fields
 from typing import List
+from fractions import Fraction
 
 
 def _cast(x):
-    if type(x) == int:
+    if type(x) == int or isinstance(x, Fraction):
         return Const(x)
-    elif isinstance(x, Expr) or type(x) == bool:
+    elif isinstance(x, Expr):
         return x
     else:
         raise NotImplementedError(f"Cannot cast {x} to Expr")
@@ -13,12 +17,19 @@ def _cast(x):
 
 def cast(func):
     def wrapper(*args) -> "Expr":
-        return _cast(func(*[_cast(a) for a in args]))
+        return func(*[_cast(a) for a in args])
 
     return wrapper
 
 
 class Expr:
+    def __post_init__(self):
+        # if any field is an Expr, cast it
+        # note: does not cast List[Expr]
+        for field in fields(self):
+            if field.type is Expr:
+                setattr(self, field.name, _cast(getattr(self, field.name)))
+
     # should be overwritten in subclasses
     def simplify(self):
         return self
@@ -43,16 +54,33 @@ class Expr:
     def __rpow__(self, other):
         return Power(other, self)
 
+    @cast
+    def __div__(self, other):
+        return Prod([self, Power(other, -1)])
+    
+    @cast
+    def __truediv__(self, other):
+        return Prod([self, Power(other, -1)])
+    
+    @cast
+    def __rdiv__(self, other):
+        return Prod([other, Power(self, -1)])
+    
+    @cast
+    def __rtruediv__(self, other):
+        return Prod([other, Power(self, -1)])
+
 
 @dataclass
 class Const(Expr):
-    value: int
+    value: Fraction
 
     def __post_init__(self):
-        assert type(self.value) == int, f"got value={self.value} not allowed Const"
+        assert isinstance(self.value, Fraction) or type(self.value) == int, f"got value={self.value} not allowed Const"
+        self.value = Fraction(self.value)
 
     def __repr__(self):
-        return repr(self.value)
+        return str(self.value)
 
     @cast
     def __eq__(self, other):
@@ -80,7 +108,8 @@ class Sum(Expr):
         s = Sum([t.simplify() for t in self.terms if t.simplify() != 0])
         return s.terms[0] if len(s.terms) == 1 else s  # no 1-term sums
 
-        # todo: combine like terms
+        # TODO: combine like terms
+        # TODO: flatten sums
 
     def __repr__(self):
         return "(" + " + ".join(map(repr, self.terms)) + ")"
@@ -119,7 +148,7 @@ class Power(Expr):
         else:
             return Power(self.base.simplify(), x)
 
-        # todo: expand
+        # TODO: expand
 
 
 def symbols(symbols: str):
@@ -152,20 +181,34 @@ def integrate(expr: Expr, var: Symbol):
     # - heuristic transformations
 
     # start with polynomials
-    pass
+    if isinstance(expr, Sum):
+        return Sum([integrate(e, var) for e in expr.terms])
+    elif isinstance(expr, Prod) and any([isinstance(e.simplify(), Const) for e in expr.terms]):
+        # if there is a constant, pull it out
+        coeff = 1
+        new_terms = []
+        for e in expr.terms:
+            e = e.simplify()
+            if isinstance(e, Const):
+                coeff *= e.value
+            else:
+                new_terms.append(e)
 
-
-def _integrate_power(expr: Expr, var: Symbol):
-    "Integrate smtn using the power rule"
-    if not (
-        isinstance(expr, Power)
-        and expr.base == var
-        and isinstance(expr.exponent, Const)
-    ):
-        raise ValueError(f"Cannot integrate {expr} using power rule")
-
-    n = expr.exponent.value
-    return (1 / (n + 1)) * Power(var, Const(n + 1))
+        if coeff == 0:
+            return Const(0)
+        return coeff * integrate(Prod(new_terms).simplify(), var)
+    elif isinstance(expr, Power):
+        if expr.base == var and isinstance(expr.exponent, Const):
+            n = expr.exponent
+            return (1 / (n + 1)) * Power(var, n + 1)
+        else:
+            raise NotImplementedError(f"Cannot integrate {expr}")
+    elif isinstance(expr, Symbol):
+        return (1 / 2) * Power(var, 2) if expr == var else expr * var
+    elif isinstance(expr, Const):
+        return expr * var
+    else:
+        raise NotImplementedError(f"Cannot integrate {expr}")
 
 
 # lisp expressions
@@ -174,5 +217,6 @@ def _integrate_power(expr: Expr, var: Symbol):
 
 if __name__ == "__main__":
     x, y = symbols("x y")
-    print((x + y) * 3)
-    print(diff((x + y) * 3, x).simplify())
+    # print((x + y) * 3)
+    # print(diff((x + y) * 3, x).simplify())
+    print(integrate(3 * x ** 4 + 2 * x ** 3 + 1, x).simplify())
