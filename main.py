@@ -2,10 +2,10 @@
 # - method to convert from our expression to sympy for testing
 
 from dataclasses import dataclass, fields
-from typing import List
+from typing import List, Tuple
 from fractions import Fraction
 from functools import reduce
-
+import itertools
 
 def _cast(x):
     if type(x) == int or isinstance(x, Fraction):
@@ -111,8 +111,8 @@ class Sum(Expr):
         # flatten sub-sums
         if all(isinstance(t, (Sum, Symbol, Const)) for t in s.terms):
             new = []
-            for t in s.terms:
-                new += t.terms if isinstance(t, Sum) else [t]
+            for term in s.terms:
+                new += term.terms if isinstance(term, Sum) else [term]
             s = Sum(new)
 
         # accumulate all constants
@@ -120,13 +120,48 @@ class Sum(Expr):
         if const != 0:
             s = Sum([Const(const)] + [t for t in s.terms if not isinstance(t, Const)])
 
-        return s.terms[0] if len(s.terms) == 1 else s  # no 1-term sums
 
-        # TODO: combine like terms
-        # TODO: flatten sums
+        new_terms = []
+
+        for i, term in enumerate(s.terms):
+            if term is None:
+                continue
+
+            new_coeff, non_const_factors1 = _deconstruct(term)
+
+            # check if any later terms are the same
+            for j in range(i+1, len(s.terms)):
+                if s.terms[j] is None:
+                    continue
+
+                term2 = s.terms[j]
+                coeff2, non_const_factors2 = _deconstruct(term2)
+
+                if (non_const_factors1 == non_const_factors2):
+                    new_coeff += coeff2
+                    s.terms[j] = None
+
+            new_terms.append(Prod([new_coeff] + non_const_factors1).simplify())
+
+        # get rid of 1-term sums
+        return new_terms[0] if len(new_terms) == 1 else Sum(new_terms)
+
 
     def __repr__(self):
         return "(" + " + ".join(map(repr, self.terms)) + ")"
+
+
+def _deconstruct(expr: Expr) -> Tuple[Const, List[Expr]]:
+    # turns smtn into a constant and a list of other terms
+    # assume expr is simplified
+    if isinstance(expr, Prod):
+        # simplifying the product puts the constants at the front
+        non_const_factors = expr.terms[1:] if isinstance(expr.terms[0], Const) else expr.terms
+        coeff = expr.terms[0] if isinstance(expr.terms[0], Const) else Const(1)
+    else:
+        non_const_factors = [expr]
+        coeff = Const(1)
+    return (coeff, non_const_factors)
 
 
 @dataclass
@@ -157,6 +192,25 @@ class Prod(Expr):
 
             return p.terms[0] if len(p.terms) == 1 else p  # no 1-term prod
 
+    @cast
+    def expand(self):
+        # simplify first in order to flatten
+        self = self.simplify()
+
+        sums = [t for t in self.terms if isinstance(t, Sum)]
+        other = [t for t in self.terms if not isinstance(t, Sum)]
+
+        if not sums:
+            return self
+
+        # for every combination of terms in the sums, multiply them and add
+        # (using itertools)
+        expanded = []
+        for terms in itertools.product(*[s.terms for s in sums]):
+            expanded.append(Prod(terms).simplify())
+
+        return (Prod(other) * Sum(expanded)).simplify() if other else Sum(expanded).simplify()
+
 
 @dataclass
 class Power(Expr):
@@ -166,6 +220,7 @@ class Power(Expr):
     def __repr__(self):
         return f"{self.base}^{self.exponent}"
 
+    @cast
     def simplify(self):
         x = self.exponent.simplify()
         b = self.base.simplify()
@@ -178,7 +233,12 @@ class Power(Expr):
         else:
             return Power(self.base.simplify(), x)
 
-    # TODO: expand (a different method)
+    @cast
+    def expand(self):
+        assert isinstance(self.exponent, Const) and self.exponent.value.denominator == 1 and self.exponent.value >= 1, f"Cannot expand {self}"
+
+        return Prod([self.base] * self.exponent.value.numerator).expand()
+
 
 
 def symbols(symbols: str):
@@ -249,4 +309,5 @@ if __name__ == "__main__":
     x, y = symbols("x y")
     # print((x + y) * 3)
     # print(diff((x + y) * 3, x).simplify())
-    print(integrate(3 * x ** 4 + 2 * x ** 3 + 1, x).simplify())
+    # print(integrate((x + 2)**2, x))
+    print(((x + 2)**3).expand())
