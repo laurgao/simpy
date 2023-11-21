@@ -4,6 +4,7 @@
 from dataclasses import dataclass, fields
 from typing import List
 from fractions import Fraction
+from functools import reduce
 
 
 def _cast(x):
@@ -106,6 +107,19 @@ class Sum(Expr):
     @cast
     def simplify(self):
         s = Sum([t.simplify() for t in self.terms if t.simplify() != 0])
+
+        # flatten sub-sums
+        if all(isinstance(t, (Sum, Symbol, Const)) for t in s.terms):
+            new = []
+            for t in s.terms:
+                new += t.terms if isinstance(t, Sum) else [t]
+            s = Sum(new)
+
+        # accumulate all constants
+        const = sum(t.value for t in s.terms if isinstance(t, Const))
+        if const != 0:
+            s = Sum([Const(const)] + [t for t in s.terms if not isinstance(t, Const)])
+
         return s.terms[0] if len(s.terms) == 1 else s  # no 1-term sums
 
         # TODO: combine like terms
@@ -128,6 +142,19 @@ class Prod(Expr):
             return 0
         else:
             p = Prod([t.simplify() for t in self.terms if t.simplify() != 1])
+
+            # flatten sub-products
+            if all(isinstance(t, (Prod, Symbol, Const)) for t in p.terms):
+                new = []
+                for t in p.terms:
+                    new += t.terms if isinstance(t, Prod) else [t]
+                p = Prod(new)
+
+            # accumulate constants
+            const = reduce(lambda x,y: x*y, [t.value for t in p.terms if isinstance(t, Const)], 1)
+            if const != 1:
+                p = Prod([Const(const)] + [t for t in p.terms if not isinstance(t, Const)])
+
             return p.terms[0] if len(p.terms) == 1 else p  # no 1-term prod
 
 
@@ -137,18 +164,21 @@ class Power(Expr):
     exponent: Expr
 
     def __repr__(self):
-        return f"({self.base}^{self.exponent})"
+        return f"{self.base}^{self.exponent}"
 
     def simplify(self):
         x = self.exponent.simplify()
+        b = self.base.simplify()
         if x == 0:
             return Const(1)
         elif x == 1:
-            return self.base.simplify()
+            return b
+        elif isinstance(b, Const) and isinstance(x, Const):
+            return Const(b.value ** x.value)
         else:
             return Power(self.base.simplify(), x)
 
-        # TODO: expand
+    # TODO: expand (a different method)
 
 
 def symbols(symbols: str):
