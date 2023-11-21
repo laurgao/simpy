@@ -2,7 +2,7 @@
 # - method to convert from our expression to sympy for testing
 
 from dataclasses import dataclass, fields
-from typing import List, Tuple
+from typing import List, Tuple, Dict
 from fractions import Fraction
 from functools import reduce
 import itertools
@@ -72,6 +72,18 @@ class Expr:
         return Prod([other, Power(self, -1)])
 
 
+class Associative():
+    def flatten(self):
+        # if children are foldable, flatten them
+        if all(isinstance(t, (self.__class__, Symbol, Const)) for t in self.terms):
+            new_terms = []
+            for t in self.terms:
+                new_terms += t.terms if isinstance(t, Prod) else [t]
+            return self.__class__(new_terms)
+        else:
+            return self
+
+
 @dataclass
 class Const(Expr):
     value: Fraction
@@ -101,19 +113,15 @@ class Symbol(Expr):
 
 
 @dataclass
-class Sum(Expr):
+class Sum(Expr, Associative):
     terms: List[Expr]
 
     @cast
     def simplify(self):
-        s = Sum([t.simplify() for t in self.terms if t.simplify() != 0])
+        # TODO: this currently would not combine terms like (2+x) and (x+2)
 
-        # flatten sub-sums
-        if all(isinstance(t, (Sum, Symbol, Const)) for t in s.terms):
-            new = []
-            for term in s.terms:
-                new += term.terms if isinstance(term, Sum) else [term]
-            s = Sum(new)
+        # simplify subexprs and flatten sub-sums
+        s = Sum([t.simplify() for t in self.terms if t.simplify() != 0]).flatten()
 
         # accumulate all constants
         const = sum(t.value for t in s.terms if isinstance(t, Const))
@@ -121,13 +129,13 @@ class Sum(Expr):
             s = Sum([Const(const)] + [t for t in s.terms if not isinstance(t, Const)])
 
 
+        # accumulate all like terms
         new_terms = []
-
         for i, term in enumerate(s.terms):
             if term is None:
                 continue
 
-            new_coeff, non_const_factors1 = _deconstruct(term)
+            new_coeff, non_const_factors1 = _deconstruct_prod(term)
 
             # check if any later terms are the same
             for j in range(i+1, len(s.terms)):
@@ -135,7 +143,7 @@ class Sum(Expr):
                     continue
 
                 term2 = s.terms[j]
-                coeff2, non_const_factors2 = _deconstruct(term2)
+                coeff2, non_const_factors2 = _deconstruct_prod(term2)
 
                 if (non_const_factors1 == non_const_factors2):
                     new_coeff += coeff2
@@ -151,7 +159,8 @@ class Sum(Expr):
         return "(" + " + ".join(map(repr, self.terms)) + ")"
 
 
-def _deconstruct(expr: Expr) -> Tuple[Const, List[Expr]]:
+def _deconstruct_prod(expr: Expr) -> Tuple[Const, List[Expr]]:
+    # 3*x^2*y -> (3, [x^2, y])
     # turns smtn into a constant and a list of other terms
     # assume expr is simplified
     if isinstance(expr, Prod):
@@ -164,8 +173,16 @@ def _deconstruct(expr: Expr) -> Tuple[Const, List[Expr]]:
     return (coeff, non_const_factors)
 
 
+def _deconstruct_power(expr: Expr) -> Tuple[Expr, Const]:
+    # x^3 -> (x, 3). x -> (x, 1). 3 -> (3, 1)
+    if isinstance(expr, Power):
+        return (expr.base, expr.exponent)
+    else:
+        return (expr, Const(1))
+
+
 @dataclass
-class Prod(Expr):
+class Prod(Expr, Associative):
     terms: List[Expr]
 
     def __repr__(self):
@@ -175,27 +192,41 @@ class Prod(Expr):
     def simplify(self):
         if any(t == 0 for t in self.terms):
             return 0
-        else:
-            p = Prod([t.simplify() for t in self.terms if t.simplify() != 1])
 
-            # flatten sub-products
-            if all(isinstance(t, (Prod, Symbol, Const)) for t in p.terms):
-                new = []
-                for t in p.terms:
-                    new += t.terms if isinstance(t, Prod) else [t]
-                p = Prod(new)
+        # simplify subexprs and flatten sub-products
+        p = Prod([t.simplify() for t in self.terms if t.simplify() != 1]).flatten()
 
-            # accumulate constants
-            const = reduce(lambda x,y: x*y, [t.value for t in p.terms if isinstance(t, Const)], 1)
-            if const != 1:
-                p = Prod([Const(const)] + [t for t in p.terms if not isinstance(t, Const)])
+        # accumulate constants
+        const = reduce(lambda x,y: x*y, [t.value for t in p.terms if isinstance(t, Const)], 1)
+        if const != 1:
+            p = Prod([Const(const)] + [t for t in p.terms if not isinstance(t, Const)])
 
-            return p.terms[0] if len(p.terms) == 1 else p  # no 1-term prod
+        # accumulate all like terms
+        terms = []
+        for i, term in enumerate(p.terms):
+            if term is None:
+                continue
+
+            base, expo = _deconstruct_power(term)
+
+            # other terms with same base
+            for j in range(i+1, len(p.terms)):
+                if p.terms[j] is None:
+                    continue
+                other = p.terms[j]
+                base2, expo2 = _deconstruct_power(other)
+                if base2 == base: # TODO: real expr equality
+                    expo += expo2
+                    p.terms[j] = None
+            
+            terms.append(Power(base, expo).simplify())
+
+
+        return terms[0] if len(terms) == 1 else Prod(terms)
 
     @cast
     def expand(self):
-        # simplify first in order to flatten
-        self = self.simplify()
+        self = self.flatten()
 
         sums = [t for t in self.terms if isinstance(t, Sum)]
         other = [t for t in self.terms if not isinstance(t, Sum)]
@@ -233,10 +264,11 @@ class Power(Expr):
         else:
             return Power(self.base.simplify(), x)
 
-    @cast
-    def expand(self):
-        assert isinstance(self.exponent, Const) and self.exponent.value.denominator == 1 and self.exponent.value >= 1, f"Cannot expand {self}"
+    def expandable(self):
+        return isinstance(self.exponent, Const) and self.exponent.value.denominator == 1 and self.exponent.value >= 1
 
+    def expand(self):
+        assert self.expandable(), f"Cannot expand {self}"
         return Prod([self.base] * self.exponent.value.numerator).expand()
 
 
@@ -291,23 +323,18 @@ def integrate(expr: Expr, var: Symbol):
         if expr.base == var and isinstance(expr.exponent, Const):
             n = expr.exponent
             return (1 / (n + 1)) * Power(var, n + 1)
+        elif expr.expandable():
+            return integrate(expr.expand(), var)
         else:
             raise NotImplementedError(f"Cannot integrate {expr}")
     elif isinstance(expr, Symbol):
-        return (1 / 2) * Power(var, 2) if expr == var else expr * var
+        return Fraction(1 / 2) * Power(var, 2) if expr == var else expr * var
     elif isinstance(expr, Const):
         return expr * var
     else:
         raise NotImplementedError(f"Cannot integrate {expr}")
 
 
-# lisp expressions
-# (+ 3 2 (* 2 3)) = 12
-# (+ 3 2 (* 2 3) (/ 4 2)) = 14
-
 if __name__ == "__main__":
     x, y = symbols("x y")
-    # print((x + y) * 3)
-    # print(diff((x + y) * 3, x).simplify())
-    # print(integrate((x + 2)**2, x))
-    print(((x + 2)**3).expand())
+    print(integrate((x + 2)**2, x).simplify())
