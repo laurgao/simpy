@@ -95,14 +95,10 @@ class Expr:
 
 class Associative():
     def flatten(self):
-        # if children are foldable, flatten them
-        if all(isinstance(t, (self.__class__, Symbol, Const)) for t in self.terms):
-            new_terms = []
-            for t in self.terms:
-                new_terms += t.terms if isinstance(t, Prod) else [t]
-            return self.__class__(new_terms)
-        else:
-            return self
+        new_terms = []
+        for t in self.terms:
+            new_terms += t.terms if isinstance(t, self.__class__) else [t]
+        return self.__class__(new_terms)
 
 
 @dataclass
