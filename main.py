@@ -53,6 +53,10 @@ class Expr:
         return self + (-1 * other)
 
     @cast
+    def __rsub__(self, other):
+        return other + (-1 * self)
+
+    @cast
     def __mul__(self, other):
         return Prod([self, other])
 
@@ -267,13 +271,16 @@ class Prod(Expr, Associative):
     @cast
     def expandable(self) -> bool:
         # a product is expandable if it contains any sums
-        return any(isinstance(t, Sum) for t in self.terms) # or any(t.expandable() for t in self.terms)
+        return any(isinstance(t, Sum) for t in self.terms) or any(t.expandable() for t in self.terms)
 
 
     @cast
     def expand(self):
+        # expand sub-expressions
         self = self.flatten()
+        self = Prod([t.expand() if t.expandable() else t for t in self.terms])
 
+        # expand sums that are left
         sums = [t for t in self.terms if isinstance(t, Sum)]
         other = [t for t in self.terms if not isinstance(t, Sum)]
 
@@ -284,9 +291,9 @@ class Prod(Expr, Associative):
         # (using itertools)
         expanded = []
         for terms in itertools.product(*[s.terms for s in sums]):
-            expanded.append(Prod(terms).simplify())
+            expanded.append(Prod(other + list(terms)).simplify())
 
-        return (Prod(other) * Sum(expanded)).simplify() if other else Sum(expanded).simplify()
+        return Sum(expanded).simplify()
 
 
     @cast
@@ -354,7 +361,7 @@ def diff(expr: Expr, var: Symbol) -> Expr:
 def integrate_bounds(expr: Expr, bounds: Tuple[Symbol, Const, Const]) -> Const:
     x, a, b = bounds
     I = integrate(expr, bounds[0]).simplify()
-    return I.evalf({x.name: b}) - I.evalf({x.name: a})
+    return (I.evalf({x.name: b}) - I.evalf({x.name: a})).simplify()
 
 
 @cast
@@ -368,7 +375,6 @@ def integrate(expr: Expr, bounds: Union[Symbol, Tuple[Symbol, Const, Const]]) ->
         var = bounds
 
     expr = expr.simplify()
-    print('expr', expr)
 
     # start with polynomials
     if isinstance(expr, Sum):
@@ -401,11 +407,13 @@ def integrate(expr: Expr, bounds: Union[Symbol, Tuple[Symbol, Const, Const]]) ->
 
 if __name__ == "__main__":
     x, y = symbols("x y")
-    # I = integrate((x + 1)**2, x).simplify()
-    # print(I)
-    # print(I.evalf({'x': 1}))
 
+    F = Fraction
     I1 = integrate((x/90 * (x-5)**2 / 350), (x, 5, 6))
-    # I2 = integrate((F(1, 15) - F(1, 360) * (x-6))*(x-5)**F(2, 350), (x, 6, 15))
-    # I3 = integrate((F(1, 15) - F(1, 360) *(x-6))*(1 - (40-x)**F(2, 875)), (x, 15, 30))
+    I2 = integrate((F(1, 15) - F(1, 360) * (x-6))*(x-5)**2 / 350, (x, 6, 15))
+    I3 = integrate((F(1, 15) - F(1, 360) * (x-6))*(1 - (40-x)**2/875), (x, 15, 30))
     
+    print(I1, I2, I3)
+    final = (I1 + I2 + I3).simplify()
+    print(final)
+    print(float(final.value))
