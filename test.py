@@ -22,5 +22,6 @@ sassert_repr(integrate((x+1)**2, x), x + x**2 + (x**3/3))
 sassert_repr(Log(x).diff(x), 1/x)
 sassert_repr(Log(x).diff(x), 1/x)
 sassert_repr(integrate(1/x, x), Log(x))
+sassert_repr(integrate(1/x, (x, 1, 2)), Log(2))
 
 print('passed')

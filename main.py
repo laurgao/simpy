@@ -6,6 +6,7 @@ from typing import List, Tuple, Dict, Union
 from fractions import Fraction
 from functools import reduce
 import itertools
+import math
 
 
 def _cast(x):
@@ -358,6 +359,20 @@ class Log(Expr):
 
     def __repr__(self):
         return f"log({self.inner})"
+
+    @cast
+    def evalf(self, subs: Dict[str, 'Const']):
+        inner = self.inner.evalf(subs)
+        # TODO: Support floats in .evalf
+        # return Const(math.log(inner.value)) if isinstance(inner, Const) else Log(inner)
+        return Log(inner)
+    
+    def simplify(self):
+        inner = self.inner.simplify()
+        if inner == 1:
+            return Const(0)
+
+        return Log(inner)
 
     def diff(self, var):
         return self.inner.diff(var) / self.inner 
