@@ -128,6 +128,9 @@ class Const(Expr):
     def evalf(self, subs: Dict[str, 'Const']):
         return self
 
+    def diff(self, var):
+        return Const(0)
+
 
 @dataclass
 class Symbol(Expr):
@@ -139,6 +142,9 @@ class Symbol(Expr):
     @cast
     def evalf(self, subs: Dict[str, 'Const']):
         return subs.get(self.name, self)
+
+    def diff(self, var):
+        return Const(1) if self.name == var.name else Const(0)
 
 
 @dataclass
@@ -191,6 +197,8 @@ class Sum(Expr, Associative):
     def evalf(self, subs: Dict[str, 'Const']):
         return Sum([t.evalf(subs) for t in self.terms]).simplify()
 
+    def diff(self, var):
+        return Sum([diff(e, var) for e in self.terms])
 
     def __repr__(self):
         return "(" + " + ".join(map(repr, self.terms)) + ")"
@@ -227,45 +235,47 @@ class Prod(Expr, Associative):
 
     @cast
     def simplify(self):
-        if any(t == 0 for t in self.terms):
-            return Const(0)
-
         # simplify subexprs and flatten sub-products
-        p = Prod([t.simplify() for t in self.terms]).flatten()
-
-        # accumulate constants
-        const = reduce(lambda x,y: x*y, [t.value for t in p.terms if isinstance(t, Const)], 1)
-
-        # return immediately if there are no non constant items
-        non_constant_terms = [t for t in p.terms if not isinstance(t, Const)]
-        if len(non_constant_terms) == 0:
-            return Const(const)
-
-        # otherwise, bring the constant to the front (if != 1)
-        p = Prod(([] if const == 1 else [Const(const)]) + non_constant_terms)
+        new = Prod([t.simplify() for t in self.terms]).flatten()
         
         # accumulate all like terms
         terms = []
-        for i, term in enumerate(p.terms):
+        for i, term in enumerate(new.terms):
             if term is None:
                 continue
 
             base, expo = _deconstruct_power(term)
 
             # other terms with same base
-            for j in range(i+1, len(p.terms)):
-                if p.terms[j] is None:
+            for j in range(i+1, len(new.terms)):
+                if new.terms[j] is None:
                     continue
-                other = p.terms[j]
+                other = new.terms[j]
                 base2, expo2 = _deconstruct_power(other)
                 if base2 == base: # TODO: real expr equality
                     expo += expo2
-                    p.terms[j] = None
+                    new.terms[j] = None
             
             terms.append(Power(base, expo).simplify())
 
+        new.terms = terms
 
-        return terms[0] if len(terms) == 1 else Prod(terms)
+        # Check for zero
+        if any(t == 0 for t in new.terms):
+            return Const(0)
+
+        # accumulate constants to the front
+        const = reduce(lambda x,y: x*y, [t.value for t in new.terms if isinstance(t, Const)], 1)
+
+        # return immediately if there are no non constant items
+        non_constant_terms = [t for t in new.terms if not isinstance(t, Const)]
+        if len(non_constant_terms) == 0:
+            return Const(const)
+
+        # otherwise, bring the constant to the front (if != 1)
+        new.terms = ([] if const == 1 else [Const(const)]) + non_constant_terms
+
+        return new.terms[0] if len(new.terms) == 1 else new
 
 
     @cast
@@ -299,6 +309,14 @@ class Prod(Expr, Associative):
     @cast
     def evalf(self, subs: Dict[str, 'Const']):
         return Prod([t.evalf(subs) for t in self.terms]).simplify()
+
+    def diff(self, var):
+        return Sum(
+            [
+                Prod([diff(e, var)] + [t for t in self.terms if t is not e])
+                for e in self.terms
+            ]
+        )
 
 
 @dataclass
@@ -334,25 +352,25 @@ class Power(Expr):
         return Power(self.base.evalf(subs), self.exponent.evalf(subs)).simplify()
 
 
+@dataclass
+class Log(Expr):
+    inner: Expr
+
+    def __repr__(self):
+        return f"log({self.inner})"
+
+    def diff(self, var):
+        return self.inner.diff(var) / self.inner 
+    
+
 def symbols(symbols: str):
     return [Symbol(name=s) for s in symbols.split(" ")]
 
 
 @cast
 def diff(expr: Expr, var: Symbol) -> Expr:
-    if isinstance(expr, Sum):
-        return Sum([diff(e, var) for e in expr.terms])
-    elif isinstance(expr, Symbol):
-        return Const(1) if expr.name == var.name else Const(0)
-    elif isinstance(expr, Prod):
-        return Sum(
-            [
-                Prod([diff(e, var)] + [t for t in expr.terms if t is not e])
-                for e in expr.terms
-            ]
-        )
-    elif isinstance(expr, Const):
-        return Const(0)
+    if hasattr(expr, 'diff'):
+        return expr.diff(var)
     else:
         raise NotImplementedError(f"Differentiation of {expr} not implemented")
 
@@ -392,7 +410,7 @@ def integrate(expr: Expr, bounds: Union[Symbol, Tuple[Symbol, Const, Const]]) ->
     elif isinstance(expr, Power):
         if expr.base == var and isinstance(expr.exponent, Const):
             n = expr.exponent
-            return (1 / (n + 1)) * Power(var, n + 1)
+            return (1 / (n + 1)) * Power(var, n + 1) if n != -1 else Log(expr.base)
         elif expr.expandable():
             return integrate(expr.expand(), var)
         else:
