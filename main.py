@@ -2,11 +2,10 @@
 # - method to convert from our expression to sympy for testing
 
 from dataclasses import dataclass, fields
-from typing import List, Tuple, Dict, Union
+from typing import List, Tuple, Dict, Union, Literal, Optional
 from fractions import Fraction
 from functools import reduce
 import itertools
-import math
 
 
 def _cast(x):
@@ -97,6 +96,13 @@ class Expr:
     def evalf(self, subs: Dict[str, 'Const']):
         raise NotImplementedError(f"Cannot evaluate {self}")
 
+    def children(self) -> List['Expr']:
+        raise NotImplementedError(f"Cannot get children of {self.__class__.__name__}")
+
+    def contains(self: 'Expr', var: 'Symbol'):
+        is_var = isinstance(self, Symbol) and self.name == var.name
+        return is_var or any(e.contains(var) for e in self.children())
+        
 
 class Associative():
     def flatten(self):
@@ -132,6 +138,9 @@ class Const(Expr):
     def diff(self, var):
         return Const(0)
 
+    def children(self) -> List['Expr']:
+        return []
+
 
 @dataclass
 class Symbol(Expr):
@@ -147,6 +156,8 @@ class Symbol(Expr):
     def diff(self, var):
         return Const(1) if self.name == var.name else Const(0)
 
+    def children(self) -> List['Expr']:
+        return []
 
 @dataclass
 class Sum(Expr, Associative):
@@ -203,6 +214,9 @@ class Sum(Expr, Associative):
 
     def __repr__(self):
         return "(" + " + ".join(map(repr, self.terms)) + ")"
+
+    def children(self) -> List['Expr']:
+        return self.terms
 
 
 def _deconstruct_prod(expr: Expr) -> Tuple[Const, List[Expr]]:
@@ -318,6 +332,9 @@ class Prod(Expr, Associative):
                 for e in self.terms
             ]
         )
+    
+    def children(self) -> List['Expr']:
+        return self.terms
 
 
 @dataclass
@@ -352,6 +369,9 @@ class Power(Expr):
     def evalf(self, subs: Dict[str, 'Const']):
         return Power(self.base.evalf(subs), self.exponent.evalf(subs)).simplify()
 
+    def children(self) -> List['Expr']:
+        return [self.base, self.exponent]
+
 
 @dataclass
 class Log(Expr):
@@ -377,6 +397,9 @@ class Log(Expr):
     def diff(self, var):
         return self.inner.diff(var) / self.inner 
     
+    def children(self) -> List['Expr']:
+        return [self.inner]
+    
 
 def symbols(symbols: str):
     return [Symbol(name=s) for s in symbols.split(" ")]
@@ -395,6 +418,97 @@ def integrate_bounds(expr: Expr, bounds: Tuple[Symbol, Const, Const]) -> Const:
     x, a, b = bounds
     I = integrate(expr, bounds[0]).simplify()
     return (I.evalf({x.name: b}) - I.evalf({x.name: a})).simplify()
+
+
+@dataclass
+class Node():
+    type: Literal['AND', 'OR', 'UNSET']
+    expr: Expr
+    children: List['Node']
+    parent: Optional['Node'] # None for root node only
+
+    def leaves(self) -> List['Node']:
+        if len(self.children) == 0:
+            return [self]
+
+        return [leaf for child in self.children for leaf in child.leaves()]
+
+
+def nesting(expr: Expr, var: Symbol) -> int:
+    """
+    Compute the nesting amount (complexity) of an expression
+
+    >>> nesting(x**2, x)
+    2
+    >>> nesting(x * y**2, x)
+    2
+    >>> nesting(x * (1 / y**2 * 3), x)
+    2
+    """
+
+    children = expr.children()
+    if isinstance(expr, Symbol) and expr.name == var.name:
+        return 1
+    elif len(children) == 0:
+        return 0
+    else:
+        return 1 + max(nesting(sub_expr, var) for sub_expr in children if sub_expr.contains(var))
+
+
+class Transform():
+    "An integral transform -- base class"
+    @staticmethod
+    def forward():
+        raise NotImplementedError("Not implemented")
+
+    @staticmethod
+    def backward():
+        raise NotImplementedError("Not implemented")
+
+
+class Additivity(Transform):
+    pass
+
+
+class Integration():
+    """
+    Keeps track of integration work as we go
+    """
+
+    def integrate(integrand: Expr):
+        heuristic_transforms = [
+            # f(tan x) -> f(y) / (1 + y**2) [after y = tan x]
+        ]
+
+        def add_transform(node: Node) -> bool:
+            if isinstance(node.expr, Sum):
+                node.type = 'AND'
+                node.children = [Node('UNSET', e, [], node) for e in node.expr.children()]
+                return True
+            return False
+
+        safe_transforms = [
+            # I[f(x) + g(x)] -> I[f(x)] + I[g(x)]
+        ]
+
+        root = Node(type='UNSET', expr=integrand, children=[], parent=None)
+
+        solved = False
+        while not solved:
+            node = None
+            for leaf in root.leaves():
+                if not node or nesting(leaf) < nesting(node):
+                    node = leaf
+            
+            # (for first iter node is root)
+
+            if safe_transform := get_safe_transform(node.expr):
+                safe_transform(node) # modifies type and appends
+            else:
+                # apply all heuristic transformations and append them all to the tree
+                node.type = 'OR'
+                for heuristic_transform in heuristic_transforms:
+                    node.children.append(heuristic_transform(node))
 
 
 @cast

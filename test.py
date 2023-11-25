@@ -9,7 +9,7 @@ def sassert_repr(a, b):
     assert repr(xs) == repr(ys), f"{xs} != {ys} (original {a} != {b})"
 
 
-x, = symbols('x')
+x, y = symbols('x y')
 
 sassert_repr(x*0, 0)
 sassert_repr(x*2, 2*x)
@@ -23,5 +23,9 @@ sassert_repr(Log(x).diff(x), 1/x)
 sassert_repr(Log(x).diff(x), 1/x)
 sassert_repr(integrate(1/x, x), Log(x))
 sassert_repr(integrate(1/x, (x, 1, 2)), Log(2))
+
+assert nesting(x**2, x) == 2
+assert nesting(x * y**2, x) == 2
+assert nesting(x * (1 / y**2 * 3), x) == 2
 
 print('passed')
