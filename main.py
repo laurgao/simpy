@@ -1,11 +1,11 @@
 # TODO: tasks for the future:
 # - method to convert from our expression to sympy for testing
 
+import itertools
 from dataclasses import dataclass, fields
-from typing import List, Tuple, Dict, Union
 from fractions import Fraction
 from functools import reduce
-import itertools
+from typing import Dict, List, Tuple, Union
 
 
 def _cast(x):
@@ -75,15 +75,15 @@ class Expr:
     @cast
     def __div__(self, other):
         return Prod([self, Power(other, -1)])
-    
+
     @cast
     def __truediv__(self, other):
         return Prod([self, Power(other, -1)])
-    
+
     @cast
     def __rdiv__(self, other):
         return Prod([other, Power(self, -1)])
-    
+
     @cast
     def __rtruediv__(self, other):
         return Prod([other, Power(self, -1)])
@@ -92,12 +92,15 @@ class Expr:
     def expandable(self) -> bool:
         return False
 
+    def expand(self) -> "Expr":
+        raise NotImplementedError(f"Cannot expand {self}")
+
     @cast
-    def evalf(self, subs: Dict[str, 'Const']):
+    def evalf(self, subs: Dict[str, "Const"]):
         raise NotImplementedError(f"Cannot evaluate {self}")
 
 
-class Associative():
+class Associative:
     def flatten(self):
         new_terms = []
         for t in self.terms:
@@ -110,7 +113,9 @@ class Const(Expr):
     value: Fraction
 
     def __post_init__(self):
-        assert isinstance(self.value, Fraction) or type(self.value) == int, f"got value={self.value} not allowed Const"
+        assert (
+            isinstance(self.value, Fraction) or type(self.value) == int
+        ), f"got value={self.value} not allowed Const"
         self.value = Fraction(self.value)
 
     def __repr__(self):
@@ -125,7 +130,7 @@ class Const(Expr):
         return not (self == other)
 
     @cast
-    def evalf(self, subs: Dict[str, 'Const']):
+    def evalf(self, subs: Dict[str, "Const"]):
         return self
 
     def diff(self, var):
@@ -138,13 +143,16 @@ class Symbol(Expr):
 
     def __repr__(self):
         return self.name
-    
+
     @cast
-    def evalf(self, subs: Dict[str, 'Const']):
+    def evalf(self, subs: Dict[str, "Const"]):
         return subs.get(self.name, self)
 
     def diff(self, var):
         return Const(1) if self.name == var.name else Const(0)
+
+    def __eq__(self, other):
+        return isinstance(other, Symbol) and self.name == other.name
 
 
 @dataclass
@@ -177,14 +185,14 @@ class Sum(Expr, Associative):
             new_coeff, non_const_factors1 = _deconstruct_prod(term)
 
             # check if any later terms are the same
-            for j in range(i+1, len(s.terms)):
+            for j in range(i + 1, len(s.terms)):
                 if s.terms[j] is None:
                     continue
 
                 term2 = s.terms[j]
                 coeff2, non_const_factors2 = _deconstruct_prod(term2)
 
-                if (non_const_factors1 == non_const_factors2):
+                if non_const_factors1 == non_const_factors2:
                     new_coeff += coeff2
                     s.terms[j] = None
 
@@ -194,7 +202,7 @@ class Sum(Expr, Associative):
         return new_terms[0] if len(new_terms) == 1 else Sum(new_terms)
 
     @cast
-    def evalf(self, subs: Dict[str, 'Const']):
+    def evalf(self, subs: Dict[str, "Const"]):
         return Sum([t.evalf(subs) for t in self.terms]).simplify()
 
     def diff(self, var):
@@ -210,7 +218,9 @@ def _deconstruct_prod(expr: Expr) -> Tuple[Const, List[Expr]]:
     # assume expr is simplified
     if isinstance(expr, Prod):
         # simplifying the product puts the constants at the front
-        non_const_factors = expr.terms[1:] if isinstance(expr.terms[0], Const) else expr.terms
+        non_const_factors = (
+            expr.terms[1:] if isinstance(expr.terms[0], Const) else expr.terms
+        )
         coeff = expr.terms[0] if isinstance(expr.terms[0], Const) else Const(1)
     else:
         non_const_factors = [expr]
@@ -237,7 +247,7 @@ class Prod(Expr, Associative):
     def simplify(self):
         # simplify subexprs and flatten sub-products
         new = Prod([t.simplify() for t in self.terms]).flatten()
-        
+
         # accumulate all like terms
         terms = []
         for i, term in enumerate(new.terms):
@@ -247,15 +257,15 @@ class Prod(Expr, Associative):
             base, expo = _deconstruct_power(term)
 
             # other terms with same base
-            for j in range(i+1, len(new.terms)):
+            for j in range(i + 1, len(new.terms)):
                 if new.terms[j] is None:
                     continue
                 other = new.terms[j]
                 base2, expo2 = _deconstruct_power(other)
-                if base2 == base: # TODO: real expr equality
+                if base2 == base:  # TODO: real expr equality
                     expo += expo2
                     new.terms[j] = None
-            
+
             terms.append(Power(base, expo).simplify())
 
         new.terms = terms
@@ -265,7 +275,9 @@ class Prod(Expr, Associative):
             return Const(0)
 
         # accumulate constants to the front
-        const = reduce(lambda x,y: x*y, [t.value for t in new.terms if isinstance(t, Const)], 1)
+        const = reduce(
+            lambda x, y: x * y, [t.value for t in new.terms if isinstance(t, Const)], 1
+        )
 
         # return immediately if there are no non constant items
         non_constant_terms = [t for t in new.terms if not isinstance(t, Const)]
@@ -277,14 +289,13 @@ class Prod(Expr, Associative):
 
         return new.terms[0] if len(new.terms) == 1 else new
 
-
     @cast
     def expandable(self) -> bool:
         # a product is expandable if it contains any sums
-        return any(isinstance(t, Sum) for t in self.terms) or any(t.expandable() for t in self.terms)
+        return any(isinstance(t, Sum) for t in self.terms) or any(
+            t.expandable() for t in self.terms
+        )
 
-
-    @cast
     def expand(self):
         # expand sub-expressions
         self = self.flatten()
@@ -305,9 +316,8 @@ class Prod(Expr, Associative):
 
         return Sum(expanded).simplify()
 
-
     @cast
-    def evalf(self, subs: Dict[str, 'Const']):
+    def evalf(self, subs: Dict[str, "Const"]):
         return Prod([t.evalf(subs) for t in self.terms]).simplify()
 
     def diff(self, var):
@@ -336,19 +346,24 @@ class Power(Expr):
         elif x == 1:
             return b
         elif isinstance(b, Const) and isinstance(x, Const):
-            return Const(b.value ** x.value)
+            return Const(b.value**x.value)
         else:
             return Power(self.base.simplify(), x)
 
     def expandable(self) -> bool:
-        return isinstance(self.exponent, Const) and self.exponent.value.denominator == 1 and self.exponent.value >= 1
+        return (
+            isinstance(self.exponent, Const)
+            and self.exponent.value.denominator == 1
+            and self.exponent.value >= 1
+            and isinstance(self.base, Sum)
+        )
 
     def expand(self) -> Expr:
         assert self.expandable(), f"Cannot expand {self}"
         return Prod([self.base] * self.exponent.value.numerator).expand()
 
     @cast
-    def evalf(self, subs: Dict[str, 'Const']):
+    def evalf(self, subs: Dict[str, "Const"]):
         return Power(self.base.evalf(subs), self.exponent.evalf(subs)).simplify()
 
 
@@ -360,8 +375,8 @@ class Log(Expr):
         return f"log({self.inner})"
 
     def diff(self, var):
-        return self.inner.diff(var) / self.inner 
-    
+        return self.inner.diff(var) / self.inner
+
 
 def symbols(symbols: str):
     return [Symbol(name=s) for s in symbols.split(" ")]
@@ -369,7 +384,7 @@ def symbols(symbols: str):
 
 @cast
 def diff(expr: Expr, var: Symbol) -> Expr:
-    if hasattr(expr, 'diff'):
+    if hasattr(expr, "diff"):
         return expr.diff(var)
     else:
         raise NotImplementedError(f"Differentiation of {expr} not implemented")
@@ -402,35 +417,48 @@ def integrate(expr: Expr, bounds: Union[Symbol, Tuple[Symbol, Const, Const]]) ->
         if isinstance(expr.terms[0], Const):
             return expr.terms[0] * integrate(Prod(expr.terms[1:]), var)
 
-        # if there are sub-sums, integrate the expansion
+        # or if there is a symbol that's not the variable, pull it out
+        for i, term in enumerate(expr.terms):
+            if isinstance(term, Symbol) and term != var:
+                return term * integrate(Prod(expr.terms[:i] + expr.terms[i + 1 :]), var)
+
+            # or if it's a power of a symbol that's not the variable, pull it out
+            if isinstance(term, Power) and term.base != var:
+                return term * integrate(Prod(expr.terms[:i] + expr.terms[i + 1 :]), var)
+
+        # # if there are sub-sums, integrate the expansion
         if expr.expandable():
             return integrate(expr.expand(), var)
-        
-        raise NotImplementedError(f"Cannot integrate {expr}")
+
+        raise NotImplementedError(f"Cannot integrate {expr} with respect to {var}")
     elif isinstance(expr, Power):
         if expr.base == var and isinstance(expr.exponent, Const):
             n = expr.exponent
             return (1 / (n + 1)) * Power(var, n + 1) if n != -1 else Log(expr.base)
+        elif isinstance(expr.base, Symbol) and expr.base != var:
+            return expr * var
         elif expr.expandable():
             return integrate(expr.expand(), var)
         else:
-            raise NotImplementedError(f"Cannot integrate {expr}")
+            raise NotImplementedError(f"Cannot integrate {expr} with respect to {var}")
     elif isinstance(expr, Symbol):
         return Fraction(1 / 2) * Power(var, 2) if expr == var else expr * var
     elif isinstance(expr, Const):
         return expr * var
     else:
-        raise NotImplementedError(f"Cannot integrate {expr}")
+        raise NotImplementedError(f"Cannot integrate {expr} with respect to {var}")
 
 
 if __name__ == "__main__":
     x, y = symbols("x y")
 
     F = Fraction
-    I1 = integrate((x/90 * (x-5)**2 / 350), (x, 5, 6))
-    I2 = integrate((F(1, 15) - F(1, 360) * (x-6))*(x-5)**2 / 350, (x, 6, 15))
-    I3 = integrate((F(1, 15) - F(1, 360) * (x-6))*(1 - (40-x)**2/875), (x, 15, 30))
-    
+    I1 = integrate((x / 90 * (x - 5) ** 2 / 350), (x, 5, 6))
+    I2 = integrate((F(1, 15) - F(1, 360) * (x - 6)) * (x - 5) ** 2 / 350, (x, 6, 15))
+    I3 = integrate(
+        (F(1, 15) - F(1, 360) * (x - 6)) * (1 - (40 - x) ** 2 / 875), (x, 15, 30)
+    )
+
     print(I1, I2, I3)
     final = (I1 + I2 + I3).simplify()
     print(final)
