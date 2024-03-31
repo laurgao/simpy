@@ -5,7 +5,7 @@ import itertools
 from dataclasses import dataclass, fields
 from fractions import Fraction
 from functools import reduce
-from typing import Dict, List, Tuple, Union
+from typing import Dict, List, Literal, Optional, Tuple, Union
 
 
 def _cast(x):
@@ -163,6 +163,9 @@ class Symbol(Expr):
 
     def __eq__(self, other):
         return isinstance(other, Symbol) and self.name == other.name
+
+    def children(self) -> List["Expr"]:
+        return []
 
 
 @dataclass
@@ -409,6 +412,9 @@ class Log(Expr):
 
     def diff(self, var):
         return self.inner.diff(var) / self.inner
+
+    def children(self) -> List["Expr"]:
+        return [self.inner]
 
 
 def symbols(symbols: str):
