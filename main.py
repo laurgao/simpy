@@ -603,7 +603,7 @@ def integrate(expr: Expr, bounds: Union[Symbol, Tuple[Symbol, Const, Const]]) ->
         if expr.expandable():
             return integrate(expr.expand(), var)
 
-        heuristics(expr, var)
+        return heuristics(expr, var)
         raise NotImplementedError(f"Cannot integrate {expr} with respect to {var}")
     elif isinstance(expr, Power):
         if expr.base == var and isinstance(expr.exponent, Const):
@@ -614,12 +614,14 @@ def integrate(expr: Expr, bounds: Union[Symbol, Tuple[Symbol, Const, Const]]) ->
         elif expr.expandable():
             return integrate(expr.expand(), var)
         else:
+            return heuristics(expr, var)
             raise NotImplementedError(f"Cannot integrate {expr} with respect to {var}")
     elif isinstance(expr, Symbol):
         return Fraction(1 / 2) * Power(var, 2) if expr == var else expr * var
     elif isinstance(expr, Const):
         return expr * var
     else:
+        return heuristics(expr, var)
         raise NotImplementedError(f"Cannot integrate {expr} with respect to {var}")
 
 
@@ -657,7 +659,20 @@ def random_id(length):
     return random_string
 
 
+def generate_intermediate_var() -> Symbol:
+    return symbols(f"intermediate_{random_id(10)}")[0]
+
+
+@cast
 def heuristics(expr: Expr, var: Symbol):
+    # if it doesnt contain any x thats not in tan
+    if contains(expr, Tan) and count(expr, Tan(var)) == count(expr, var):
+        intermediate = generate_intermediate_var()
+        # y = tanx
+        new_integrand = replace(expr, Tan(var), intermediate) / (1 + intermediate**2)
+        breakpoint()
+        return integrate(new_integrand, intermediate)
+
     # if expression **contains** trig function and we the current node is not of the transform A on it
     # (or the last heuristic transform was not transform A)
     # then we want to do transform A?
@@ -708,7 +723,7 @@ def heuristics(expr: Expr, var: Symbol):
     # look for (1 + (-1 * x^2))
     s = f"(1 + (-1 * {var.name}^2))"
     if s in expr.__repr__():
-        intermediate_var = symbols(f"intermediate_{random_id(10)}")[0]
+        intermediate_var = generate_intermediate_var()
         # intermediate1 = sin^-1 (var)
         # ughhh idk how to do this ugh
         # like you want to create a new expression wher eyou replace every instance of the var with sin^-1???
@@ -721,8 +736,13 @@ def heuristics(expr: Expr, var: Symbol):
         # expr.children = [Node]
         return integrate(new_thing, intermediate_var)
 
+    raise NotImplementedError(f"Cannot integrate {expr} with respect to {var}")
 
-def replace(expr: Expr, old: Symbol, new: Expr) -> Expr:
+
+def replace(expr: Expr, old: Expr, new: Expr) -> Expr:
+    if isinstance(expr, old.__class__) and expr == old:
+        return new
+
     # find all instances of old in expr and replace with new
     if isinstance(expr, Sum):
         return Sum([replace(e, old, new) for e in expr.terms])
@@ -734,14 +754,12 @@ def replace(expr: Expr, old: Symbol, new: Expr) -> Expr:
         )
     # i love recursion
     if isinstance(expr, SingleFunc):
-        return expr.__class__(
-            replace(expr.inner, old, new)
-        )  # this currently doesnt work because trigfunction takes a 2nd arg.
+        return expr.__class__(replace(expr.inner, old, new))
 
     if isinstance(expr, Const):
         return expr
     if isinstance(expr, Symbol):
-        return new if expr == old else expr
+        return expr
 
     raise NotImplementedError(f"replace not implemented for {expr.__class__.__name__}")
 
@@ -753,7 +771,14 @@ def contains(expr: Expr, cls) -> bool:
     return any([contains(e, cls) for e in expr.children()])
 
 
-# cls here has to be a singlefunc
+@cast
+def count(expr: Expr, query: Expr) -> bool:
+    if isinstance(expr, query.__class__) and expr == query:
+        return 1
+    return sum(count(e, query) for e in expr.children())
+
+
+# cls here has to be a subclass of singlefunc
 def replace_class(expr: Expr, cls: list, newfunc: List[Callable[[Expr], Expr]]) -> Expr:
     if isinstance(expr, Sum):
         return Sum([replace_class(e, cls, newfunc) for e in expr.terms])
