@@ -2,6 +2,7 @@
 # - method to convert from our expression to sympy for testing
 
 import itertools
+import re
 from dataclasses import dataclass, fields
 from fractions import Fraction
 from functools import reduce
@@ -88,6 +89,10 @@ class Expr:
     def __rtruediv__(self, other):
         return Prod([other, Power(self, -1)])
 
+    @cast
+    def __eq__(self, other):
+        return self.__repr__ == other.__repr__
+
     # should be overloaded
     def expandable(self) -> bool:
         return False
@@ -106,13 +111,31 @@ class Expr:
         is_var = isinstance(self, Symbol) and self.name == var.name
         return is_var or any(e.contains(var) for e in self.children())
 
+    # should be overloaded
+    def simplifable(self) -> bool:
+        return False
+
+    def diff(self, var: "Symbol"):
+        raise NotImplementedError(
+            f"Cannot get the derivative of {self.__class__.__name__}"
+        )
+
+    def symbols(self) -> List["Symbol"]:
+        # I hate this syntax
+        return [
+            symbol for e in self.children() for symbol in e.symbols()
+        ]  # do smtn to prevent duplicates (set doesnt work bc symbol is unhashable)
+
 
 class Associative:
     def flatten(self):
         new_terms = []
         for t in self.terms:
-            new_terms += t.terms if isinstance(t, self.__class__) else [t]
+            new_terms += t.flatten().terms if isinstance(t, self.__class__) else [t]
         return self.__class__(new_terms)
+
+    def children(self) -> List["Expr"]:
+        return self.terms
 
 
 @dataclass
@@ -159,7 +182,7 @@ class Symbol(Expr):
         return subs.get(self.name, self)
 
     def diff(self, var):
-        return Const(1) if self.name == var.name else Const(0)
+        return Const(1) if self == var else Const(0)
 
     def __eq__(self, other):
         return isinstance(other, Symbol) and self.name == other.name
@@ -167,10 +190,16 @@ class Symbol(Expr):
     def children(self) -> List["Expr"]:
         return []
 
+    def symbols(self) -> List["Expr"]:
+        return [self]
+
 
 @dataclass
-class Sum(Expr, Associative):
+class Sum(Associative, Expr):
     terms: List[Expr]
+
+    def simplifable(self) -> bool:
+        pass
 
     def simplify(self):
         # TODO: this currently would not combine terms like (2+x) and (x+2)
@@ -211,8 +240,24 @@ class Sum(Expr, Associative):
 
             new_terms.append(Prod([new_coeff] + non_const_factors1).simplify())
 
+        # if Const(1) in new_terms and Prod([-1, Power(TrigFunction(anysymbol, "sin"), 2)]) in new_terms:
         # get rid of 1-term sums
-        return new_terms[0] if len(new_terms) == 1 else Sum(new_terms)
+        if len(new_terms) == 1:
+            return new_terms[0]
+
+        new_sum = Sum(new_terms)
+
+        pattern = "\(1 \+ \(-1 \* sin\(\w+\)\^2\)\)"
+        if re.search(pattern, new_sum.__repr__()) and len(new_sum.terms) == 2:
+            return Power(TrigFunction(new_sum.symbols()[0], "cos"), 2)
+            # ok im  gna be dumb and j assume the sum is only this
+
+            # for term in new_sum.terms:
+            #     if isinstance(term, Const) and term.
+            #     p =
+            #     if re.search(term.__repr__())
+
+        return new_sum
 
     @cast
     def evalf(self, subs: Dict[str, "Const"]):
@@ -224,8 +269,9 @@ class Sum(Expr, Associative):
     def __repr__(self):
         return "(" + " + ".join(map(repr, self.terms)) + ")"
 
-    def children(self) -> List["Expr"]:
-        return self.terms
+    @cast
+    def __eq__(self, other) -> bool:
+        return isinstance(other, Sum) and set(other.terms) == set(self.terms)
 
 
 def _deconstruct_prod(expr: Expr) -> Tuple[Const, List[Expr]]:
@@ -253,7 +299,7 @@ def _deconstruct_power(expr: Expr) -> Tuple[Expr, Const]:
 
 
 @dataclass
-class Prod(Expr, Associative):
+class Prod(Associative, Expr):
     terms: List[Expr]
 
     def __repr__(self):
@@ -344,9 +390,6 @@ class Prod(Expr, Associative):
             ]
         )
 
-    def children(self) -> List["Expr"]:
-        return self.terms
-
 
 @dataclass
 class Power(Expr):
@@ -366,6 +409,8 @@ class Power(Expr):
             return b
         elif isinstance(b, Const) and isinstance(x, Const):
             return Const(b.value**x.value)
+        elif isinstance(b, Power):
+            return Power(b.base, (x * b.exponent).simplify())
         else:
             return Power(self.base.simplify(), x)
 
@@ -390,7 +435,19 @@ class Power(Expr):
 
 
 @dataclass
-class Log(Expr):
+class SingleFunc:
+    inner: Expr
+
+    def children(self) -> List["Expr"]:
+        return [self.inner]
+
+    def simplify(self):
+        inner = self.inner.simplify()
+        return self.__class__(inner)
+
+
+@dataclass
+class Log(SingleFunc, Expr):
     inner: Expr
 
     def __repr__(self):
@@ -413,8 +470,19 @@ class Log(Expr):
     def diff(self, var):
         return self.inner.diff(var) / self.inner
 
-    def children(self) -> List["Expr"]:
-        return [self.inner]
+
+@dataclass
+class TrigFunction(SingleFunc, Expr):
+    inner: Expr
+    function: Literal["sin", "cos", "tan", "sec", "csc", "cot"]
+    is_inverse: bool = False
+
+    def __repr__(self):
+        return f"{self.function}{'^-1' if self.is_inverse else ''}({self.inner})"
+
+    def simplify(self):
+        inner = self.inner.simplify()
+        return self.__class__(inner, self.function)
 
 
 def symbols(symbols: str):
@@ -434,102 +502,6 @@ def integrate_bounds(expr: Expr, bounds: Tuple[Symbol, Const, Const]) -> Const:
     x, a, b = bounds
     I = integrate(expr, bounds[0]).simplify()
     return (I.evalf({x.name: b}) - I.evalf({x.name: a})).simplify()
-
-
-@dataclass
-class Node:
-    type: Literal["AND", "OR", "UNSET"]
-    expr: Expr
-    children: List["Node"]
-    parent: Optional["Node"]  # None for root node only
-
-    def leaves(self) -> List["Node"]:
-        if len(self.children) == 0:
-            return [self]
-
-        return [leaf for child in self.children for leaf in child.leaves()]
-
-
-def nesting(expr: Expr, var: Symbol) -> int:
-    """
-    Compute the nesting amount (complexity) of an expression
-
-    >>> nesting(x**2, x)
-    2
-    >>> nesting(x * y**2, x)
-    2
-    >>> nesting(x * (1 / y**2 * 3), x)
-    2
-    """
-
-    children = expr.children()
-    if isinstance(expr, Symbol) and expr.name == var.name:
-        return 1
-    elif len(children) == 0:
-        return 0
-    else:
-        return 1 + max(
-            nesting(sub_expr, var) for sub_expr in children if sub_expr.contains(var)
-        )
-
-
-class Transform:
-    "An integral transform -- base class"
-
-    @staticmethod
-    def forward():
-        raise NotImplementedError("Not implemented")
-
-    @staticmethod
-    def backward():
-        raise NotImplementedError("Not implemented")
-
-
-class Additivity(Transform):
-    pass
-
-
-class Integration:
-    """
-    Keeps track of integration work as we go
-    """
-
-    def integrate(integrand: Expr):
-        heuristic_transforms = [
-            # f(tan x) -> f(y) / (1 + y**2) [after y = tan x]
-        ]
-
-        def add_transform(node: Node) -> bool:
-            if isinstance(node.expr, Sum):
-                node.type = "AND"
-                node.children = [
-                    Node("UNSET", e, [], node) for e in node.expr.children()
-                ]
-                return True
-            return False
-
-        safe_transforms = [
-            # I[f(x) + g(x)] -> I[f(x)] + I[g(x)]
-        ]
-
-        root = Node(type="UNSET", expr=integrand, children=[], parent=None)
-
-        solved = False
-        while not solved:
-            node = None
-            for leaf in root.leaves():
-                if not node or nesting(leaf) < nesting(node):
-                    node = leaf
-
-            # (for first iter node is root)
-
-            if safe_transform := get_safe_transform(node.expr):
-                safe_transform(node)  # modifies type and appends
-            else:
-                # apply all heuristic transformations and append them all to the tree
-                node.type = "OR"
-                for heuristic_transform in heuristic_transforms:
-                    node.children.append(heuristic_transform(node))
 
 
 @cast
@@ -558,13 +530,18 @@ def integrate(expr: Expr, bounds: Union[Symbol, Tuple[Symbol, Const, Const]]) ->
                 return term * integrate(Prod(expr.terms[:i] + expr.terms[i + 1 :]), var)
 
             # or if it's a power of a symbol that's not the variable, pull it out
-            if isinstance(term, Power) and term.base != var:
+            if (
+                isinstance(term, Power)
+                and isinstance(term.base, Symbol)
+                and term.base != var
+            ):
                 return term * integrate(Prod(expr.terms[:i] + expr.terms[i + 1 :]), var)
 
         # # if there are sub-sums, integrate the expansion
         if expr.expandable():
             return integrate(expr.expand(), var)
 
+        heuristics(expr, var)
         raise NotImplementedError(f"Cannot integrate {expr} with respect to {var}")
     elif isinstance(expr, Power):
         if expr.base == var and isinstance(expr.exponent, Const):
@@ -584,17 +561,62 @@ def integrate(expr: Expr, bounds: Union[Symbol, Tuple[Symbol, Const, Const]]) ->
         raise NotImplementedError(f"Cannot integrate {expr} with respect to {var}")
 
 
+import random
+import string
+
+
+def random_id(length):
+    # Define the pool of characters you can choose from
+    characters = string.ascii_letters + string.digits
+    # Use random.choices() to pick characters at random, then join them into a string
+    random_string = "".join(random.choices(characters, k=length))
+    return random_string
+
+
+def heuristics(expr: Expr, var: Symbol):
+    # look for (1 + (-1 * x^2))
+    s = f"(1 + (-1 * {var.name}^2))"
+    if s in expr.__repr__():
+        intermediate_var = symbols(f"intermediate_{random_id(10)}")[0]
+        # intermediate1 = sin^-1 (var)
+        # ughhh idk how to do this ugh
+        # like you want to create a new expression wher eyou replace every instance of the var with sin^-1???
+        # psuedocode is good laura
+        # how do i loop over the entire expression? and replace it all? so if it's a sum or product then you can loop over all the terms and if it's a product you loop over the ... idk just loop over .children and .children?? but you have to recreate it. ugh
+        new_thing = replace(
+            expr, var, TrigFunction(intermediate_var, "sin")
+        ) * TrigFunction(intermediate_var, "cos")
+        # then that's a node and u store the transform and u take the integral of that.
+        # Node(new_thing)
+        # expr.children = [Node]
+        integrate(new_thing, var)
+
+
+def replace(expr: Expr, old: Symbol, new: Expr) -> Expr:
+    # find all instances of old in expr and replace with new
+    if isinstance(expr, Sum):
+        return Sum([replace(e, old, new) for e in expr.terms])
+    if isinstance(expr, Prod):
+        return Prod([replace(e, old, new) for e in expr.terms])
+    if isinstance(expr, Power):
+        return Power(
+            base=replace(expr.base, old, new), exponent=replace(expr.exponent, old, new)
+        )
+    # i love recursion
+    if isinstance(expr, SingleFunc):
+        return expr.__class__(
+            replace(expr.inner, old, new)
+        )  # this currently doesnt work because trigfunction takes a 2nd arg.
+
+    if isinstance(expr, Const):
+        return expr
+    if isinstance(expr, Symbol):
+        return new if expr == old else expr
+
+
 if __name__ == "__main__":
-    x, y = symbols("x y")
-
     F = Fraction
-    I1 = integrate((x / 90 * (x - 5) ** 2 / 350), (x, 5, 6))
-    I2 = integrate((F(1, 15) - F(1, 360) * (x - 6)) * (x - 5) ** 2 / 350, (x, 6, 15))
-    I3 = integrate(
-        (F(1, 15) - F(1, 360) * (x - 6)) * (1 - (40 - x) ** 2 / 875), (x, 15, 30)
-    )
-
-    print(I1, I2, I3)
-    final = (I1 + I2 + I3).simplify()
-    print(final)
-    print(float(final.value))
+    x, y = symbols("x y")
+    expression = -5 * x**4 / (1 - x**2) ** F(5, 2)
+    print(expression)
+    print(integrate(expression, x))
