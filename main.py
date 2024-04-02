@@ -2,11 +2,14 @@
 # - method to convert from our expression to sympy for testing
 
 import itertools
+import random
 import re
+import string
+from abc import ABC, abstractmethod
 from dataclasses import dataclass, fields
 from fractions import Fraction
 from functools import reduce
-from typing import Dict, List, Literal, Optional, Tuple, Union
+from typing import Callable, Dict, List, Literal, Optional, Tuple, Union
 
 
 def _cast(x):
@@ -29,7 +32,7 @@ def cast(func):
     return wrapper
 
 
-class Expr:
+class Expr(ABC):
     def __post_init__(self):
         # if any field is an Expr, cast it
         # note: does not cast List[Expr]
@@ -91,19 +94,22 @@ class Expr:
 
     @cast
     def __eq__(self, other):
-        return self.__repr__ == other.__repr__
+        return self.__repr__() == other.__repr__()
 
-    # should be overloaded
+    # should be overloaded if necessary
     def expandable(self) -> bool:
         return False
 
+    # overload if necessary
     def expand(self) -> "Expr":
         raise NotImplementedError(f"Cannot expand {self}")
 
     @cast
+    @abstractmethod
     def evalf(self, subs: Dict[str, "Const"]):
         raise NotImplementedError(f"Cannot evaluate {self}")
 
+    @abstractmethod
     def children(self) -> List["Expr"]:
         raise NotImplementedError(f"Cannot get children of {self.__class__.__name__}")
 
@@ -115,6 +121,7 @@ class Expr:
     def simplifable(self) -> bool:
         return False
 
+    # @abstractmethod
     def diff(self, var: "Symbol"):
         raise NotImplementedError(
             f"Cannot get the derivative of {self.__class__.__name__}"
@@ -249,7 +256,7 @@ class Sum(Associative, Expr):
 
         pattern = "\(1 \+ \(-1 \* sin\(\w+\)\^2\)\)"
         if re.search(pattern, new_sum.__repr__()) and len(new_sum.terms) == 2:
-            return Power(TrigFunction(new_sum.symbols()[0], "cos"), 2)
+            return Power(Cos(new_sum.symbols()[0]), 2)
             # ok im  gna be dumb and j assume the sum is only this
 
             # for term in new_sum.terms:
@@ -268,10 +275,6 @@ class Sum(Associative, Expr):
 
     def __repr__(self):
         return "(" + " + ".join(map(repr, self.terms)) + ")"
-
-    @cast
-    def __eq__(self, other) -> bool:
-        return isinstance(other, Sum) and set(other.terms) == set(self.terms)
 
 
 def _deconstruct_prod(expr: Expr) -> Tuple[Const, List[Expr]]:
@@ -410,7 +413,12 @@ class Power(Expr):
         elif isinstance(b, Const) and isinstance(x, Const):
             return Const(b.value**x.value)
         elif isinstance(b, Power):
-            return Power(b.base, (x * b.exponent).simplify())
+            return Power(b.base, x * b.exponent).simplify()
+        elif isinstance(b, Prod):
+            # when you construct this new power entity you have to simplify it.
+            # because what if the term raised to this exponent can be simplified?
+            # ex: if you have (ab)^n where a = c^m
+            return Prod([Power(term, x).simplify() for term in b.terms])
         else:
             return Power(self.base.simplify(), x)
 
@@ -435,7 +443,7 @@ class Power(Expr):
 
 
 @dataclass
-class SingleFunc:
+class SingleFunc(ABC):
     inner: Expr
 
     def children(self) -> List["Expr"]:
@@ -472,7 +480,7 @@ class Log(SingleFunc, Expr):
 
 
 @dataclass
-class TrigFunction(SingleFunc, Expr):
+class TrigFunction(SingleFunc, Expr, ABC):
     inner: Expr
     function: Literal["sin", "cos", "tan", "sec", "csc", "cot"]
     is_inverse: bool = False
@@ -480,9 +488,63 @@ class TrigFunction(SingleFunc, Expr):
     def __repr__(self):
         return f"{self.function}{'^-1' if self.is_inverse else ''}({self.inner})"
 
-    def simplify(self):
-        inner = self.inner.simplify()
-        return self.__class__(inner, self.function)
+    # def simplify(self):
+    #     inner = self.inner.simplify()
+    #     return self.__class__(inner, self.function)
+
+
+@dataclass
+class Sin(TrigFunction):
+    def __init__(self, inner):
+        super().__init__(inner, function="sin")
+
+    def __repr__(self):
+        return super().__repr__()
+
+
+@dataclass
+class Cos(TrigFunction):
+    def __init__(self, inner):
+        super().__init__(inner, function="cos")
+
+    def __repr__(self):
+        return super().__repr__()
+
+
+@dataclass
+class Tan(TrigFunction):
+    def __init__(self, inner):
+        super().__init__(inner, function="tan")
+
+    def __repr__(self):
+        return super().__repr__()
+
+
+@dataclass
+class Csc(TrigFunction):
+    def __init__(self, inner):
+        super().__init__(inner, function="csc")
+
+    def __repr__(self):
+        return super().__repr__()
+
+
+@dataclass
+class Sec(TrigFunction):
+    def __init__(self, inner):
+        super().__init__(inner, function="sec")
+
+    def __repr__(self):
+        return super().__repr__()
+
+
+@dataclass
+class Cot(TrigFunction):
+    def __init__(self, inner):
+        super().__init__(inner, function="cot")
+
+    def __repr__(self):
+        return super().__repr__()
 
 
 def symbols(symbols: str):
@@ -561,8 +623,30 @@ def integrate(expr: Expr, bounds: Union[Symbol, Tuple[Symbol, Const, Const]]) ->
         raise NotImplementedError(f"Cannot integrate {expr} with respect to {var}")
 
 
-import random
-import string
+def nesting(expr: Expr, var: Symbol) -> int:
+    """
+    Compute the nesting amount (complexity) of an expression
+
+    >>> nesting(x**2, x)
+    2
+    >>> nesting(x * y**2, x)
+    2
+    >>> nesting(x * (1 / y**2 * 3), x)
+    2
+    """
+
+    if not expr.contains(var):
+        return 0
+
+    children = expr.children()
+    if isinstance(expr, Symbol) and expr.name == var.name:
+        return 1
+    elif len(children) == 0:
+        return 0
+    else:
+        return 1 + max(
+            nesting(sub_expr, var) for sub_expr in children if sub_expr.contains(var)
+        )
 
 
 def random_id(length):
@@ -574,6 +658,53 @@ def random_id(length):
 
 
 def heuristics(expr: Expr, var: Symbol):
+    # if expression **contains** trig function and we the current node is not of the transform A on it
+    # (or the last heuristic transform was not transform A)
+    # then we want to do transform A?
+
+    # for mvp:
+    # 1. check that the expression contains a trig function.
+    # 2. do a replace for all 3 sets
+    # 3. simplify
+    # 4. find the one with the lowest nesting
+    # 5. integrate that one.
+    if contains(expr, TrigFunction):
+        r1 = replace_class(
+            expr,
+            [Tan, Csc, Cot, Sec],
+            [
+                lambda x: Sin(x) / Cos(x),
+                lambda x: 1 / Sin(x),
+                lambda x: Cos(x) / Sin(x),
+                lambda x: 1 / Cos(x),
+            ],
+        ).simplify()
+        r2 = replace_class(
+            expr,
+            [Sin, Cos, Cot, Sec],
+            [
+                lambda x: 1 / Csc(x),
+                lambda x: 1 / Tan(x) / Csc(x),
+                lambda x: 1 / Tan(x),
+                lambda x: Tan(x) * Csc(x),
+            ],
+        ).simplify()
+        r3 = replace_class(
+            expr,
+            [Sin, Cos, Tan, Csc],
+            [
+                lambda x: 1 / Cot(x) / Sec(x),
+                lambda x: 1 / Sec(x),
+                lambda x: 1 / Cot(x),
+                lambda x: Cot(x) * Sec(x),
+            ],
+        ).simplify()
+
+        options = [r1, r2, r3]
+        results = [nesting(r, var) for r in options]
+        lowest_idx_option = options[results.index(min(results))]
+        return integrate(lowest_idx_option, var)
+
     # look for (1 + (-1 * x^2))
     s = f"(1 + (-1 * {var.name}^2))"
     if s in expr.__repr__():
@@ -583,13 +714,12 @@ def heuristics(expr: Expr, var: Symbol):
         # like you want to create a new expression wher eyou replace every instance of the var with sin^-1???
         # psuedocode is good laura
         # how do i loop over the entire expression? and replace it all? so if it's a sum or product then you can loop over all the terms and if it's a product you loop over the ... idk just loop over .children and .children?? but you have to recreate it. ugh
-        new_thing = replace(
-            expr, var, TrigFunction(intermediate_var, "sin")
-        ) * TrigFunction(intermediate_var, "cos")
+        new_thing = replace(expr, var, Sin(intermediate_var)) * Cos(intermediate_var)
+        new_thing = new_thing.simplify()
         # then that's a node and u store the transform and u take the integral of that.
         # Node(new_thing)
         # expr.children = [Node]
-        integrate(new_thing, var)
+        return integrate(new_thing, intermediate_var)
 
 
 def replace(expr: Expr, old: Symbol, new: Expr) -> Expr:
@@ -612,6 +742,43 @@ def replace(expr: Expr, old: Symbol, new: Expr) -> Expr:
         return expr
     if isinstance(expr, Symbol):
         return new if expr == old else expr
+
+    raise NotImplementedError(f"replace not implemented for {expr.__class__.__name__}")
+
+
+def contains(expr: Expr, cls) -> bool:
+    if isinstance(expr, cls) or issubclass(expr.__class__, cls):
+        return True
+
+    return any([contains(e, cls) for e in expr.children()])
+
+
+# cls here has to be a singlefunc
+def replace_class(expr: Expr, cls: list, newfunc: List[Callable[[Expr], Expr]]) -> Expr:
+    if isinstance(expr, Sum):
+        return Sum([replace_class(e, cls, newfunc) for e in expr.terms])
+    if isinstance(expr, Prod):
+        return Prod([replace_class(e, cls, newfunc) for e in expr.terms])
+    if isinstance(expr, Power):
+        return Power(
+            base=replace_class(expr.base, cls, newfunc),
+            exponent=replace_class(expr.exponent, cls, newfunc),
+        )
+    if isinstance(expr, SingleFunc):
+        new_inner = replace_class(expr.inner, cls, newfunc)
+        for i, cl in enumerate(cls):
+            if isinstance(expr, cl):
+                return newfunc[i](new_inner)
+        return expr.__class__(new_inner)
+
+    if isinstance(expr, Const):
+        return expr
+    if isinstance(expr, Symbol):
+        return expr
+
+    raise NotImplementedError(
+        f"replace_class not implemented for {expr.__class__.__name__}"
+    )
 
 
 if __name__ == "__main__":
