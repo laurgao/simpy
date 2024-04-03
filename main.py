@@ -11,10 +11,14 @@ from fractions import Fraction
 from functools import reduce
 from typing import Callable, Dict, List, Literal, Optional, Tuple, Union
 
+import numpy as np
+
 
 def _cast(x):
     if type(x) == int or isinstance(x, Fraction):
         return Const(x)
+    if type(x) == float and int(x) == x:  # silly patch
+        return Const(int(x))
     elif isinstance(x, Expr):
         return x
     elif isinstance(x, dict):
@@ -92,9 +96,16 @@ class Expr(ABC):
     def __rtruediv__(self, other):
         return Prod([other, Power(self, -1)])
 
+    def __neg__(self):
+        return -1 * self
+
     @cast
     def __eq__(self, other):
         return self.__repr__() == other.__repr__()
+
+    @cast
+    def __ne__(self, other):
+        return not (self == other)
 
     # should be overloaded if necessary
     def expandable(self) -> bool:
@@ -163,8 +174,16 @@ class Const(Expr):
         return isinstance(other, Const) and self.value == other.value
 
     @cast
-    def __ne__(self, other):
-        return not (self == other)
+    def __ge__(self, other):
+        if not isinstance(other, Const):
+            return NotImplemented
+        return self.value > other.value
+
+    @cast
+    def __lt__(self, other):
+        if not isinstance(other, Const):
+            return NotImplemented
+        return self.value < other.value
 
     @cast
     def evalf(self, subs: Dict[str, "Const"]):
@@ -603,6 +622,10 @@ def integrate(expr: Expr, bounds: Union[Symbol, Tuple[Symbol, Const, Const]]) ->
         if expr.expandable():
             return integrate(expr.expand(), var)
 
+        if divisible(expr, var):
+            divided = polynomial_division(expr, var)
+            return integrate(divided, var)
+
         return heuristics(expr, var)
         raise NotImplementedError(f"Cannot integrate {expr} with respect to {var}")
     elif isinstance(expr, Power):
@@ -623,6 +646,140 @@ def integrate(expr: Expr, bounds: Union[Symbol, Tuple[Symbol, Const, Const]]) ->
     else:
         return heuristics(expr, var)
         raise NotImplementedError(f"Cannot integrate {expr} with respect to {var}")
+
+
+def divisible(expr: Prod, var: Symbol):
+    # we want to check that all of the terms in the product are polynomials.
+    # this means no trigfunctions and logs i guess. and that all powers are to integers.
+
+    # none of these terms should be products because by here the product is expanded simplified and flattened
+
+    # we also has to make sure it has at least one pos power and neg power ig ugh
+    return all([is_polynomial(term, var) for term in expr.terms])
+
+
+def is_polynomial(expr: Expr, var: Symbol) -> bool:
+    # how to handle other symbols? treat as consts or just say no? idk.
+
+    def _contains_singlefunc_w_inner(expr: Expr, var: Symbol) -> bool:
+        if isinstance(expr, SingleFunc) and expr.inner.contains(var):
+            return True
+
+        return any([_contains_singlefunc_w_inner(e, var) for e in expr.children()])
+
+    if _contains_singlefunc_w_inner(expr, var):
+        return False
+
+    if isinstance(expr, Const) or isinstance(expr, Symbol):
+        return True
+    if isinstance(expr, Power):
+
+        if not (
+            isinstance(expr.exponent, Const) and expr.exponent.value.denominator == 1
+        ):
+            return False
+        return True
+    if isinstance(expr, Sum):
+        return all([is_polynomial(term, var) for term in expr.terms])
+
+    raise NotImplementedError(
+        f"is_polynomial not implemented for {expr.__class__.__name__}"
+    )
+
+
+def polynomial_division(expr: Prod, var: Symbol) -> Expr:
+    # First, we formulate the division problem. We want a numerator and denominator. both are sums or powers or consts or symbols
+    numerator = 1
+    denominator = 1
+    for term in expr.terms:
+        b, x = _deconstruct_power(term)
+        if x.value > 0:
+            numerator *= term
+        else:
+            denominator *= Power(b, -x).simplify()
+
+    numerator = numerator.simplify()
+    denominator = denominator.simplify()
+    numerator_list = to_polynomial(numerator, var)
+    denominator_list = to_polynomial(denominator, var)
+    quotient = np.zeros(len(numerator_list) - len(denominator_list) + 1)
+
+    while numerator_list.size >= denominator_list.size:
+        quotient_degree = len(numerator_list) - len(denominator_list)
+        quotient_coeff = numerator_list[-1] / denominator_list[-1]
+        quotient[quotient_degree] = quotient_coeff
+        numerator_list -= np.concatenate(
+            ([0] * quotient_degree, denominator_list * quotient_coeff)
+        )
+        numerator_list = rid_ending_zeros(numerator_list)
+
+    remainder = polynomial_to_expr(numerator_list, var) / polynomial_to_expr(
+        denominator_list, var
+    )
+    quotient_expr = polynomial_to_expr(quotient, var)
+    answer = (quotient_expr + remainder).simplify()
+    return answer
+
+
+Polynomial = np.ndarray  # has to be 1-D array
+
+
+def to_polynomial(expr: Expr, var: Symbol) -> Polynomial:
+    if isinstance(expr, Sum):
+        xyz = np.zeros(10)
+        for term in expr.terms:
+            if isinstance(term, Prod):
+                const, power = expr.terms
+                assert isinstance(const, Const)
+                if isinstance(power, Symbol):
+                    xyz[1] = int(const.value)
+                assert isinstance(power, Power)
+                assert power.base == var
+                xyz[int(power.exponent.value)] = int(const.value)
+            elif isinstance(term, Power):
+                assert term.base == var
+                xyz[int(term.exponent.value)] = 1
+            elif isinstance(term, Symbol):
+                assert term == var
+                xyz[1] = 1
+            elif isinstance(term, Const):
+                xyz[0] = int(term.value)
+            else:
+                raise NotImplementedError(f"weird term: {term}")
+        return rid_ending_zeros(xyz)
+
+    if isinstance(expr, Prod):
+        # has to be product of 2 terms: a constant and a power.
+        const, power = expr.terms
+        assert isinstance(const, Const)
+        if isinstance(power, Symbol):
+            return np.array([0, int(const.value)])
+        assert isinstance(power, Power)
+        assert power.base == var
+        xyz = np.zeros(int(power.exponent.value) + 1)
+        xyz[-1] = const.value
+        return xyz
+    if isinstance(expr, Power):
+        assert expr.base == var
+        xyz = np.zeros(int(expr.exponent.value) + 1)
+        xyz[-1] = 1
+        return xyz
+    if isinstance(expr, Symbol):
+        assert expr == var
+        return np.array([0, 1])
+
+    raise NotImplementedError(f"weird expr: {expr}")
+
+
+def polynomial_to_expr(poly: Polynomial, var: Symbol) -> Expr:
+    final = Const(0)
+    for i, element in enumerate(poly):
+        final += element * var**i
+    return final.simplify()
+
+
+def rid_ending_zeros(arr: Polynomial) -> Polynomial:
+    return np.trim_zeros(arr, "b")
 
 
 def nesting(expr: Expr, var: Symbol) -> int:
@@ -670,7 +827,6 @@ def heuristics(expr: Expr, var: Symbol):
         intermediate = generate_intermediate_var()
         # y = tanx
         new_integrand = replace(expr, Tan(var), intermediate) / (1 + intermediate**2)
-        breakpoint()
         return integrate(new_integrand, intermediate)
 
     # if expression **contains** trig function and we the current node is not of the transform A on it
