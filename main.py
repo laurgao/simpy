@@ -283,6 +283,10 @@ class Sum(Associative, Expr):
             #     p =
             #     if re.search(term.__repr__())
 
+        pattern = "1 \+ tan\(\w+\)\^2"
+        if re.search(pattern, new_sum.__repr__()) and len(new_sum.terms) == 2:
+            return Power(Sec(new_sum.symbols()[0]), 2)
+
         return new_sum
 
     @cast
@@ -892,6 +896,13 @@ def heuristics(expr: Expr, var: Symbol):
         # expr.children = [Node]
         return integrate(new_thing, intermediate_var)
 
+    s2 = f"1 + {var.name}^2"
+    if s2 in expr.__repr__():
+        intermediate = generate_intermediate_var()
+        dy_dx = Sec(intermediate) ** 2
+        new_thing = (replace(expr, var, Tan(intermediate)) * dy_dx).simplify()
+        return integrate(new_thing, intermediate)
+
     raise NotImplementedError(f"Cannot integrate {expr} with respect to {var}")
 
 
@@ -967,4 +978,6 @@ if __name__ == "__main__":
     x, y = symbols("x y")
     expression = -5 * x**4 / (1 - x**2) ** F(5, 2)
     print(expression)
-    print(integrate(expression, x))
+    integral = integrate(expression, x).simplify()  # TODO auto simplify
+    print(integral)
+    breakpoint()
