@@ -12,8 +12,8 @@ from main import *
 class Node:
     expr: Expr
     var: Symbol  # variable that THIS EXPR is integrated by.
-    transform: Optional["Transform"]  # the transform that led to this node
-    parent: Optional["Node"]  # None for root node only
+    transform: Optional["Transform"] = None  # the transform that led to this node
+    parent: Optional["Node"] = None  # None for root node only
     children: Optional[List["Node"]] = (
         None  # smtn smtn setting it to [] by default causes errors
     )
@@ -23,10 +23,10 @@ class Node:
     @property
     def leaves(self) -> List["Node"]:
         # Returns the leaves of the tree (all nodes without children)
-        if len(self.children) == 0:
+        if not self.children:
             return [self]
 
-        return [leaf for child in self.children for leaf in child.leaves()]
+        return [leaf for child in self.children for leaf in child.leaves]
 
     @property
     def unfinished_leaves(self) -> List["Node"]:
@@ -39,9 +39,10 @@ class Node:
             return self
         return self.parent.root
 
-    @property
-    def is_solved(self) -> bool:
+    # @property
+    def is_solved(self, limit=20) -> bool:
         # Returns True if all leaves WITH AND NODES are solved and all OR nodes are solved
+        # if limit is reached, return False
         if self.type == "SOLUTION":
             return True
 
@@ -50,10 +51,15 @@ class Node:
 
         if self.type == "AND" or self.type == "UNSET":
             # UNSET should only have one child.
-            return all([child.is_solved for child in self.children])
+            return all([child.is_solved(limit - 1) for child in self.children])
 
         if self.type == "OR":
-            return any([child.is_solved for child in self.children])
+
+            if limit == 0:
+                print("LIMIT REACHED")
+                breakpoint()
+
+            return any([child.is_solved(limit - 1) for child in self.children])
 
     @property
     def is_failed(self) -> bool:
@@ -74,11 +80,13 @@ class Node:
 
     @property
     def is_finished(self) -> bool:
-        return self.is_solved or self.is_failed
+        return self.is_solved() or self.is_failed
 
     @property
     def unsolved_children(self) -> List["Node"]:
-        return [child for child in self.children if not child.is_solved]
+        if not self.children:
+            return []
+        return [child for child in self.children if not child.is_solved()]
 
     # @property
     # def grouped_unsolved_leaves(self) -> list:
@@ -105,8 +113,8 @@ class Transform(ABC):
 
 class PullConstant(Transform):
 
-    constant: Expr = None
-    non_constant_part: Expr = None
+    _constant: Expr = None
+    _non_constant_part: Expr = None
 
     def check(self, node: Node) -> bool:
         expr = node.expr
@@ -114,8 +122,8 @@ class PullConstant(Transform):
         if isinstance(expr, Prod):
             # if there is a constant, pull it out
             if isinstance(expr.terms[0], Const):
-                self.constant = expr.terms[0]
-                self.non_constant_part = Prod(expr.terms[1:]).simplify()
+                self._constant = expr.terms[0]
+                self._non_constant_part = Prod(expr.terms[1:]).simplify()
                 return True
 
             # or if there is a symbol that's not the variable, pull it out
@@ -127,8 +135,8 @@ class PullConstant(Transform):
                     and term.base != var
                 )
                 if is_nonvar_symbol or is_nonvar_power:
-                    self.constant = term
-                    self.non_constant_part = Prod(
+                    self._constant = term
+                    self._non_constant_part = Prod(
                         expr.terms[:i] + expr.terms[i + 1 :]
                     ).simplify()
                     return True
@@ -136,12 +144,12 @@ class PullConstant(Transform):
         return False
 
     def forward(self, node: Node):
-        node.children = [Node(self.non_constant_part, node.var, self, node)]
+        node.children = [Node(self._non_constant_part, node.var, self, node)]
 
 
 class PolynomialDivision(Transform):
-    numerator: Polynomial = None
-    denominator: Polynomial = None
+    _numerator: Polynomial = None
+    _denominator: Polynomial = None
 
     def check(self, node: Node) -> bool:
         # This is so messy we can honestly just do catching in the `to_polynomial`
@@ -208,25 +216,25 @@ class PolynomialDivision(Transform):
         if len(numerator_list) < len(denominator_list):
             return False
 
-        self.numerator = numerator_list
-        self.numerator = denominator_list
+        self._numerator = numerator_list
+        self._numerator = denominator_list
         return True
 
     def forward(self, node: Node):
         var = node.var
-        quotient = np.zeros(len(self.numerator) - len(self.denominator) + 1)
+        quotient = np.zeros(len(self._numerator) - len(self._denominator) + 1)
 
-        while self.numerator.size >= self.denominator.size:
-            quotient_degree = len(self.numerator) - len(self.denominator)
-            quotient_coeff = self.numerator[-1] / self.denominator[-1]
+        while self._numerator.size >= self._denominator.size:
+            quotient_degree = len(self._numerator) - len(self._denominator)
+            quotient_coeff = self._numerator[-1] / self._denominator[-1]
             quotient[quotient_degree] = quotient_coeff
-            self.numerator -= np.concatenate(
-                ([0] * quotient_degree, self.denominator * quotient_coeff)
+            self._numerator -= np.concatenate(
+                ([0] * quotient_degree, self._denominator * quotient_coeff)
             )
-            self.numerator = rid_ending_zeros(self.numerator)
+            self._numerator = rid_ending_zeros(self._numerator)
 
-        remainder = polynomial_to_expr(self.numerator, var) / polynomial_to_expr(
-            self.denominator, var
+        remainder = polynomial_to_expr(self._numerator, var) / polynomial_to_expr(
+            self._denominator, var
         )
         quotient_expr = polynomial_to_expr(quotient, var)
         answer = (quotient_expr + remainder).simplify()
@@ -237,7 +245,7 @@ class Expand(Transform):
     def forward(self, node: Node):
         node.children = [Node(node.expr.expand(), node.var, self, node)]
 
-    def check(node: Node) -> bool:
+    def check(self, node: Node) -> bool:
         return node.expr.expandable()
 
 
@@ -263,7 +271,7 @@ class B_Tan(Transform):
         new_node = Node(new_integrand, intermediate, self, node)
         node.children = [new_node]
 
-    def check(node: Node) -> bool:
+    def check(self, node: Node) -> bool:
         expr = node.expr
         return contains(expr, Tan) and count(expr, Tan(node.var)) == count(
             expr, node.var
@@ -308,7 +316,7 @@ class A(Transform):
         node.children = [Node(option, node.var, self, node) for option in stuff]
         node.type = "OR"
 
-    def check(node: Node) -> bool:
+    def check(self, node: Node) -> bool:
         expr = node.expr
         return contains(expr, TrigFunction)
 
@@ -324,7 +332,7 @@ class C_Sin(Transform):
         # then that's a node and u store the transform and u take the integral of that.
         node.children = [Node(new_thing, intermediate_var, self, node)]
 
-    def check(node: Node) -> bool:
+    def check(self, node: Node) -> bool:
         s = f"(1 + (-1 * {node.var.name}^2))"
         return s in node.expr.__repr__()  # ugh unclean
 
@@ -333,11 +341,11 @@ class C_Tan(Transform):
     def forward(self, node: Node):
         intermediate = generate_intermediate_var()
         dy_dx = Sec(intermediate) ** 2
-        new_thing = (replace(node.expr, var, Tan(intermediate)) * dy_dx).simplify()
+        new_thing = (replace(node.expr, node.var, Tan(intermediate)) * dy_dx).simplify()
         node.children = [Node(new_thing, intermediate, self, node)]
         # TODO: I NEED TO STORE THAT THE EXPR SHOULD NOW BE INTEGRATED WRT INTERMEDIATE VAR!!!!
 
-    def check(node: Node) -> bool:
+    def check(self, node: Node) -> bool:
         s2 = f"1 + {node.var.name}^2"
         return s2 in node.expr.__repr__()
 
@@ -346,7 +354,7 @@ HEURISTICS = [B_Tan, A, C_Sin, C_Tan]
 SAFE_TRANSFORMS = [Additivity, PullConstant, Expand, PolynomialDivision]
 
 
-def check_if_solvable(node: Node):
+def _check_if_solvable(node: Node):
     expr = node.expr
     var = node.var
     answer = None
@@ -368,21 +376,21 @@ def check_if_solvable(node: Node):
     node.children = [Node(answer, parent=node, type="SOLUTION")]
 
 
-def cycle(node: Node):
+def _cycle(node: Node):
     # 1. APPLY ALL SAFE TRANSFORMS
-    integrate_safely(node)
+    _integrate_safely(node)
 
     # now we have a tree with all the safe transforms applied
     # 2. LOOK IN TABLE
     for leaf in node.unfinished_leaves:
-        check_if_solvable(leaf)
+        _check_if_solvable(leaf)
 
     if len(node.unfinished_leaves) == 0:
         return "SOLVED"
 
     # 3. APPLY HEURISTICS
     next_node = node.unfinished_leaves[0]  # random lol
-    integrate_heuristically(next_node)
+    _integrate_heuristically(next_node)
 
     next_next_node = _get_next_node_post_heuristic(next_node)
     # if next_next_node is None:
@@ -456,7 +464,7 @@ class Integration:
         root = Node(integrand, var)
         curr_node = root
         while True:
-            answer = cycle(curr_node)
+            answer = _cycle(curr_node)
 
             if root.is_finished:
                 break
@@ -477,19 +485,20 @@ class Integration:
         ...
 
 
-def integrate_safely(node: Node):
+def _integrate_safely(node: Node):
     for transform in SAFE_TRANSFORMS:
         tr = transform()
         if tr.check(node):
             tr.forward(node)
             for child in node.children:
-                integrate_safely(child)
+                _integrate_safely(child)
 
 
-def integrate_heuristically(node: Node):
-    for heuristic_transform in HEURISTICS:
-        if heuristic_transform.check(node):
-            heuristic_transform.forward(node)
+def _integrate_heuristically(node: Node):
+    for transform in HEURISTICS:
+        tr = transform()
+        if tr.check(node):
+            tr.forward(node)
 
     if len(node.children) > 1:
         node.type = "OR"
@@ -498,7 +507,10 @@ def integrate_heuristically(node: Node):
         node.type = "FAILURE"
 
 
+CCOUNT = 0
+
 if __name__ == "__main__":
+
     F = Fraction
     x, y = symbols("x y")
     expression = -5 * x**4 / (1 - x**2) ** F(5, 2)
