@@ -263,7 +263,7 @@ class Additivity(Transform):
         node.children = [Node(e, node.var, self, node) for e in node.expr.terms]
 
     def check(self, node: Node) -> bool:
-        return isinstance(node, Sum)
+        return isinstance(node.expr, Sum)
 
 
 # Let's just add all the transforms we've used for now.
@@ -388,7 +388,7 @@ def _check_if_solvable(node: Node):
     if answer is None:
         return
 
-    node.children = [Node(answer, parent=node, type="SOLUTION")]
+    node.children = [Node(answer, var=node.var, parent=node, type="SOLUTION")]
 
 
 def _cycle(node: Node):
@@ -489,7 +489,6 @@ class Integration:
                 curr_node = answer
 
         if root.is_failed:
-            breakpoint()
             raise NotImplementedError(f"Failed to integrate {integrand} wrt {var}")
 
         # now we have a solved tree or a failed tree
