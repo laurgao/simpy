@@ -225,7 +225,7 @@ class PolynomialDivision(Transform):
             return False
 
         self._numerator = numerator_list
-        self._numerator = denominator_list
+        self._denominator = denominator_list
         return True
 
     def forward(self, node: Node):
