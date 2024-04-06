@@ -569,6 +569,33 @@ class Cot(TrigFunction):
         return super().__repr__()
 
 
+@dataclass
+class ArcSin(TrigFunction):
+    def __init__(self, inner):
+        super().__init__(inner, function="sin", is_inverse=True)
+
+    def __repr__(self):
+        return super().__repr__()
+
+
+@dataclass
+class ArcCos(TrigFunction):
+    def __init__(self, inner):
+        super().__init__(inner, function="cos", is_inverse=True)
+
+    def __repr__(self):
+        return super().__repr__()
+
+
+@dataclass
+class ArcTan(TrigFunction):
+    def __init__(self, inner):
+        super().__init__(inner, function="tan", is_inverse=True)
+
+    def __repr__(self):
+        return super().__repr__()
+
+
 def symbols(symbols: str):
     symbols = [Symbol(name=s) for s in symbols.split(" ")]
     return symbols if len(symbols) > 1 else symbols[0]

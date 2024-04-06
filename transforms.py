@@ -18,6 +18,9 @@ class Node:
         None  # smtn smtn setting it to [] by default causes errors
     )
     type: Literal["AND", "OR", "UNSET", "SOLUTION", "FAILURE"] = "UNSET"
+    solution: Optional[Expr] = (
+        None  # only for SOLUTION nodes (& their parents when we go backwards)
+    )
     # failure = can't proceed forward.
 
     def __post_init__(self):
@@ -105,22 +108,26 @@ class Node:
 
 class Transform(ABC):
     "An integral transform -- base class"
+    # forward and backward modify the nodetree directly
 
     def __init__(self):
         pass
 
-    def forward(self, node: Node):
+    @abstractmethod
+    def forward(self, node: Node) -> None:
         raise NotImplementedError("Not implemented")
 
-    def backward(self, node: Node):
-        raise NotImplementedError("Not implemented")
+    @abstractmethod
+    def backward(self, node: Node) -> None:
+        if not node.solution:
+            raise ValueError("Node has no solution")
 
+    @abstractmethod
     def check(self, node: Node) -> bool:
         raise NotImplementedError("Not implemented")
 
 
 class PullConstant(Transform):
-
     _constant: Expr = None
     _non_constant_part: Expr = None
 
@@ -153,6 +160,10 @@ class PullConstant(Transform):
 
     def forward(self, node: Node):
         node.children = [Node(self._non_constant_part, node.var, self, node)]
+
+    def backward(self, node: Node) -> None:
+        super().backward(node)
+        node.parent.solution = (self._constant * node.solution).simplify()
 
 
 class PolynomialDivision(Transform):
@@ -248,6 +259,10 @@ class PolynomialDivision(Transform):
         answer = (quotient_expr + remainder).simplify()
         node.children = [Node(answer, var, self, node)]
 
+    def backward(self, node: Node) -> None:
+        super().backward(node)
+        node.parent.solution = node.solution
+
 
 class Expand(Transform):
     def forward(self, node: Node):
@@ -255,6 +270,10 @@ class Expand(Transform):
 
     def check(self, node: Node) -> bool:
         return node.expr.expandable()
+
+    def backward(self, node: Node) -> None:
+        super().backward(node)
+        node.parent.solution = node.solution
 
 
 class Additivity(Transform):
@@ -265,10 +284,23 @@ class Additivity(Transform):
     def check(self, node: Node) -> bool:
         return isinstance(node.expr, Sum)
 
+    def backward(self, node: Node) -> None:
+        super().backward(node)
+
+        # For this to work, we must have a solution for each sibling.
+        if not all([child.solution for child in node.parent.children]):
+            return ValueError(f"Additivity backward for {node} failed")
+
+        node.parent.solution = Sum(
+            [child.solution for child in node.parent.children]
+        ).simplify()
+
 
 # Let's just add all the transforms we've used for now.
 # and we will make this shit good and generalized later.
 class B_Tan(Transform):
+    _variable_change = None
+
     def forward(self, node: Node):
         intermediate = generate_intermediate_var()
         expr = node.expr
@@ -279,11 +311,19 @@ class B_Tan(Transform):
         new_node = Node(new_integrand, intermediate, self, node)
         node.children = [new_node]
 
+        self._variable_change = Tan(node.var)
+
     def check(self, node: Node) -> bool:
         expr = node.expr
         return contains(expr, Tan) and count(expr, Tan(node.var)) == count(
             expr, node.var
         )  # ugh everything is so sus
+
+    def backward(self, node: Node) -> None:
+        super().backward(node)
+        node.parent.solution = replace(
+            node.expr, node.var, self._variable_change
+        ).simplify()
 
 
 class A(Transform):
@@ -335,10 +375,18 @@ class A(Transform):
         expr = node.expr
         return contains(expr, TrigFunction)
 
+    def backward(self, node: Node) -> None:
+        super().backward(node)
+        node.parent.solution = node.solution
+
 
 class C_Sin(Transform):
+    _variable_change = None
+
     def forward(self, node: Node):
         intermediate_var = generate_intermediate_var()
+        self._variable_change = ArcSin(node.var)
+        # intermediate = sin^-1 x
         new_thing = replace(node.expr, node.var, Sin(intermediate_var)) * Cos(
             intermediate_var
         )
@@ -351,18 +399,33 @@ class C_Sin(Transform):
         s = f"(1 + (-1 * {node.var.name}^2))"
         return s in node.expr.__repr__()  # ugh unclean
 
+    def backward(self, node: Node) -> None:
+        super().backward(node)
+        node.parent.solution = replace(
+            node.solution, node.var, self._variable_change
+        ).simplify()
+
 
 class C_Tan(Transform):
+    _variable_change = None
+
     def forward(self, node: Node):
         intermediate = generate_intermediate_var()
         dy_dx = Sec(intermediate) ** 2
         new_thing = (replace(node.expr, node.var, Tan(intermediate)) * dy_dx).simplify()
         node.children = [Node(new_thing, intermediate, self, node)]
-        # TODO: I NEED TO STORE THAT THE EXPR SHOULD NOW BE INTEGRATED WRT INTERMEDIATE VAR!!!!
+
+        self._variable_change = ArcTan(node.var)
 
     def check(self, node: Node) -> bool:
         s2 = f"1 + {node.var.name}^2"
         return s2 in node.expr.__repr__()
+
+    def backward(self, node: Node) -> None:
+        super().backward(node)
+        node.parent.solution = replace(
+            node.solution, node.var, self._variable_change
+        ).simplify()
 
 
 HEURISTICS = [B_Tan, A, C_Sin, C_Tan]
@@ -388,7 +451,9 @@ def _check_if_solvable(node: Node):
     if answer is None:
         return
 
-    node.children = [Node(answer, var=node.var, parent=node, type="SOLUTION")]
+    # node.children = [Node(answer, var=node.var, parent=node, type="SOLUTION")]
+    node.type = "SOLUTION"
+    node.solution = answer
 
 
 def _cycle(node: Node):
@@ -408,8 +473,6 @@ def _cycle(node: Node):
     _integrate_heuristically(next_node)
 
     next_next_node = _get_next_node_post_heuristic(next_node)
-    # if next_next_node is None:
-    #     return "FAILURE"
     return next_next_node
 
 
@@ -493,7 +556,21 @@ class Integration:
 
         # now we have a solved tree or a failed tree
         # we can go back and get the answer
-        ...
+        solved_leaves = [leaf for leaf in root.leaves if leaf.is_solved]
+        for leaf in solved_leaves:
+            # GO backwards on each leaf until it errors out, then go backwards on the next leaf.
+            l = leaf
+            while True:
+                try:
+                    l.transform.backward(l)
+                    l = l.parent
+                except ValueError:
+                    break
+
+        if root.solution is None:
+            raise ValueError("something went wrong while going backwards...")
+
+        return root.solution
 
 
 def _integrate_safely(node: Node):
@@ -528,5 +605,5 @@ if __name__ == "__main__":
     expression = -5 * x**4 / (1 - x**2) ** F(5, 2)
     print(expression)
     integral = Integration.integrate(expression, x)  # TODO auto simplify
-    # print(integral)
-    # breakpoint()
+    print(integral)
+    breakpoint()
