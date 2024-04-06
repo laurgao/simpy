@@ -45,8 +45,8 @@ class Node:
             return 0
         return 1 + self.parent.distance_from_root
 
-    # @property
-    def is_solved(self, limit=29) -> bool:
+    @property
+    def is_solved(self) -> bool:
         # Returns True if all leaves WITH AND NODES are solved and all OR nodes are solved
         # if limit is reached, return False
         if self.type == "SOLUTION":
@@ -57,15 +57,10 @@ class Node:
 
         if self.type == "AND" or self.type == "UNSET":
             # UNSET should only have one child.
-            return all([child.is_solved(limit - 1) for child in self.children])
+            return all([child.is_solved for child in self.children])
 
         if self.type == "OR":
-
-            if limit == 0:
-                print("LIMIT REACHED")
-                breakpoint()
-
-            return any([child.is_solved(limit - 1) for child in self.children])
+            return any([child.is_solved for child in self.children])
 
     @property
     def is_failed(self) -> bool:
@@ -86,13 +81,13 @@ class Node:
 
     @property
     def is_finished(self) -> bool:
-        return self.is_solved() or self.is_failed
+        return self.is_solved or self.is_failed
 
     @property
     def unsolved_children(self) -> List["Node"]:
         if not self.children:
             return []
-        return [child for child in self.children if not child.is_solved()]
+        return [child for child in self.children if not child.is_solved]
 
     # @property
     # def grouped_unsolved_leaves(self) -> list:
@@ -414,8 +409,7 @@ def _cycle(node: Node):
 def _get_next_node_post_heuristic(node: Node) -> Node:
 
     if len(node.unfinished_leaves) == 0:
-        if node.type == "FAILURE":
-            # this means node.type == FAILURE (it better be based on our structure)
+        if node.is_failed:
             # we want to go back and solve the parent
 
             parent = node.parent
@@ -428,7 +422,6 @@ def _get_next_node_post_heuristic(node: Node) -> Node:
             # now parent is the lowest OR node with multiple children
             return _get_next_node_post_heuristic(parent)
         else:
-            # node.type = "SUCCESS"
             raise NotImplementedError("TODO _get_next_node for success nodes")
 
     if len(node.unfinished_leaves) == 1:

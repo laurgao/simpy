@@ -973,11 +973,11 @@ def replace_class(expr: Expr, cls: list, newfunc: List[Callable[[Expr], Expr]]) 
     )
 
 
-if __name__ == "__main__":
-    F = Fraction
-    x, y = symbols("x y")
-    expression = -5 * x**4 / (1 - x**2) ** F(5, 2)
-    print(expression)
-    integral = integrate(expression, x).simplify()  # TODO auto simplify
-    print(integral)
-    breakpoint()
+# if __name__ == "__main__":
+#     F = Fraction
+#     x, y = symbols("x y")
+#     expression = -5 * x**4 / (1 - x**2) ** F(5, 2)
+#     print(expression)
+#     integral = integrate(expression, x).simplify()  # TODO auto simplify
+#     print(integral)
+#     breakpoint()
