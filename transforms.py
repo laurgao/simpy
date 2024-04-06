@@ -39,8 +39,14 @@ class Node:
             return self
         return self.parent.root
 
+    @property
+    def distance_from_root(self) -> int:
+        if not self.parent:
+            return 0
+        return 1 + self.parent.distance_from_root
+
     # @property
-    def is_solved(self, limit=20) -> bool:
+    def is_solved(self, limit=29) -> bool:
         # Returns True if all leaves WITH AND NODES are solved and all OR nodes are solved
         # if limit is reached, return False
         if self.type == "SOLUTION":
@@ -313,10 +319,17 @@ class A(Transform):
         ).simplify()
 
         stuff = [r1, r2, r3]
+        for thing in stuff:
+            if thing.__repr__() == expr.__repr__():
+                stuff.remove(thing)
         node.children = [Node(option, node.var, self, node) for option in stuff]
         node.type = "OR"
 
     def check(self, node: Node) -> bool:
+        # make sure that this node didn't get here by this transform
+        if isinstance(node.transform, A):
+            return False
+
         expr = node.expr
         return contains(expr, TrigFunction)
 
@@ -500,11 +513,12 @@ def _integrate_heuristically(node: Node):
         if tr.check(node):
             tr.forward(node)
 
+    if not node.children:
+        node.type = "FAILURE"
+        return
+
     if len(node.children) > 1:
         node.type = "OR"
-
-    if len(node.children) == 0:
-        node.type = "FAILURE"
 
 
 CCOUNT = 0
