@@ -32,4 +32,7 @@ assert nesting(x * (1 / y**2 * 3), x) == 2
 
 sassert_repr(x + (2 + y), x + 2 + y)
 
+assert count(2, x) == 0
+assert count(Tan(x + 1) ** 2 - 2 * x, x) == 2
+
 print("passed")

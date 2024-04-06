@@ -9,7 +9,7 @@ from abc import ABC, abstractmethod
 from dataclasses import dataclass, fields
 from fractions import Fraction
 from functools import reduce
-from typing import Callable, Dict, List, Literal, Optional, Tuple, Union
+from typing import Callable, Dict, List, Literal, Tuple, Union
 
 import numpy as np
 
@@ -316,7 +316,7 @@ def _deconstruct_prod(expr: Expr) -> Tuple[Const, List[Expr]]:
     return (coeff, non_const_factors)
 
 
-def _deconstruct_power(expr: Expr) -> Tuple[Expr, Const]:
+def deconstruct_power(expr: Expr) -> Tuple[Expr, Const]:
     # x^3 -> (x, 3). x -> (x, 1). 3 -> (3, 1)
     if isinstance(expr, Power):
         return (expr.base, expr.exponent)
@@ -342,14 +342,14 @@ class Prod(Associative, Expr):
             if term is None:
                 continue
 
-            base, expo = _deconstruct_power(term)
+            base, expo = deconstruct_power(term)
 
             # other terms with same base
             for j in range(i + 1, len(new.terms)):
                 if new.terms[j] is None:
                     continue
                 other = new.terms[j]
-                base2, expo2 = _deconstruct_power(other)
+                base2, expo2 = deconstruct_power(other)
                 if base2 == base:  # TODO: real expr equality
                     expo += expo2
                     new.terms[j] = None
@@ -696,7 +696,7 @@ def polynomial_division(expr: Prod, var: Symbol) -> Expr:
     numerator = 1
     denominator = 1
     for term in expr.terms:
-        b, x = _deconstruct_power(term)
+        b, x = deconstruct_power(term)
         if x.value > 0:
             numerator *= term
         else:
