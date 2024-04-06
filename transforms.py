@@ -1,6 +1,6 @@
 # structures for integration w transforms
 
-from typing import Optional
+from typing import Any, Optional
 
 from main import *
 
@@ -19,6 +19,9 @@ class Node:
     )
     type: Literal["AND", "OR", "UNSET", "SOLUTION", "FAILURE"] = "UNSET"
     # failure = can't proceed forward.
+
+    def __post_init__(self):
+        self.expr = self.expr.simplify()
 
     def __repr__(self):
         num_children = len(self.children) if self.children else 0
@@ -186,11 +189,13 @@ class PolynomialDivision(Transform):
                     ):
                         return False
                     return True
-                if isinstance(expr, Const) or isinstance(expr, Symbol):
+                if isinstance(expression, Const) or isinstance(expression, Symbol):
                     return True
 
-                if isinstance(expr, Sum):
-                    return all([_is_polynomial(term, node.var) for term in expr.terms])
+                if isinstance(expression, Sum):
+                    return all(
+                        [_is_polynomial(term, node.var) for term in expression.terms]
+                    )
 
                 raise NotImplementedError(f"Not implemented: {expression}")
 
