@@ -166,7 +166,7 @@ class Const(Expr):
         self.value = Fraction(self.value)
 
     def __repr__(self):
-        return str(self.value)
+        return str(self.value) if self.value.denominator == 1 else f"({self.value})"
 
     @cast
     def __eq__(self, other):
@@ -508,7 +508,7 @@ class TrigFunction(SingleFunc, Expr, ABC):
     is_inverse: bool = False
 
     def __repr__(self):
-        return f"{self.function}{'^-1' if self.is_inverse else ''}({self.inner})"
+        return f"{'a' if self.is_inverse else ''}{self.function}({self.inner})"
 
     # def simplify(self):
     #     inner = self.inner.simplify()

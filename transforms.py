@@ -561,6 +561,8 @@ class Integration:
             # GO backwards on each leaf until it errors out, then go backwards on the next leaf.
             l = leaf
             while True:
+                if l.parent is None:  # is root
+                    break
                 try:
                     l.transform.backward(l)
                     l = l.parent
