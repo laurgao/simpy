@@ -140,9 +140,8 @@ class Expr(ABC):
 
     def symbols(self) -> List["Symbol"]:
         # I hate this syntax
-        return [
-            symbol for e in self.children() for symbol in e.symbols()
-        ]  # do smtn to prevent duplicates (set doesnt work bc symbol is unhashable)
+        str_set = set([symbol.name for e in self.children() for symbol in e.symbols()])
+        return [Symbol(name=s) for s in str_set]
 
 
 class Associative:
@@ -571,7 +570,8 @@ class Cot(TrigFunction):
 
 
 def symbols(symbols: str):
-    return [Symbol(name=s) for s in symbols.split(" ")]
+    symbols = [Symbol(name=s) for s in symbols.split(" ")]
+    return symbols if len(symbols) > 1 else symbols[0]
 
 
 @cast
@@ -821,7 +821,7 @@ def random_id(length):
 
 
 def generate_intermediate_var() -> Symbol:
-    return symbols(f"intermediate_{random_id(10)}")[0]
+    return symbols(f"intermediate_{random_id(10)}")
 
 
 @cast

@@ -20,6 +20,10 @@ class Node:
     type: Literal["AND", "OR", "UNSET", "SOLUTION", "FAILURE"] = "UNSET"
     # failure = can't proceed forward.
 
+    def __repr__(self):
+        num_children = len(self.children) if self.children else 0
+        return f"Node({self.expr.__repr__()}, {self.var}, transform {self.transform.__class__.__name__}, {num_children} children, {self.type})"
+
     @property
     def leaves(self) -> List["Node"]:
         # Returns the leaves of the tree (all nodes without children)
@@ -166,11 +170,9 @@ class PolynomialDivision(Transform):
             if isinstance(expr, SingleFunc) and expr.inner.contains(node.var):
                 return True
 
-            return any(
-                [_contains_singlefunc_w_inner(e, node.var) for e in expr.children()]
-            )
+            return any([_contains_singlefunc_w_inner(e) for e in expr.children()])
 
-        if _contains_singlefunc_w_inner(expr, node.var):
+        if _contains_singlefunc_w_inner(expr):
             return False
 
         ## Make sure each factor is a polynomial
@@ -482,9 +484,8 @@ class Integration:
                 curr_node = answer
 
         if root.is_failed:
+            breakpoint()
             raise NotImplementedError(f"Failed to integrate {integrand} wrt {var}")
-
-        breakpoint()
 
         # now we have a solved tree or a failed tree
         # we can go back and get the answer
