@@ -2,7 +2,7 @@
 
 from typing import Optional
 
-from .main import *
+from main import *
 
 # feels like var should be global of some sorts for each integration call. being passed down each by each feels sad.
 # idk im overthinking it.
@@ -93,13 +93,13 @@ class Transform(ABC):
     def __init__(self):
         pass
 
-    def forward(self, node: Node, var: Symbol):
+    def forward(self, node: Node):
         raise NotImplementedError("Not implemented")
 
-    def backward(self, node: Node, var: Symbol):
+    def backward(self, node: Node):
         raise NotImplementedError("Not implemented")
 
-    def check(self, node: Node, var: Symbol) -> bool:
+    def check(self, node: Node) -> bool:
         raise NotImplementedError("Not implemented")
 
 
@@ -108,8 +108,9 @@ class PullConstant(Transform):
     constant: Expr = None
     non_constant_part: Expr = None
 
-    def check(self, node: Node, var: Symbol) -> bool:
+    def check(self, node: Node) -> bool:
         expr = node.expr
+        var = node.var
         if isinstance(expr, Prod):
             # if there is a constant, pull it out
             if isinstance(expr.terms[0], Const):
@@ -134,31 +135,33 @@ class PullConstant(Transform):
 
         return False
 
-    def forward(self, node: Node, var: Symbol):
-        node.children = [Node(self.non_constant_part, self, node)]
+    def forward(self, node: Node):
+        node.children = [Node(self.non_constant_part, node.var, self, node)]
 
 
 class PolynomialDivision(Transform):
     numerator: Polynomial = None
     denominator: Polynomial = None
 
-    def check(self, node: Node, var: Symbol) -> bool:
+    def check(self, node: Node) -> bool:
         # This is so messy we can honestly just do catching in the `to_polynomial`
         expr = node.expr
         # currently we don't support division of polynomials with multiple variables
-        if expr.symbols() != [var]:
+        if expr.symbols() != [node.var]:
             return False
         if not isinstance(expr, Prod):
             return False
 
         ## Don't contain any SingleFunc with inner containing var
-        def _contains_singlefunc_w_inner(expr: Expr, var: Symbol) -> bool:
-            if isinstance(expr, SingleFunc) and expr.inner.contains(var):
+        def _contains_singlefunc_w_inner(expr: Expr) -> bool:
+            if isinstance(expr, SingleFunc) and expr.inner.contains(node.var):
                 return True
 
-            return any([_contains_singlefunc_w_inner(e, var) for e in expr.children()])
+            return any(
+                [_contains_singlefunc_w_inner(e, node.var) for e in expr.children()]
+            )
 
-        if _contains_singlefunc_w_inner(expr, var):
+        if _contains_singlefunc_w_inner(expr, node.var):
             return False
 
         ## Make sure each factor is a polynomial
@@ -176,7 +179,7 @@ class PolynomialDivision(Transform):
                     return True
 
                 if isinstance(expr, Sum):
-                    return all([_is_polynomial(term, var) for term in expr.terms])
+                    return all([_is_polynomial(term, node.var) for term in expr.terms])
 
                 raise NotImplementedError(f"Not implemented: {expression}")
 
@@ -197,8 +200,8 @@ class PolynomialDivision(Transform):
         denominator = denominator.simplify()
 
         try:
-            numerator_list = to_polynomial(numerator, var)
-            denominator_list = to_polynomial(denominator, var)
+            numerator_list = to_polynomial(numerator, node.var)
+            denominator_list = to_polynomial(denominator, node.var)
         except AssertionError:
             return False
 
@@ -209,7 +212,8 @@ class PolynomialDivision(Transform):
         self.numerator = denominator_list
         return True
 
-    def forward(self, node: Node, var: Symbol):
+    def forward(self, node: Node):
+        var = node.var
         quotient = np.zeros(len(self.numerator) - len(self.denominator) + 1)
 
         while self.numerator.size >= self.denominator.size:
@@ -226,48 +230,48 @@ class PolynomialDivision(Transform):
         )
         quotient_expr = polynomial_to_expr(quotient, var)
         answer = (quotient_expr + remainder).simplify()
-        node.children = [Node(answer, self, node)]
+        node.children = [Node(answer, var, self, node)]
 
 
 class Expand(Transform):
-    def forward(self, node: Node, var: Symbol):
-        node.children = [Node(node.expr.expand(), self, node)]
+    def forward(self, node: Node):
+        node.children = [Node(node.expr.expand(), node.var, self, node)]
 
-    def check(node: Node, var: Symbol) -> bool:
+    def check(node: Node) -> bool:
         return node.expr.expandable()
 
 
 class Additivity(Transform):
-    def forward(self, node: Node, var: Symbol):
+    def forward(self, node: Node):
         node.type = "AND"
-        node.children = [
-            Node("UNSET", e, [], node, Additivity) for e in node.expr.terms
-        ]
+        node.children = [Node(e, node.var, self, node) for e in node.expr.terms]
 
-    def check(self, node: Node, var: Symbol) -> bool:
+    def check(self, node: Node) -> bool:
         return isinstance(node, Sum)
 
 
 # Let's just add all the transforms we've used for now.
 # and we will make this shit good and generalized later.
 class B_Tan(Transform):
-    def forward(self, node: Node, var: Symbol):
+    def forward(self, node: Node):
         intermediate = generate_intermediate_var()
-        expr = node.exprarea
+        expr = node.expr
         # y = tanx
-        new_integrand = replace(expr, Tan(var), intermediate) / (1 + intermediate**2)
-        new_node = Node(new_integrand, self, node)
+        new_integrand = replace(expr, Tan(node.var), intermediate) / (
+            1 + intermediate**2
+        )
+        new_node = Node(new_integrand, intermediate, self, node)
         node.children = [new_node]
 
-    def check(node: Node, var: Symbol) -> bool:
+    def check(node: Node) -> bool:
         expr = node.expr
-        return contains(expr, Tan) and count(expr, Tan(var)) == count(
-            expr, var
+        return contains(expr, Tan) and count(expr, Tan(node.var)) == count(
+            expr, node.var
         )  # ugh everything is so sus
 
 
 class A(Transform):
-    def forward(self, node: Node, var: Symbol):
+    def forward(self, node: Node):
         expr = node.expr
         r1 = replace_class(
             expr,
@@ -301,40 +305,40 @@ class A(Transform):
         ).simplify()
 
         stuff = [r1, r2, r3]
-        node.children = [Node(option, self, node) for option in stuff]
+        node.children = [Node(option, node.var, self, node) for option in stuff]
         node.type = "OR"
 
-    def check(node: Node, var: Symbol) -> bool:
+    def check(node: Node) -> bool:
         expr = node.expr
         return contains(expr, TrigFunction)
 
 
 class C_Sin(Transform):
-    def forward(self, node: Node, var: Symbol):
+    def forward(self, node: Node):
         intermediate_var = generate_intermediate_var()
-        new_thing = replace(node.expr, var, Sin(intermediate_var)) * Cos(
+        new_thing = replace(node.expr, node.var, Sin(intermediate_var)) * Cos(
             intermediate_var
         )
         new_thing = new_thing.simplify()
 
         # then that's a node and u store the transform and u take the integral of that.
-        node.children = [Node(new_thing, self, node)]
+        node.children = [Node(new_thing, intermediate_var, self, node)]
 
-    def check(node: Node, var: Symbol) -> bool:
-        s = f"(1 + (-1 * {var.name}^2))"
+    def check(node: Node) -> bool:
+        s = f"(1 + (-1 * {node.var.name}^2))"
         return s in node.expr.__repr__()  # ugh unclean
 
 
 class C_Tan(Transform):
-    def forward(self, node: Node, var: Symbol):
+    def forward(self, node: Node):
         intermediate = generate_intermediate_var()
         dy_dx = Sec(intermediate) ** 2
         new_thing = (replace(node.expr, var, Tan(intermediate)) * dy_dx).simplify()
-        node.children = [Node(new_thing, self, node)]
+        node.children = [Node(new_thing, intermediate, self, node)]
         # TODO: I NEED TO STORE THAT THE EXPR SHOULD NOW BE INTEGRATED WRT INTERMEDIATE VAR!!!!
 
-    def check(node: Node, var: Symbol) -> bool:
-        s2 = f"1 + {var.name}^2"
+    def check(node: Node) -> bool:
+        s2 = f"1 + {node.var.name}^2"
         return s2 in node.expr.__repr__()
 
 
@@ -342,8 +346,9 @@ HEURISTICS = [B_Tan, A, C_Sin, C_Tan]
 SAFE_TRANSFORMS = [Additivity, PullConstant, Expand, PolynomialDivision]
 
 
-def check_if_solvable(node: Node, var: Symbol):
+def check_if_solvable(node: Node):
     expr = node.expr
+    var = node.var
     answer = None
     if isinstance(expr, Power):
         if expr.base == var and isinstance(expr.exponent, Const):
@@ -363,14 +368,14 @@ def check_if_solvable(node: Node, var: Symbol):
     node.children = [Node(answer, parent=node, type="SOLUTION")]
 
 
-def cycle(node: Node, var: Symbol):
+def cycle(node: Node):
     # 1. APPLY ALL SAFE TRANSFORMS
-    integrate_safely(node, var)
+    integrate_safely(node)
 
     # now we have a tree with all the safe transforms applied
     # 2. LOOK IN TABLE
     for leaf in node.unfinished_leaves:
-        check_if_solvable(leaf, var)
+        check_if_solvable(leaf)
 
     if len(node.unfinished_leaves) == 0:
         return "SOLVED"
@@ -409,23 +414,6 @@ def _get_next_node_post_heuristic(node: Node) -> Node:
         return node.unfinished_leaves[0]
 
     if len(node.unfinished_leaves) > 1:
-        # if node.type == "AND":
-
-        #     # if none of node's children has a child
-        #     # if all([not child.children for child in node.children]):
-
-        #     # choose a random one lmfao
-        #     raise NotImplementedError(
-        #         "_get_next_node for AND nodes"
-        #     )  # not gonna do this here tbh bc we call this function
-        #     # exclusively for post-heuristics. this can change later if we have heuristics that aren't pure "OR"
-        #     return node.unfinished_leaves[0]
-
-        # ok now node.type = "OR"
-
-        # do least nested one
-        # if there are ANDs that are children of this node,
-        # do the one
         return _nesting_node(node)
 
 
@@ -465,7 +453,7 @@ class Integration:
     @staticmethod
     def integrate(integrand: Expr, var: Symbol):
 
-        root = Node(integrand)
+        root = Node(integrand, var)
         curr_node = root
         while True:
             answer = cycle(curr_node)
@@ -489,19 +477,19 @@ class Integration:
         ...
 
 
-def integrate_safely(node: Node, var: Symbol):
+def integrate_safely(node: Node):
     for transform in SAFE_TRANSFORMS:
         tr = transform()
-        if tr.check(node, var):
-            tr.forward(node, var)
+        if tr.check(node):
+            tr.forward(node)
             for child in node.children:
-                integrate_safely(child, var)
+                integrate_safely(child)
 
 
-def integrate_heuristically(node: Node, var: Symbol):
+def integrate_heuristically(node: Node):
     for heuristic_transform in HEURISTICS:
-        if heuristic_transform.check(node, var):
-            heuristic_transform.forward(node, var)
+        if heuristic_transform.check(node):
+            heuristic_transform.forward(node)
 
     if len(node.children) > 1:
         node.type = "OR"
