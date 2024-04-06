@@ -289,7 +289,7 @@ class Additivity(Transform):
 
         # For this to work, we must have a solution for each sibling.
         if not all([child.solution for child in node.parent.children]):
-            return ValueError(f"Additivity backward for {node} failed")
+            raise ValueError(f"Additivity backward for {node} failed")
 
         node.parent.solution = Sum(
             [child.solution for child in node.parent.children]
@@ -322,7 +322,7 @@ class B_Tan(Transform):
     def backward(self, node: Node) -> None:
         super().backward(node)
         node.parent.solution = replace(
-            node.expr, node.var, self._variable_change
+            node.solution, node.var, self._variable_change
         ).simplify()
 
 
@@ -453,7 +453,7 @@ def _check_if_solvable(node: Node):
 
     # node.children = [Node(answer, var=node.var, parent=node, type="SOLUTION")]
     node.type = "SOLUTION"
-    node.solution = answer
+    node.solution = answer.simplify()
 
 
 def _cycle(node: Node):
@@ -559,13 +559,14 @@ class Integration:
         solved_leaves = [leaf for leaf in root.leaves if leaf.is_solved]
         for leaf in solved_leaves:
             # GO backwards on each leaf until it errors out, then go backwards on the next leaf.
-            l = leaf
+            curr = leaf
             while True:
-                if l.parent is None:  # is root
+                if curr.parent is None:  # is root
                     break
                 try:
-                    l.transform.backward(l)
-                    l = l.parent
+                    # breakpoint()
+                    curr.transform.backward(curr)
+                    curr = curr.parent
                 except ValueError:
                     break
 
