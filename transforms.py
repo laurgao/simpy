@@ -442,6 +442,15 @@ class C(Transform):
 HEURISTICS = [B, A, C]
 SAFE_TRANSFORMS = [Additivity, PullConstant, Expand, PolynomialDivision]
 
+TRIGFUNCTION_INTEGRALS = {
+    "sin": lambda x: -Cos(x),
+    "cos": Sin,
+    "tan": lambda x: -Log(Cos(x)),
+    "csc": lambda x: -Log(Csc(x) - Cot(x)),
+    "sec": lambda x: Log(Sec(x) + Tan(x)),
+    "cot": lambda x: Log(Sin(x)),
+}
+
 
 def _check_if_solvable(node: Node):
     expr = node.expr
@@ -458,6 +467,8 @@ def _check_if_solvable(node: Node):
         answer = Fraction(1 / 2) * Power(var, 2) if expr == var else expr * var
     elif isinstance(expr, Const):
         answer = expr * var
+    elif isinstance(expr, TrigFunction) and not expr.is_inverse:
+        answer = TRIGFUNCTION_INTEGRALS[expr.function](expr.inner)
 
     if answer is None:
         return
@@ -568,6 +579,7 @@ class Integration:
                 curr_node = answer
 
         if root.is_failed:
+            breakpoint()
             raise NotImplementedError(f"Failed to integrate {integrand} wrt {var}")
 
         # now we have a solved tree or a failed tree
