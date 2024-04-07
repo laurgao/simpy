@@ -272,19 +272,36 @@ class Sum(Associative, Expr):
 
         new_sum = Sum(new_terms)
 
-        pattern = "\(1 - sin\(\w+\)\^2\)"
-        if re.search(pattern, new_sum.__repr__()) and len(new_sum.terms) == 2:
-            return Power(Cos(new_sum.symbols()[0]), 2)
-            # ok im  gna be dumb and j assume the sum is only this
+        sum_trig_identities: Dict[str, Callable[[Expr], Expr]] = {
+            "sin\(\w+\)\^2 \+ cos\(\w+\)\^2": lambda x: Const(1),
+            "1 \+ tan\(\w+\)\^2": lambda x: Sec(x.symbols()[0]) ** 2,
+            "1 \+ cot\(\w+\)\^2": lambda x: Csc(x.symbols()[0]) ** 2,
+            "1 - sin\(\w+\)\^2": lambda x: Cos(x.symbols()[0]) ** 2,
+            "1 - cos\(\w+\)\^2": lambda x: Sin(x.symbols()[0]) ** 2,
+            "1 - tan\(\w+\)\^2": lambda x: Const(1) / (Tan(x.symbols()[0]) ** 2),
+            "1 - cot\(\w+\)\^2": lambda x: Const(1) / (Cot(x.symbols()[0]) ** 2),
+        }
 
-            # for term in new_sum.terms:
-            #     if isinstance(term, Const) and term.
-            #     p =
-            #     if re.search(term.__repr__())
+        for pattern, replacement_callable in sum_trig_identities.items():
+            if re.search(pattern, new_sum.__repr__()) and len(new_sum.terms) == 2:
+                other = replacement_callable(new_sum).simplify()
+                # if nesting(other) < nesting(new_sum):
+                #     return other
+                return other
 
-        pattern = "1 \+ tan\(\w+\)\^2"
-        if re.search(pattern, new_sum.__repr__()) and len(new_sum.terms) == 2:
-            return Power(Sec(new_sum.symbols()[0]), 2)
+        # pattern = "\(1 - sin\(\w+\)\^2\)"
+        # if re.search(pattern, new_sum.__repr__()) and len(new_sum.terms) == 2:
+        #     return Power(Cos(new_sum.symbols()[0]), 2)
+        #     # ok im  gna be dumb and j assume the sum is only this
+
+        #     # for term in new_sum.terms:
+        #     #     if isinstance(term, Const) and term.
+        #     #     p =
+        #     #     if re.search(term.__repr__())
+
+        # pattern = "1 \+ tan\(\w+\)\^2"
+        # if re.search(pattern, new_sum.__repr__()) and len(new_sum.terms) == 2:
+        #     return Power(Sec(new_sum.symbols()[0]), 2)
 
         return new_sum
 
