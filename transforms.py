@@ -24,6 +24,8 @@ class Node:
 
     def __post_init__(self):
         self.expr = self.expr.simplify()
+        if self.children is None:
+            self.children = []
 
     def __repr__(self):
         num_children = len(self.children) if self.children else 0
@@ -73,7 +75,6 @@ class Node:
 
     @property
     def is_failed(self) -> bool:
-        # TODO
         # Is not solveable if one branch is not solveable and it has no "OR"s
 
         if self.type == "FAILURE":
@@ -93,10 +94,10 @@ class Node:
         return self.is_solved or self.is_failed
 
     @property
-    def unsolved_children(self) -> List["Node"]:
+    def unfinished_children(self) -> List["Node"]:
         if not self.children:
             return []
-        return [child for child in self.children if not child.is_solved]
+        return [child for child in self.children if not child.is_finished]
 
     # @property
     # def grouped_unsolved_leaves(self) -> list:
@@ -320,7 +321,7 @@ class B(Transform):
         cls, dy_dx = self._table[self._key]
         new_integrand = replace(expr, cls(node.var), intermediate) * dy_dx(intermediate)
         new_node = Node(new_integrand, intermediate, self, node)
-        node.children = [new_node]
+        node.children.append(new_node)
 
         self._variable_change = cls(node.var)
 
@@ -331,6 +332,8 @@ class B(Transform):
             if count_ >= 1 and count_ == count(node.expr, node.var):
                 self._key = k
                 return True
+
+        return False
 
     def backward(self, node: Node) -> None:
         super().backward(node)
@@ -377,7 +380,7 @@ class A(Transform):
         for thing in stuff:
             if thing.__repr__() == expr.__repr__():
                 stuff.remove(thing)
-        node.children = [Node(option, node.var, self, node) for option in stuff]
+        node.children += [Node(option, node.var, self, node) for option in stuff]
         node.type = "OR"
 
     def check(self, node: Node) -> bool:
@@ -408,7 +411,7 @@ class C(Transform):
         cls, q, dy_dx, var_change = self._table[self._key]
         dy_dx = dy_dx(intermediate)
         new_thing = (replace(node.expr, node.var, cls(intermediate)) * dy_dx).simplify()
-        node.children = [Node(new_thing, intermediate, self, node)]
+        node.children.append(Node(new_thing, intermediate, self, node))
 
         self._variable_change = var_change(node.var)
 
@@ -507,21 +510,21 @@ def _get_next_node_post_heuristic(node: Node) -> Node:
 
 # a recursive function.
 def _nesting_node(node: Node) -> Node:
-    if len(node.unsolved_children) == 1:
-        return _nesting_node(node.unsolved_children[0])
+    if len(node.unfinished_children) == 1:
+        return _nesting_node(node.unfinished_children[0])
 
-    if len(node.unsolved_children) == 0:
+    if len(node.unfinished_children) == 0:
         return node  # base case ???
         raise ValueError("nesting_node on a solved node?")
 
     is_2nd_lowest_parent = all(
-        [not child.unsolved_children for child in node.unsolved_children]
+        [not child.unfinished_children for child in node.unfinished_children]
     )
     fn = min if node.type == "OR" else max
     if is_2nd_lowest_parent:
-        return _get_node_with_best_nesting(node.unsolved_children, fn)
+        return _get_node_with_best_nesting(node.unfinished_children, fn)
 
-    childrens_best_nodes = [_nesting_node(c) for c in node.unsolved_children]
+    childrens_best_nodes = [_nesting_node(c) for c in node.unfinished_children]
     return _get_node_with_best_nesting(childrens_best_nodes, fn)
 
 

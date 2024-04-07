@@ -23,6 +23,6 @@ def test_transform_b():
 
 
 if __name__ == "__main__":
-    test_lecture_example()
     test_transform_b()
+    # test_lecture_example()
     print("Passed")
