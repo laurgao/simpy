@@ -359,7 +359,6 @@ class Prod(Associative, Expr):
     def is_subtraction(self):
         return self.terms[0] == Const(-1)
 
-    @cast
     def simplify(self):
         # simplify subexprs and flatten sub-products
         new = Prod([t.simplify() for t in self.terms]).flatten()
@@ -459,7 +458,6 @@ class Power(Expr):
 
         return f"{self.base}^{self.exponent}"
 
-    @cast
     def simplify(self):
         x = self.exponent.simplify()
         b = self.base.simplify()

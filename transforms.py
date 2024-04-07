@@ -380,46 +380,37 @@ class A(Transform):
         node.parent.solution = node.solution
 
 
-class C_Sin(Transform):
+ExprFn = Callable[[Expr], Expr]
+
+
+class C(Transform):
+    _key = None
     _variable_change = None
 
-    def forward(self, node: Node):
-        intermediate_var = generate_intermediate_var()
-        self._variable_change = ArcSin(node.var)
-        # intermediate = sin^-1 x
-        new_thing = replace(node.expr, node.var, Sin(intermediate_var)) * Cos(
-            intermediate_var
-        )
-        new_thing = new_thing.simplify()
-
-        # then that's a node and u store the transform and u take the integral of that.
-        node.children = [Node(new_thing, intermediate_var, self, node)]
-
-    def check(self, node: Node) -> bool:
-        s = f"1 - {node.var.name}^2"
-        return s in node.expr.__repr__()  # ugh unclean
-
-    def backward(self, node: Node) -> None:
-        super().backward(node)
-        node.parent.solution = replace(
-            node.solution, node.var, self._variable_change
-        ).simplify()
-
-
-class C_Tan(Transform):
-    _variable_change = None
+    # {label: class, search query, dy_dx, variable_change}
+    _table: Dict[str, Tuple[ExprFn, Callable[[str], str], ExprFn, ExprFn]] = {
+        "sin": (Sin, lambda name: f"1 - {name}^2", lambda var: Cos(var), ArcSin),
+        # "cos": (Cos, lambda name: f"1 - {name}^2", lambda var: -Sin(var), ArcCos),
+        "tan": (Tan, lambda name: f"1 + {name}^2", lambda var: Sec(var) ** 2, ArcTan),
+    }
 
     def forward(self, node: Node):
         intermediate = generate_intermediate_var()
-        dy_dx = Sec(intermediate) ** 2
-        new_thing = (replace(node.expr, node.var, Tan(intermediate)) * dy_dx).simplify()
+        cls, q, dy_dx, var_change = self._table[self._key]
+        dy_dx = dy_dx(intermediate)
+        new_thing = (replace(node.expr, node.var, cls(intermediate)) * dy_dx).simplify()
         node.children = [Node(new_thing, intermediate, self, node)]
 
-        self._variable_change = ArcTan(node.var)
+        self._variable_change = var_change(node.var)
 
     def check(self, node: Node) -> bool:
-        s2 = f"1 + {node.var.name}^2"
-        return s2 in node.expr.__repr__()
+        for k, v in self._table.items():
+            query = v[1]
+            if query(node.var.name) in node.expr.__repr__():
+                self._key = k
+                return True
+
+        return False
 
     def backward(self, node: Node) -> None:
         super().backward(node)
@@ -428,7 +419,7 @@ class C_Tan(Transform):
         ).simplify()
 
 
-HEURISTICS = [B_Tan, A, C_Sin, C_Tan]
+HEURISTICS = [B_Tan, A, C]
 SAFE_TRANSFORMS = [Additivity, PullConstant, Expand, PolynomialDivision]
 
 
