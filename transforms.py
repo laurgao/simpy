@@ -312,8 +312,8 @@ class B(Transform):
     _key: str = None
     # {label: trigfn class, derivative of inverse trigfunction}
     _table: Dict[str, Tuple[ExprFn, ExprFn]] = {
-        "sin": (Sin, lambda var: 1 / (1 - var**2)),
-        "cos": (Cos, lambda var: -1 / (1 - var**2)),
+        "sin": (Sin, lambda var: 1 / sqrt(1 - var**2)),
+        "cos": (Cos, lambda var: -1 / sqrt(1 - var**2)),
         "tan": (Tan, lambda var: 1 / (1 + var**2)),
     }
 
