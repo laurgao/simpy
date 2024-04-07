@@ -396,7 +396,7 @@ class C_Sin(Transform):
         node.children = [Node(new_thing, intermediate_var, self, node)]
 
     def check(self, node: Node) -> bool:
-        s = f"(1 + (-1 * {node.var.name}^2))"
+        s = f"1 - {node.var.name}^2"
         return s in node.expr.__repr__()  # ugh unclean
 
     def backward(self, node: Node) -> None:

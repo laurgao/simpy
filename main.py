@@ -272,7 +272,7 @@ class Sum(Associative, Expr):
 
         new_sum = Sum(new_terms)
 
-        pattern = "\(1 \+ \(-1 \* sin\(\w+\)\^2\)\)"
+        pattern = "\(1 - sin\(\w+\)\^2\)"
         if re.search(pattern, new_sum.__repr__()) and len(new_sum.terms) == 2:
             return Power(Cos(new_sum.symbols()[0]), 2)
             # ok im  gna be dumb and j assume the sum is only this
@@ -296,7 +296,16 @@ class Sum(Associative, Expr):
         return Sum([diff(e, var) for e in self.terms])
 
     def __repr__(self):
-        return "(" + " + ".join(map(repr, self.terms)) + ")"
+        ongoing_str = "("
+        for i, term in enumerate(self.terms):
+            if i == 0:
+                ongoing_str += f"{term}"
+            elif isinstance(term, Prod) and term.is_subtraction:
+                ongoing_str += f" - {Prod(term.terms[1:]).simplify()}"
+            else:
+                ongoing_str += f" + {term}"
+
+        return ongoing_str + ")"
 
 
 def _deconstruct_prod(expr: Expr) -> Tuple[Const, List[Expr]]:
@@ -328,7 +337,18 @@ class Prod(Associative, Expr):
     terms: List[Expr]
 
     def __repr__(self):
+        # special case for subtraction:
+        if self.is_subtraction:
+            if len(self.terms) == 2:
+                return "-" + repr(self.terms[1])
+            else:
+                return "-(" + " * ".join(map(repr, self.terms[1:])) + ")"
+
         return "(" + " * ".join(map(repr, self.terms)) + ")"
+
+    @property
+    def is_subtraction(self):
+        return self.terms[0] == Const(-1)
 
     @cast
     def simplify(self):
@@ -422,6 +442,12 @@ class Power(Expr):
     exponent: Expr
 
     def __repr__(self):
+        # special case for sqrt
+        if self.exponent == Const(Fraction(1, 2)):
+            return f"sqrt{self.base}"
+        if self.exponent == Const(Fraction(-1, 2)):
+            return f"(sqrt{self.base})^-1"
+
         return f"{self.base}^{self.exponent}"
 
     @cast
@@ -501,6 +527,38 @@ class Log(SingleFunc, Expr):
         return self.inner.diff(var) / self.inner
 
 
+def sqrt(x):
+    return x ** Const(Fraction(1, 2))
+
+
+double_trigfunction_simplification_dict: Dict[str, Callable[[Expr], Expr]] = {
+    "sin acos": lambda x: sqrt(1 - x**2),
+    "sin atan": lambda x: x / sqrt(1 + x**2),
+    "cos asin": lambda x: sqrt(1 - x**2),  # same as sin acos
+    "cos atan": lambda x: 1 / sqrt(1 + x**2),
+    "tan asin": lambda x: x / sqrt(1 - x**2),
+    "tan acos": lambda x: sqrt(1 - x**2) / x,
+    # Arcsecant
+    "sin asec": lambda x: sqrt(x**2 - 1) / x,  # Since sin(asec(x)) = sqrt(x^2 - 1) / x
+    "tan asec": lambda x: sqrt(x**2 - 1),  # tan(asec(x)) = sqrt(x^2 - 1)
+    # Arccosecant
+    "cos acsc": lambda x: sqrt(1 - 1 / x**2),  # cos(acsc(x)) = sqrt(1 - 1/x^2)
+    "tan acsc": lambda x: 1 / sqrt(x**2 - 1),  # tan(acsc(x)) = 1/sqrt(x^2 - 1)
+    # Arccotangent
+    "sin acot": lambda x: 1 / sqrt(1 + x**2),  # sin(acot(x)) = 1/sqrt(1 + x^2)
+    "cos acot": lambda x: x / sqrt(1 + x**2),  # cos(acot(x)) = x/sqrt(1 + x^2)
+}
+
+reciprocal_chart: Dict[str, str] = {
+    "sin": "csc",
+    "cos": "sec",
+    "tan": "cot",
+    "csc": "sin",
+    "sec": "cos",
+    "cot": "tan",
+}
+
+
 @dataclass
 class TrigFunction(SingleFunc, Expr, ABC):
     inner: Expr
@@ -508,11 +566,40 @@ class TrigFunction(SingleFunc, Expr, ABC):
     is_inverse: bool = False
 
     def __repr__(self):
-        return f"{'a' if self.is_inverse else ''}{self.function}({self.inner})"
+        return f"{self.full_function}({self.inner})"
 
-    # def simplify(self):
-    #     inner = self.inner.simplify()
-    #     return self.__class__(inner, self.function)
+    @property
+    def full_function(self):
+        return f"{'a' if self.is_inverse else ''}{self.function}"
+
+    def simplify(self):
+        inner = self.inner.simplify()
+
+        # things like sin(cos(x)) cannot be more simplified.
+        if isinstance(inner, TrigFunction) and inner.is_inverse != self.is_inverse:
+            # asin(sin(x)) -> x
+            if inner.function == self.function:
+                return inner.inner
+
+            if not self.is_inverse:
+                if inner.function == reciprocal_chart[self.function]:
+                    return (1 / inner.inner).simplify()
+
+                if self.function in ["sin", "cos", "tan"]:
+                    callable_ = double_trigfunction_simplification_dict[
+                        f"{self.function} {inner.full_function}"
+                    ]
+                    return callable_(inner.inner).simplify()
+
+                else:
+                    callable_ = double_trigfunction_simplification_dict[
+                        f"{reciprocal_chart[self.function]} {inner.full_function}"
+                    ]
+                    return (1 / callable_(inner.inner)).simplify()
+
+            # not supporting stuff like asin(cos(x)) sorry.
+
+        return self.__class__(inner)
 
 
 @dataclass
