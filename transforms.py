@@ -224,6 +224,9 @@ class PolynomialDivision(Transform):
                 denominator *= Power(b, -x).simplify()
 
         numerator = numerator.simplify()
+        if denominator == 1:
+            # there is nothing to divide. this is not a division.
+            return False
         denominator = denominator.simplify()
 
         try:
@@ -416,6 +419,11 @@ class C(Transform):
         self._variable_change = var_change(node.var)
 
     def check(self, node: Node) -> bool:
+        if isinstance(node.transform, B):
+            # If it just went through B, C is guaranteed to have a match.
+            # going through C will just undo B.
+            return False
+
         for k, v in self._table.items():
             query = v[1]
             if query(node.var.name) in node.expr.__repr__():

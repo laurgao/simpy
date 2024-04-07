@@ -855,7 +855,7 @@ def to_polynomial(expr: Expr, var: Symbol) -> Polynomial:
         xyz = np.zeros(10)
         for term in expr.terms:
             if isinstance(term, Prod):
-                const, power = expr.terms
+                const, power = term.terms
                 assert isinstance(const, Const)
                 if isinstance(power, Symbol):
                     xyz[1] = int(const.value)
