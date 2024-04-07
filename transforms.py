@@ -1,11 +1,10 @@
 # structures for integration w transforms
 
-from typing import Any, Optional
+from typing import Optional
 
 from main import *
 
-# feels like var should be global of some sorts for each integration call. being passed down each by each feels sad.
-# idk im overthinking it.
+ExprFn = Callable[[Expr], Expr]
 
 
 @dataclass
@@ -298,26 +297,38 @@ class Additivity(Transform):
 
 # Let's just add all the transforms we've used for now.
 # and we will make this shit good and generalized later.
-class B_Tan(Transform):
+class B(Transform):
+    """
+    u-sub of a trig function
+    ex: integral of f(tanx) -> integral of f(y) / 1 + y^2, sub y = tanx
+    """
+
     _variable_change = None
+
+    _key: str = None
+    _table: Dict[str, Tuple[ExprFn, ExprFn]] = {
+        "sin": (Sin, lambda var: 1 / (1 - var**2)),
+        "tan": (Tan, lambda var: 1 / (1 + var**2)),
+    }
 
     def forward(self, node: Node):
         intermediate = generate_intermediate_var()
         expr = node.expr
         # y = tanx
-        new_integrand = replace(expr, Tan(node.var), intermediate) / (
-            1 + intermediate**2
-        )
+        cls, dy_dx = self._table[self._key]
+        new_integrand = replace(expr, cls(node.var), intermediate) * dy_dx(intermediate)
         new_node = Node(new_integrand, intermediate, self, node)
         node.children = [new_node]
 
-        self._variable_change = Tan(node.var)
+        self._variable_change = cls(node.var)
 
     def check(self, node: Node) -> bool:
-        expr = node.expr
-        return contains(expr, Tan) and count(expr, Tan(node.var)) == count(
-            expr, node.var
-        )  # ugh everything is so sus
+        for k, v in self._table.items():
+            cls, dy_dx = v
+            count_ = count(node.expr, cls(node.var))
+            if count_ >= 1 and count_ == count(node.expr, node.var):
+                self._key = k
+                return True
 
     def backward(self, node: Node) -> None:
         super().backward(node)
@@ -380,9 +391,6 @@ class A(Transform):
         node.parent.solution = node.solution
 
 
-ExprFn = Callable[[Expr], Expr]
-
-
 class C(Transform):
     _key = None
     _variable_change = None
@@ -390,7 +398,6 @@ class C(Transform):
     # {label: class, search query, dy_dx, variable_change}
     _table: Dict[str, Tuple[ExprFn, Callable[[str], str], ExprFn, ExprFn]] = {
         "sin": (Sin, lambda name: f"1 - {name}^2", lambda var: Cos(var), ArcSin),
-        # "cos": (Cos, lambda name: f"1 - {name}^2", lambda var: -Sin(var), ArcCos),
         "tan": (Tan, lambda name: f"1 + {name}^2", lambda var: Sec(var) ** 2, ArcTan),
     }
 
@@ -419,7 +426,7 @@ class C(Transform):
         ).simplify()
 
 
-HEURISTICS = [B_Tan, A, C]
+HEURISTICS = [B, A, C]
 SAFE_TRANSFORMS = [Additivity, PullConstant, Expand, PolynomialDivision]
 
 
