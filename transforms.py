@@ -306,8 +306,10 @@ class B(Transform):
     _variable_change = None
 
     _key: str = None
+    # {label: trigfn class, derivative of inverse trigfunction}
     _table: Dict[str, Tuple[ExprFn, ExprFn]] = {
         "sin": (Sin, lambda var: 1 / (1 - var**2)),
+        "cos": (Cos, lambda var: -1 / (1 - var**2)),
         "tan": (Tan, lambda var: 1 / (1 + var**2)),
     }
 
@@ -454,7 +456,7 @@ def _check_if_solvable(node: Node):
     node.solution = answer.simplify()
 
 
-def _cycle(node: Node):
+def _cycle(node: Node) -> Optional[Union[Node, Literal["SOLVED"]]]:
     # 1. APPLY ALL SAFE TRANSFORMS
     _integrate_safely(node)
 
@@ -478,8 +480,12 @@ def _get_next_node_post_heuristic(node: Node) -> Node:
 
     if len(node.unfinished_leaves) == 0:
         if node.is_failed:
-            # we want to go back and solve the parent
+            # if on the first cycle, there are zero safe transforms AND no heuristics then
+            # node here would be the root.
+            if node.parent is None:
+                return None
 
+            # we want to go back and solve the parent
             parent = node.parent
             while len(parent.children) == 1 or parent.type == "AND":
                 if parent.parent is None:
