@@ -272,28 +272,28 @@ class Sum(Associative, Expr):
 
         new_sum = Sum(new_terms)
 
-        # I WANT TO DO IT so that it's more robust.
-        # - allow the first one if sum has >2 terms.
+        if contains(new_sum, TrigFunction):
+            # I WANT TO DO IT so that it's more robust.
+            # - allow the first one if sum has >2 terms.
+            # - what if the matched query is not a symbol but an expression?
+            # - do something to check for sin^2x + cos^2x = 1
 
-        sum_trig_identities: Dict[str, Callable[[Expr], Expr]] = {
-            r"1 \+ tan\((\w+)\)\^2": lambda x: Sec(x) ** 2,
-            r"1 \+ cot\((\w+)\)\^2": lambda x: Csc(x) ** 2,
-            r"1 - sin\((\w+)\)\^2": lambda x: Cos(x) ** 2,
-            r"1 - cos\((\w+)\)\^2": lambda x: Sin(x) ** 2,
-            r"1 - tan\((\w+)\)\^2": lambda x: Const(1) / (Tan(x) ** 2),
-            r"1 - cot\((\w+)\)\^2": lambda x: Const(1) / (Cot(x) ** 2),
-        }
+            pythagorean_trig_identities: Dict[str, Callable[[Expr], Expr]] = {
+                r"1 \+ tan\((\w+)\)\^2": lambda x: Sec(x) ** 2,
+                r"1 \+ cot\((\w+)\)\^2": lambda x: Csc(x) ** 2,
+                r"1 - sin\((\w+)\)\^2": lambda x: Cos(x) ** 2,
+                r"1 - cos\((\w+)\)\^2": lambda x: Sin(x) ** 2,
+                r"1 - tan\((\w+)\)\^2": lambda x: Const(1) / (Tan(x) ** 2),
+                r"1 - cot\((\w+)\)\^2": lambda x: Const(1) / (Cot(x) ** 2),
+            }
 
-        for pattern, replacement_callable in sum_trig_identities.items():
-            match = re.search(pattern, new_sum.__repr__())
-            result = match.group(1) if match else None
+            for pattern, replacement_callable in pythagorean_trig_identities.items():
+                match = re.search(pattern, new_sum.__repr__())
+                result = match.group(1) if match else None
 
-            if result and len(new_sum.terms) == 2:
-                # TODO: what if the matched query is not a symbol but an expression?
-                other = replacement_callable(Symbol(result)).simplify()
-                # if nesting(other) < nesting(new_sum):
-                #     return other
-                return other
+                if result and len(new_sum.terms) == 2:
+                    other = replacement_callable(Symbol(result)).simplify()
+                    return other
 
         return new_sum
 
