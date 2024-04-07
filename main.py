@@ -536,7 +536,8 @@ class Log(SingleFunc, Expr):
         return self.inner.diff(var) / self.inner
 
 
-def sqrt(x):
+@cast
+def sqrt(x: Expr) -> Expr:
     return x ** Const(Fraction(1, 2))
 
 
@@ -1094,13 +1095,3 @@ def replace_class(expr: Expr, cls: list, newfunc: List[Callable[[Expr], Expr]]) 
     raise NotImplementedError(
         f"replace_class not implemented for {expr.__class__.__name__}"
     )
-
-
-# if __name__ == "__main__":
-#     F = Fraction
-#     x, y = symbols("x y")
-#     expression = -5 * x**4 / (1 - x**2) ** F(5, 2)
-#     print(expression)
-#     integral = integrate(expression, x).simplify()  # TODO auto simplify
-#     print(integral)
-#     breakpoint()

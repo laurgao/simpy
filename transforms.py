@@ -534,6 +534,7 @@ class Integration:
     Keeps track of integration work as we go
     """
 
+    @cast
     @staticmethod
     def integrate(integrand: Expr, var: Symbol):
 
@@ -597,16 +598,3 @@ def _integrate_heuristically(node: Node):
 
     if len(node.children) > 1:
         node.type = "OR"
-
-
-CCOUNT = 0
-
-if __name__ == "__main__":
-
-    F = Fraction
-    x, y = symbols("x y")
-    expression = -5 * x**4 / (1 - x**2) ** F(5, 2)
-    print(expression)
-    integral = Integration.integrate(expression, x)  # TODO auto simplify
-    print(integral)
-    breakpoint()
