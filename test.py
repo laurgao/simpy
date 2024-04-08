@@ -35,4 +35,16 @@ sassert_repr(x + (2 + y), x + 2 + y)
 assert count(2, x) == 0
 assert count(Tan(x + 1) ** 2 - 2 * x, x) == 2
 
+
+# I want to test simplification
+expr = Sin(x) ** 2 + Cos(x) ** 2 + 3
+simplified = expr.simplify()
+assert_eq(simplified, 4)
+
+expr = Sin(x - 2 * y) ** 2 + 3 + Cos(x - 2 * y) ** 2 + y**2
+simplified = expr.simplify()
+breakpoint()
+assert_eq(simplified, 4 + y**2)
+
+
 print("passed")

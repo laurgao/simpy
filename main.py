@@ -187,7 +187,9 @@ class Const(Expr):
 
     @cast
     def __eq__(self, other):
-        return isinstance(other, Const) and self.value == other.value
+        return (isinstance(other, Const) and self.value == other.value) or (
+            isinstance(other, Union[int, Fraction]) and self.value == other
+        )
 
     @cast
     def __ge__(self, other):
@@ -282,7 +284,7 @@ class Sum(Associative, Expr):
         if len(new_terms) == 1:
             return new_terms[0]
 
-        new_sum = Sum(new_terms)._sort()
+        new_sum = Sum(new_terms)
 
         if contains(new_sum, TrigFunction):
             # I WANT TO DO IT so that it's more robust.
@@ -307,7 +309,38 @@ class Sum(Associative, Expr):
                     other = replacement_callable(Symbol(result)).simplify()
                     return other
 
-        return new_sum
+            other_table = [
+                (r"^sin\((\w+)\)\^2$", r"^cos\((\w+)\)\^2$", Const(1)),
+                (r"^sec\((\w+)\)\^2$", r"^-tan\((\w+)\)\^2$", Const(1)),
+            ]
+            for pattern1, pattern2, value in other_table:
+                match1 = []
+                match2 = []
+                for t in new_sum.terms:
+                    m1 = re.search(pattern1, t.__repr__())
+                    m2 = re.search(pattern2, t.__repr__())
+                    if m1:
+                        match1.append(m1)
+                    if m2:
+                        match2.append(m2)
+
+                if len(match1) == 0 or len(match2) == 0:
+                    continue
+
+                r1 = [m.group(1) for m in match1]
+                r2 = [m.group(1) for m in match2]
+                for m in r1:
+                    for n in r2:
+                        if m == n:
+                            new_terms = [value] + [
+                                t
+                                for t in new_sum.terms
+                                if t.__repr__() != f"sin({m})^2"
+                                and t.__repr__() != f"cos({m})^2"
+                            ]
+                            return Sum(new_terms).simplify()
+
+        return new_sum._sort()
 
     @cast
     def evalf(self, subs: Dict[str, "Const"]):
