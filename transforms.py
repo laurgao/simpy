@@ -99,12 +99,6 @@ class Node:
             return []
         return [child for child in self.children if not child.is_finished]
 
-    # @property
-    # def grouped_unsolved_leaves(self) -> list:
-    #     # returns lists of like
-    #     # based on AND/OR
-    #     # like i want to group based on "groups you need to solve in order to solve the problem"
-
 
 class Transform(ABC):
     "An integral transform -- base class"
@@ -136,20 +130,9 @@ class PullConstant(Transform):
         var = node.var
         if isinstance(expr, Prod):
             # if there is a constant, pull it out
-            if isinstance(expr.terms[0], Const):
-                self._constant = expr.terms[0]
-                self._non_constant_part = Prod(expr.terms[1:]).simplify()
-                return True
-
-            # or if there is a symbol that's not the variable, pull it out
+            # # or if there is a symbol that's not the variable, pull it out
             for i, term in enumerate(expr.terms):
-                is_nonvar_symbol = isinstance(term, Symbol) and term != var
-                is_nonvar_power = (
-                    isinstance(term, Power)
-                    and isinstance(term.base, Symbol)
-                    and term.base != var
-                )
-                if is_nonvar_symbol or is_nonvar_power:
+                if var not in expr.symbols():
                     self._constant = term
                     self._non_constant_part = Prod(
                         expr.terms[:i] + expr.terms[i + 1 :]
@@ -473,7 +456,6 @@ def _check_if_solvable(node: Node):
     if answer is None:
         return
 
-    # node.children = [Node(answer, var=node.var, parent=node, type="SOLUTION")]
     node.type = "SOLUTION"
     node.solution = answer.simplify()
 
@@ -528,6 +510,7 @@ def _get_next_node_post_heuristic(node: Node) -> Node:
 
 
 # a recursive function.
+# find the simplest problem to work on that makes progress.
 def _nesting_node(node: Node) -> Node:
     if len(node.unfinished_children) == 1:
         return _nesting_node(node.unfinished_children[0])
