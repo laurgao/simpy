@@ -43,7 +43,6 @@ assert_eq(simplified, 4)
 
 expr = Sin(x - 2 * y) ** 2 + 3 + Cos(x - 2 * y) ** 2 + y**2
 simplified = expr.simplify()
-breakpoint()
 assert_eq(simplified, 4 + y**2)
 
 

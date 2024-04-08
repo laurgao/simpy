@@ -289,8 +289,9 @@ class Sum(Associative, Expr):
         if contains(new_sum, TrigFunction):
             # I WANT TO DO IT so that it's more robust.
             # - what if the matched query is not a symbol but an expression?
-            # - do something to check for sin^2x + cos^2x = 1 (and allow for it if sum has >2 terms)
+            # - ~~do something to check for sin^2x + cos^2x = 1 (and allow for it if sum has >2 terms)~~
             # - ordering
+            # - what if there is a constant (or variable) common factor? (i think for this i'll have to implement a .factor method)
 
             pythagorean_trig_identities: Dict[str, Callable[[Expr], Expr]] = {
                 r"1 \+ tan\((\w+)\)\^2": lambda x: Sec(x) ** 2,
@@ -309,9 +310,11 @@ class Sum(Associative, Expr):
                     other = replacement_callable(Symbol(result)).simplify()
                     return other
 
+            # fuckit just gonna let the insides be anything and not check for paranthesis balance
+            # because im asserting beginning and end of string conditions.
             other_table = [
-                (r"^sin\((\w+)\)\^2$", r"^cos\((\w+)\)\^2$", Const(1)),
-                (r"^sec\((\w+)\)\^2$", r"^-tan\((\w+)\)\^2$", Const(1)),
+                (r"^sin\((.+)\)\^2$", r"^cos\((.+)\)\^2$", Const(1)),
+                (r"^sec\((.+)\)\^2$", r"^-tan\((.+)\)\^2$", Const(1)),
             ]
             for pattern1, pattern2, value in other_table:
                 match1 = []
@@ -577,8 +580,13 @@ class Power(Expr):
 
 
 @dataclass
-class SingleFunc(ABC):
+class SingleFunc(Expr):
     inner: Expr
+
+    @property
+    @abstractmethod
+    def _label(self) -> str:
+        raise NotImplementedError("Label not implemented")
 
     def children(self) -> List["Expr"]:
         return [self.inner]
@@ -587,13 +595,19 @@ class SingleFunc(ABC):
         inner = self.inner.simplify()
         return self.__class__(inner)
 
+    def __repr__(self) -> str:
+        inner_repr = self.inner.__repr__()
+        if inner_repr[0] == "(" and inner_repr[-1] == ")":
+            return f"{self._label}{inner_repr}"
+        return f"{self._label}({inner_repr})"
 
-@dataclass
-class Log(SingleFunc, Expr):
+
+class Log(SingleFunc):
     inner: Expr
 
-    def __repr__(self):
-        return f"log({self.inner})"
+    @property
+    def _label(self):
+        return "ln"
 
     @cast
     def evalf(self, subs: Dict[str, "Const"]):
@@ -646,17 +660,20 @@ reciprocal_chart: Dict[str, str] = {
 }
 
 
-@dataclass
-class TrigFunction(SingleFunc, Expr, ABC):
+class TrigFunction(SingleFunc):
     inner: Expr
     function: Literal["sin", "cos", "tan", "sec", "csc", "cot"]
     is_inverse: bool = False
 
-    def __repr__(self):
-        return f"{self.full_function}({self.inner})"
+    # have to have __init__ here bc if i use @dataclass on TrigFunction
+    # repr no longer inherits from SingleFunc
+    def __init__(self, inner, function, is_inverse=False):
+        super().__init__(inner)
+        self.function = function
+        self.is_inverse = is_inverse
 
     @property
-    def full_function(self):
+    def _label(self):
         return f"{'a' if self.is_inverse else ''}{self.function}"
 
     def simplify(self):
@@ -674,13 +691,13 @@ class TrigFunction(SingleFunc, Expr, ABC):
 
                 if self.function in ["sin", "cos", "tan"]:
                     callable_ = double_trigfunction_simplification_dict[
-                        f"{self.function} {inner.full_function}"
+                        f"{self.function} {inner._label}"
                     ]
                     return callable_(inner.inner).simplify()
 
                 else:
                     callable_ = double_trigfunction_simplification_dict[
-                        f"{reciprocal_chart[self.function]} {inner.full_function}"
+                        f"{reciprocal_chart[self.function]} {inner._label}"
                     ]
                     return (1 / callable_(inner.inner)).simplify()
 
@@ -689,85 +706,49 @@ class TrigFunction(SingleFunc, Expr, ABC):
         return self.__class__(inner)
 
 
-@dataclass
 class Sin(TrigFunction):
     def __init__(self, inner):
         super().__init__(inner, function="sin")
 
-    def __repr__(self):
-        return super().__repr__()
 
-
-@dataclass
 class Cos(TrigFunction):
     def __init__(self, inner):
         super().__init__(inner, function="cos")
 
-    def __repr__(self):
-        return super().__repr__()
 
-
-@dataclass
 class Tan(TrigFunction):
     def __init__(self, inner):
         super().__init__(inner, function="tan")
 
-    def __repr__(self):
-        return super().__repr__()
 
-
-@dataclass
 class Csc(TrigFunction):
     def __init__(self, inner):
         super().__init__(inner, function="csc")
 
-    def __repr__(self):
-        return super().__repr__()
 
-
-@dataclass
 class Sec(TrigFunction):
     def __init__(self, inner):
         super().__init__(inner, function="sec")
 
-    def __repr__(self):
-        return super().__repr__()
 
-
-@dataclass
 class Cot(TrigFunction):
     def __init__(self, inner):
         super().__init__(inner, function="cot")
 
-    def __repr__(self):
-        return super().__repr__()
 
-
-@dataclass
 class ArcSin(TrigFunction):
     def __init__(self, inner):
         super().__init__(inner, function="sin", is_inverse=True)
 
-    def __repr__(self):
-        return super().__repr__()
 
-
-@dataclass
 class ArcCos(TrigFunction):
     def __init__(self, inner):
         super().__init__(inner, function="cos", is_inverse=True)
 
-    def __repr__(self):
-        return super().__repr__()
 
-
-@dataclass
 class ArcTan(TrigFunction):
     def __init__(self, inner):
         super().__init__(inner, function="tan", is_inverse=True)
-
-    def __repr__(self):
-        return super().__repr__()
 
 
 def symbols(symbols: str):
