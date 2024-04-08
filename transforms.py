@@ -422,7 +422,61 @@ class C(Transform):
         ).simplify()
 
 
-HEURISTICS = [B, A, C]
+Number = Union[Fraction, int]
+
+
+class D(Transform):
+    _variable_change = None  # x^n
+
+    # u substitution for x/sqrt(1-x^2)
+    # u just need to check that x^n-1 is a term and every other instance of x is x^n
+    # you're gonna replace u=x^n
+    def check(self, node: Node) -> bool:
+        if not isinstance(node.expr, Prod):
+            return False
+
+        rest: Expr = None
+        n = None
+        for i, term in enumerate(node.expr.terms):
+            # yes you can assume it's an expanded simplified product. so no terms
+            # are Prod or Sum.
+            # so x^n-1 must be exactly a term with no fluff. :)
+            if (
+                isinstance(term, Power)
+                and term.base == node.var
+                and not term.exponent.contains(node.var)
+            ):
+                n = term.exponent + 1
+                rest = Prod(node.expr.terms[:i] + node.expr.terms[i + 1 :]).simplify()
+                break
+
+            if term == node.var:
+                n = 2
+                rest = Prod(node.expr.terms[:i] + node.expr.terms[i + 1 :]).simplify()
+                break
+
+        if n is None:
+            return False
+
+        self._variable_change = Power(node.var, n).simplify()  # x^n
+        count_ = count(node.expr, self._variable_change)
+        return count_ > 0 and count_ == count(rest, node.var)
+
+    def forward(self, node: Node) -> None:
+        intermediate = generate_intermediate_var()
+        dx_dy = self._variable_change.diff(node.var)
+        new_integrand = replace(node.expr, self._variable_change, intermediate) / dx_dy
+        new_integrand = new_integrand.simplify()
+        node.children.append(Node(new_integrand, intermediate, self, node))
+
+    def backward(self, node: Node) -> None:
+        super().backward(node)
+        node.parent.solution = replace(
+            node.solution, node.var, self._variable_change
+        ).simplify()
+
+
+HEURISTICS = [D, B, A, C]
 SAFE_TRANSFORMS = [Additivity, PullConstant, Expand, PolynomialDivision]
 
 TRIGFUNCTION_INTEGRALS = {
