@@ -144,15 +144,32 @@ class Expr(ABC):
         return [Symbol(name=s) for s in str_set]
 
 
+@dataclass
 class Associative:
-    def flatten(self):
+    terms: List[Expr]
+
+    def _flatten(self) -> "Associative":
         new_terms = []
         for t in self.terms:
-            new_terms += t.flatten().terms if isinstance(t, self.__class__) else [t]
+            new_terms += t._flatten().terms if isinstance(t, self.__class__) else [t]
         return self.__class__(new_terms)
 
     def children(self) -> List["Expr"]:
         return self.terms
+
+    def _sort(self) -> "Associative":
+        def _key(term: Expr) -> str:
+            n = nesting(term)
+            power = deconstruct_power(term)[1]
+            return f"{n} {power} {term.__repr__()}"
+            # the idea is you sort first by nesting, then by power, then by the term alphabetical
+
+        return self.__class__(sorted(self.terms, key=_key))
+
+    @abstractmethod
+    def simplify(self) -> "Associative":
+        return self.__class__([t.simplify() for t in self.terms])._flatten()
+        # sort at the end
 
 
 @dataclass
@@ -221,16 +238,11 @@ class Symbol(Expr):
 
 @dataclass
 class Sum(Associative, Expr):
-    terms: List[Expr]
-
-    def simplifable(self) -> bool:
-        pass
-
     def simplify(self):
         # TODO: this currently would not combine terms like (2+x) and (x+2)
 
         # simplify subexprs and flatten sub-sums
-        s = Sum([t.simplify() for t in self.terms]).flatten()
+        s = super().simplify()
 
         # accumulate all constants
         const = sum(t.value for t in s.terms if isinstance(t, Const))
@@ -270,13 +282,13 @@ class Sum(Associative, Expr):
         if len(new_terms) == 1:
             return new_terms[0]
 
-        new_sum = Sum(new_terms)
+        new_sum = Sum(new_terms)._sort()
 
         if contains(new_sum, TrigFunction):
             # I WANT TO DO IT so that it's more robust.
-            # - allow the first one if sum has >2 terms.
             # - what if the matched query is not a symbol but an expression?
-            # - do something to check for sin^2x + cos^2x = 1
+            # - do something to check for sin^2x + cos^2x = 1 (and allow for it if sum has >2 terms)
+            # - ordering
 
             pythagorean_trig_identities: Dict[str, Callable[[Expr], Expr]] = {
                 r"1 \+ tan\((\w+)\)\^2": lambda x: Sec(x) ** 2,
@@ -343,17 +355,43 @@ def deconstruct_power(expr: Expr) -> Tuple[Expr, Const]:
 
 @dataclass
 class Prod(Associative, Expr):
-    terms: List[Expr]
-
     def __repr__(self):
         # special case for subtraction:
         if self.is_subtraction:
             if len(self.terms) == 2:
                 return "-" + repr(self.terms[1])
             else:
-                return "-(" + " * ".join(map(repr, self.terms[1:])) + ")"
+                return "-" + Prod(self.terms[1:]).__repr__()
 
-        return "(" + " * ".join(map(repr, self.terms)) + ")"
+        is_division = False
+        denominator = []
+        denominator_ = []
+        for term in self.terms:
+            if isinstance(term, Power):
+                if isinstance(term.exponent, Const) and term.exponent.value < 0:
+                    is_division = True
+                    denominator.append(term)
+                    denominator_.append(Power(term.base, -term.exponent))
+
+        if is_division:
+            numerator = [term for term in self.terms if term not in denominator]
+            numerator_str = repr(Prod(numerator).simplify())
+            denominator_str = repr(Prod(denominator_).simplify())
+            return numerator_str + "/" + denominator_str
+
+        return "(" + "*".join(map(repr, self.terms)) + ")"
+
+    @property
+    def numerator_denominator(self) -> Tuple["Expr", "Expr"]:
+        denominator = [1]
+        numerator = [1]
+        for term in self.terms:
+            b, x = deconstruct_power(term)
+            if isinstance(x, Const) and x.value < 0:
+                denominator.append(Power(b, -x))
+            else:
+                numerator.append(term)
+        return [Prod(numerator).simplify(), Prod(denominator).simplify()]
 
     @property
     def is_subtraction(self):
@@ -361,7 +399,7 @@ class Prod(Associative, Expr):
 
     def simplify(self):
         # simplify subexprs and flatten sub-products
-        new = Prod([t.simplify() for t in self.terms]).flatten()
+        new = super().simplify()
 
         # accumulate all like terms
         terms = []
@@ -402,7 +440,7 @@ class Prod(Associative, Expr):
         # otherwise, bring the constant to the front (if != 1)
         new.terms = ([] if const == 1 else [Const(const)]) + non_constant_terms
 
-        return new.terms[0] if len(new.terms) == 1 else new
+        return new.terms[0] if len(new.terms) == 1 else new._sort()
 
     @cast
     def expandable(self) -> bool:
@@ -413,7 +451,7 @@ class Prod(Associative, Expr):
 
     def expand(self):
         # expand sub-expressions
-        self = self.flatten()
+        self = self._flatten()
         self = Prod([t.expand() if t.expandable() else t for t in self.terms])
 
         # expand sums that are left
@@ -495,6 +533,14 @@ class Power(Expr):
 
     def children(self) -> List["Expr"]:
         return [self.base, self.exponent]
+
+    def diff(self, var) -> Expr:
+        if self.exponent.contains(var):
+            # return self * (self.exponent * Log(self.base)).diff(var) idk if this is right and im lazy rn
+            raise NotImplementedError(
+                "Power.diff not implemented for exponential functions."
+            )
+        return self.exponent * self.base ** (self.exponent - 1) * self.base.diff(var)
 
 
 @dataclass
@@ -908,9 +954,13 @@ def rid_ending_zeros(arr: Polynomial) -> Polynomial:
     return np.trim_zeros(arr, "b")
 
 
-def nesting(expr: Expr, var: Symbol) -> int:
+from typing import Optional
+
+
+def nesting(expr: Expr, var: Optional[Symbol] = None) -> int:
     """
     Compute the nesting amount (complexity) of an expression
+    If var is provided, only count the nesting of the subexpression containing var
 
     >>> nesting(x**2, x)
     2
@@ -920,18 +970,19 @@ def nesting(expr: Expr, var: Symbol) -> int:
     2
     """
 
-    if not expr.contains(var):
+    if var is not None and not expr.contains(var):
         return 0
 
-    children = expr.children()
-    if isinstance(expr, Symbol) and expr.name == var.name:
+    # special case
+    if isinstance(expr, Prod) and expr.terms[0] == Const(-1) and len(expr.terms) == 2:
+        return nesting(expr.terms[1], var)
+
+    if isinstance(expr, Symbol) and (var is None or expr.name == var.name):
         return 1
-    elif len(children) == 0:
+    elif len(expr.children()) == 0:
         return 0
     else:
-        return 1 + max(
-            nesting(sub_expr, var) for sub_expr in children if sub_expr.contains(var)
-        )
+        return 1 + max(nesting(sub_expr, var) for sub_expr in expr.children())
 
 
 def random_id(length):
@@ -1061,7 +1112,7 @@ def contains(expr: Expr, cls) -> bool:
 
 
 @cast
-def count(expr: Expr, query: Expr) -> bool:
+def count(expr: Expr, query: Expr) -> int:
     if isinstance(expr, query.__class__) and expr == query:
         return 1
     return sum(count(e, query) for e in expr.children())
@@ -1069,6 +1120,7 @@ def count(expr: Expr, query: Expr) -> bool:
 
 # cls here has to be a subclass of singlefunc
 def replace_class(expr: Expr, cls: list, newfunc: List[Callable[[Expr], Expr]]) -> Expr:
+    assert all(issubclass(cl, SingleFunc) for cl in cls), "cls must subclass SingleFunc"
     if isinstance(expr, Sum):
         return Sum([replace_class(e, cls, newfunc) for e in expr.terms])
     if isinstance(expr, Prod):
