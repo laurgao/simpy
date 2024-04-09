@@ -1,6 +1,6 @@
 from test import sassert_repr
 
-from transforms import *
+from integration import *
 
 x = symbols("x")
 

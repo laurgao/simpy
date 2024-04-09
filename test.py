@@ -1,4 +1,5 @@
-from transforms import *
+from expr import symbols
+from integration import *
 
 
 def assert_eq(x, y):
@@ -23,6 +24,7 @@ sassert_repr(Integration.integrate(3 * x**2 - 2 * x, x), x**3 - x**2)
 sassert_repr(Integration.integrate((x + 1) ** 2, x), x + x**2 + (x**3 / 3))
 sassert_repr(Log(x).diff(x), 1 / x)
 sassert_repr(Log(x).diff(x), 1 / x)
+
 sassert_repr(Integration.integrate(1 / x, x), Log(x))
 sassert_repr(Integration.integrate(1 / x, (x, 1, 2)), Log(2))
 
@@ -53,6 +55,11 @@ transform = PullConstant()
 assert transform.check(test_node)
 transform.forward(test_node)
 assert_eq(test_node.child.expr, x**3)
+
+
+# new repr standards test
+expr = 1 - x**2
+assert expr.__repr__() == "(1 - x^2)"
 
 
 print("passed")

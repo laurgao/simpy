@@ -1,4 +1,4 @@
-from transforms import *
+from integration import *
 
 F = Fraction
 x = symbols("x")

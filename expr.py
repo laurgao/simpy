@@ -2,16 +2,12 @@
 # - method to convert from our expression to sympy for testing
 
 import itertools
-import random
 import re
-import string
 from abc import ABC, abstractmethod
 from dataclasses import dataclass, fields
 from fractions import Fraction
 from functools import reduce
 from typing import Callable, Dict, List, Literal, Optional, Tuple, Union
-
-import numpy as np
 
 
 def _cast(x):
@@ -286,7 +282,7 @@ class Sum(Associative, Expr):
 
         new_sum = Sum(new_terms)
 
-        if contains(new_sum, TrigFunction):
+        if contains_cls(new_sum, TrigFunction):
             # I WANT TO DO IT so that it's more robust.
             # - what if the matched query is not a symbol but an expression?
             # - ~~do something to check for sin^2x + cos^2x = 1 (and allow for it if sum has >2 terms)~~
@@ -768,67 +764,6 @@ def diff(expr: Expr, var: Symbol) -> Expr:
         raise NotImplementedError(f"Differentiation of {expr} not implemented")
 
 
-Polynomial = np.ndarray  # has to be 1-D array
-
-
-def to_polynomial(expr: Expr, var: Symbol) -> Polynomial:
-    if isinstance(expr, Sum):
-        xyz = np.zeros(10)
-        for term in expr.terms:
-            if isinstance(term, Prod):
-                const, power = term.terms
-                assert isinstance(const, Const)
-                if isinstance(power, Symbol):
-                    xyz[1] = int(const.value)
-                assert isinstance(power, Power)
-                assert power.base == var
-                xyz[int(power.exponent.value)] = int(const.value)
-            elif isinstance(term, Power):
-                assert term.base == var
-                xyz[int(term.exponent.value)] = 1
-            elif isinstance(term, Symbol):
-                assert term == var
-                xyz[1] = 1
-            elif isinstance(term, Const):
-                xyz[0] = int(term.value)
-            else:
-                raise NotImplementedError(f"weird term: {term}")
-        return rid_ending_zeros(xyz)
-
-    if isinstance(expr, Prod):
-        # has to be product of 2 terms: a constant and a power.
-        const, power = expr.terms
-        assert isinstance(const, Const)
-        if isinstance(power, Symbol):
-            return np.array([0, int(const.value)])
-        assert isinstance(power, Power)
-        assert power.base == var
-        xyz = np.zeros(int(power.exponent.value) + 1)
-        xyz[-1] = const.value
-        return xyz
-    if isinstance(expr, Power):
-        assert expr.base == var
-        xyz = np.zeros(int(expr.exponent.value) + 1)
-        xyz[-1] = 1
-        return xyz
-    if isinstance(expr, Symbol):
-        assert expr == var
-        return np.array([0, 1])
-
-    raise NotImplementedError(f"weird expr: {expr}")
-
-
-def polynomial_to_expr(poly: Polynomial, var: Symbol) -> Expr:
-    final = Const(0)
-    for i, element in enumerate(poly):
-        final += element * var**i
-    return final.simplify()
-
-
-def rid_ending_zeros(arr: Polynomial) -> Polynomial:
-    return np.trim_zeros(arr, "b")
-
-
 def nesting(expr: Expr, var: Optional[Symbol] = None) -> int:
     """
     Compute the nesting amount (complexity) of an expression
@@ -857,48 +792,11 @@ def nesting(expr: Expr, var: Optional[Symbol] = None) -> int:
         return 1 + max(nesting(sub_expr, var) for sub_expr in expr.children())
 
 
-def random_id(length):
-    # Define the pool of characters you can choose from
-    characters = string.ascii_letters + string.digits
-    # Use random.choices() to pick characters at random, then join them into a string
-    random_string = "".join(random.choices(characters, k=length))
-    return random_string
-
-
-def generate_intermediate_var() -> Symbol:
-    return symbols(f"intermediate_{random_id(10)}")
-
-
-def replace(expr: Expr, old: Expr, new: Expr) -> Expr:
-    if isinstance(expr, old.__class__) and expr == old:
-        return new
-
-    # find all instances of old in expr and replace with new
-    if isinstance(expr, Sum):
-        return Sum([replace(e, old, new) for e in expr.terms])
-    if isinstance(expr, Prod):
-        return Prod([replace(e, old, new) for e in expr.terms])
-    if isinstance(expr, Power):
-        return Power(
-            base=replace(expr.base, old, new), exponent=replace(expr.exponent, old, new)
-        )
-    # i love recursion
-    if isinstance(expr, SingleFunc):
-        return expr.__class__(replace(expr.inner, old, new))
-
-    if isinstance(expr, Const):
-        return expr
-    if isinstance(expr, Symbol):
-        return expr
-
-    raise NotImplementedError(f"replace not implemented for {expr.__class__.__name__}")
-
-
-def contains(expr: Expr, cls) -> bool:
+def contains_cls(expr: Expr, cls) -> bool:
     if isinstance(expr, cls) or issubclass(expr.__class__, cls):
         return True
 
-    return any([contains(e, cls) for e in expr.children()])
+    return any([contains_cls(e, cls) for e in expr.children()])
 
 
 @cast
@@ -906,32 +804,3 @@ def count(expr: Expr, query: Expr) -> int:
     if isinstance(expr, query.__class__) and expr == query:
         return 1
     return sum(count(e, query) for e in expr.children())
-
-
-# cls here has to be a subclass of singlefunc
-def replace_class(expr: Expr, cls: list, newfunc: List[Callable[[Expr], Expr]]) -> Expr:
-    assert all(issubclass(cl, SingleFunc) for cl in cls), "cls must subclass SingleFunc"
-    if isinstance(expr, Sum):
-        return Sum([replace_class(e, cls, newfunc) for e in expr.terms])
-    if isinstance(expr, Prod):
-        return Prod([replace_class(e, cls, newfunc) for e in expr.terms])
-    if isinstance(expr, Power):
-        return Power(
-            base=replace_class(expr.base, cls, newfunc),
-            exponent=replace_class(expr.exponent, cls, newfunc),
-        )
-    if isinstance(expr, SingleFunc):
-        new_inner = replace_class(expr.inner, cls, newfunc)
-        for i, cl in enumerate(cls):
-            if isinstance(expr, cl):
-                return newfunc[i](new_inner)
-        return expr.__class__(new_inner)
-
-    if isinstance(expr, Const):
-        return expr
-    if isinstance(expr, Symbol):
-        return expr
-
-    raise NotImplementedError(
-        f"replace_class not implemented for {expr.__class__.__name__}"
-    )
