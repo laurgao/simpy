@@ -12,7 +12,6 @@ def test_lecture_example():
         -(x / (sqrt(1 - x**2))) + (F(1, 3) * x**3 / (1 - x**2) ** F(3, 2)) + ArcSin(x)
     )
     diff = (integral - expected_integral).simplify()
-    breakpoint()
     assert diff == Const(0), f"diff = {diff}"
 
 
