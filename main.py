@@ -9,7 +9,7 @@ from abc import ABC, abstractmethod
 from dataclasses import dataclass, fields
 from fractions import Fraction
 from functools import reduce
-from typing import Callable, Dict, List, Literal, Tuple, Union
+from typing import Callable, Dict, List, Literal, Optional, Tuple, Union
 
 import numpy as np
 
@@ -768,149 +768,6 @@ def diff(expr: Expr, var: Symbol) -> Expr:
         raise NotImplementedError(f"Differentiation of {expr} not implemented")
 
 
-@cast
-def integrate_bounds(expr: Expr, bounds: Tuple[Symbol, Const, Const]) -> Const:
-    x, a, b = bounds
-    I = integrate(expr, bounds[0]).simplify()
-    return (I.evalf({x.name: b}) - I.evalf({x.name: a})).simplify()
-
-
-@cast
-def integrate(expr: Expr, bounds: Union[Symbol, Tuple[Symbol, Const, Const]]) -> Expr:
-    # - table: power rule, 1/x -> lnx, trig standard integrals
-    # - safe transformations: constant out, sum, polynomial division,
-    # - heuristic transformations
-    if type(bounds) == tuple:
-        return integrate_bounds(expr, bounds)
-    else:
-        var = bounds
-
-    expr = expr.simplify()
-
-    # start with polynomials
-    if isinstance(expr, Sum):
-        return Sum([integrate(e, var) for e in expr.terms])
-    elif isinstance(expr, Prod):
-        # if there is a constant, pull it out
-        if isinstance(expr.terms[0], Const):
-            return expr.terms[0] * integrate(Prod(expr.terms[1:]), var)
-
-        # or if there is a symbol that's not the variable, pull it out
-        for i, term in enumerate(expr.terms):
-            if isinstance(term, Symbol) and term != var:
-                return term * integrate(Prod(expr.terms[:i] + expr.terms[i + 1 :]), var)
-
-            # or if it's a power of a symbol that's not the variable, pull it out
-            if (
-                isinstance(term, Power)
-                and isinstance(term.base, Symbol)
-                and term.base != var
-            ):
-                return term * integrate(Prod(expr.terms[:i] + expr.terms[i + 1 :]), var)
-
-        # # if there are sub-sums, integrate the expansion
-        if expr.expandable():
-            return integrate(expr.expand(), var)
-
-        if divisible(expr, var):
-            divided = polynomial_division(expr, var)
-            return integrate(divided, var)
-
-        return heuristics(expr, var)
-        raise NotImplementedError(f"Cannot integrate {expr} with respect to {var}")
-    elif isinstance(expr, Power):
-        if expr.base == var and isinstance(expr.exponent, Const):
-            n = expr.exponent
-            return (1 / (n + 1)) * Power(var, n + 1) if n != -1 else Log(expr.base)
-        elif isinstance(expr.base, Symbol) and expr.base != var:
-            return expr * var
-        elif expr.expandable():
-            return integrate(expr.expand(), var)
-        else:
-            return heuristics(expr, var)
-            raise NotImplementedError(f"Cannot integrate {expr} with respect to {var}")
-    elif isinstance(expr, Symbol):
-        return Fraction(1 / 2) * Power(var, 2) if expr == var else expr * var
-    elif isinstance(expr, Const):
-        return expr * var
-    else:
-        return heuristics(expr, var)
-        raise NotImplementedError(f"Cannot integrate {expr} with respect to {var}")
-
-
-def divisible(expr: Prod, var: Symbol):
-    # we want to check that all of the terms in the product are polynomials.
-    # this means no trigfunctions and logs i guess. and that all powers are to integers.
-
-    # none of these terms should be products because by here the product is expanded simplified and flattened
-
-    # we also has to make sure it has at least one pos power and neg power ig ugh
-    return all([is_polynomial(term, var) for term in expr.terms])
-
-
-def is_polynomial(expr: Expr, var: Symbol) -> bool:
-    # how to handle other symbols? treat as consts or just say no? idk.
-
-    def _contains_singlefunc_w_inner(expr: Expr, var: Symbol) -> bool:
-        if isinstance(expr, SingleFunc) and expr.inner.contains(var):
-            return True
-
-        return any([_contains_singlefunc_w_inner(e, var) for e in expr.children()])
-
-    if _contains_singlefunc_w_inner(expr, var):
-        return False
-
-    if isinstance(expr, Const) or isinstance(expr, Symbol):
-        return True
-    if isinstance(expr, Power):
-
-        if not (
-            isinstance(expr.exponent, Const) and expr.exponent.value.denominator == 1
-        ):
-            return False
-        return True
-    if isinstance(expr, Sum):
-        return all([is_polynomial(term, var) for term in expr.terms])
-
-    raise NotImplementedError(
-        f"is_polynomial not implemented for {expr.__class__.__name__}"
-    )
-
-
-def polynomial_division(expr: Prod, var: Symbol) -> Expr:
-    # First, we formulate the division problem. We want a numerator and denominator. both are sums or powers or consts or symbols
-    numerator = 1
-    denominator = 1
-    for term in expr.terms:
-        b, x = deconstruct_power(term)
-        if x.value > 0:
-            numerator *= term
-        else:
-            denominator *= Power(b, -x).simplify()
-
-    numerator = numerator.simplify()
-    denominator = denominator.simplify()
-    numerator_list = to_polynomial(numerator, var)
-    denominator_list = to_polynomial(denominator, var)
-    quotient = np.zeros(len(numerator_list) - len(denominator_list) + 1)
-
-    while numerator_list.size >= denominator_list.size:
-        quotient_degree = len(numerator_list) - len(denominator_list)
-        quotient_coeff = numerator_list[-1] / denominator_list[-1]
-        quotient[quotient_degree] = quotient_coeff
-        numerator_list -= np.concatenate(
-            ([0] * quotient_degree, denominator_list * quotient_coeff)
-        )
-        numerator_list = rid_ending_zeros(numerator_list)
-
-    remainder = polynomial_to_expr(numerator_list, var) / polynomial_to_expr(
-        denominator_list, var
-    )
-    quotient_expr = polynomial_to_expr(quotient, var)
-    answer = (quotient_expr + remainder).simplify()
-    return answer
-
-
 Polynomial = np.ndarray  # has to be 1-D array
 
 
@@ -972,9 +829,6 @@ def rid_ending_zeros(arr: Polynomial) -> Polynomial:
     return np.trim_zeros(arr, "b")
 
 
-from typing import Optional
-
-
 def nesting(expr: Expr, var: Optional[Symbol] = None) -> int:
     """
     Compute the nesting amount (complexity) of an expression
@@ -1013,88 +867,6 @@ def random_id(length):
 
 def generate_intermediate_var() -> Symbol:
     return symbols(f"intermediate_{random_id(10)}")
-
-
-@cast
-def heuristics(expr: Expr, var: Symbol):
-    # if it doesnt contain any x thats not in tan
-    if contains(expr, Tan) and count(expr, Tan(var)) == count(expr, var):
-        intermediate = generate_intermediate_var()
-        # y = tanx
-        new_integrand = replace(expr, Tan(var), intermediate) / (1 + intermediate**2)
-        return integrate(new_integrand, intermediate)
-
-    # if expression **contains** trig function and we the current node is not of the transform A on it
-    # (or the last heuristic transform was not transform A)
-    # then we want to do transform A?
-
-    # for mvp:
-    # 1. check that the expression contains a trig function.
-    # 2. do a replace for all 3 sets
-    # 3. simplify
-    # 4. find the one with the lowest nesting
-    # 5. integrate that one.
-    if contains(expr, TrigFunction):
-        r1 = replace_class(
-            expr,
-            [Tan, Csc, Cot, Sec],
-            [
-                lambda x: Sin(x) / Cos(x),
-                lambda x: 1 / Sin(x),
-                lambda x: Cos(x) / Sin(x),
-                lambda x: 1 / Cos(x),
-            ],
-        ).simplify()
-        r2 = replace_class(
-            expr,
-            [Sin, Cos, Cot, Sec],
-            [
-                lambda x: 1 / Csc(x),
-                lambda x: 1 / Tan(x) / Csc(x),
-                lambda x: 1 / Tan(x),
-                lambda x: Tan(x) * Csc(x),
-            ],
-        ).simplify()
-        r3 = replace_class(
-            expr,
-            [Sin, Cos, Tan, Csc],
-            [
-                lambda x: 1 / Cot(x) / Sec(x),
-                lambda x: 1 / Sec(x),
-                lambda x: 1 / Cot(x),
-                lambda x: Cot(x) * Sec(x),
-            ],
-        ).simplify()
-
-        options = [r1, r2, r3]
-        results = [nesting(r, var) for r in options]
-        lowest_idx_option = options[results.index(min(results))]
-        return integrate(lowest_idx_option, var)
-
-    # look for (1 + (-1 * x^2))
-    s = f"(1 + (-1 * {var.name}^2))"
-    if s in expr.__repr__():
-        intermediate_var = generate_intermediate_var()
-        # intermediate1 = sin^-1 (var)
-        # ughhh idk how to do this ugh
-        # like you want to create a new expression wher eyou replace every instance of the var with sin^-1???
-        # psuedocode is good laura
-        # how do i loop over the entire expression? and replace it all? so if it's a sum or product then you can loop over all the terms and if it's a product you loop over the ... idk just loop over .children and .children?? but you have to recreate it. ugh
-        new_thing = replace(expr, var, Sin(intermediate_var)) * Cos(intermediate_var)
-        new_thing = new_thing.simplify()
-        # then that's a node and u store the transform and u take the integral of that.
-        # Node(new_thing)
-        # expr.children = [Node]
-        return integrate(new_thing, intermediate_var)
-
-    s2 = f"1 + {var.name}^2"
-    if s2 in expr.__repr__():
-        intermediate = generate_intermediate_var()
-        dy_dx = Sec(intermediate) ** 2
-        new_thing = (replace(expr, var, Tan(intermediate)) * dy_dx).simplify()
-        return integrate(new_thing, intermediate)
-
-    raise NotImplementedError(f"Cannot integrate {expr} with respect to {var}")
 
 
 def replace(expr: Expr, old: Expr, new: Expr) -> Expr:
