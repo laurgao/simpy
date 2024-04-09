@@ -687,6 +687,7 @@ class Integration:
         if root.solution is None:
             raise ValueError("something went wrong while going backwards...")
 
+        _print_success_tree(root)
         return root.solution
 
 
@@ -711,3 +712,14 @@ def _integrate_heuristically(node: Node):
 
     if len(node.children) > 1:
         node.type = "OR"
+
+
+def _print_success_tree(root: Node) -> None:
+    if not root.is_solved:
+        return
+    print(f"[{root.distance_from_root}] {root.expr}")
+    if not root.children:
+        return
+    for child in root.children:
+        _print_success_tree(child)
+        print("")
