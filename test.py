@@ -19,12 +19,12 @@ sassert_repr(x**2, x * x)
 sassert_repr(x * 2 - 2 * x, 0)
 sassert_repr(((x + 1) ** 2 - (x + 1) * (x + 1)), 0)
 
-sassert_repr(integrate(3 * x**2 - 2 * x, x), x**3 - x**2)
-sassert_repr(integrate((x + 1) ** 2, x), x + x**2 + (x**3 / 3))
+sassert_repr(Integration.integrate(3 * x**2 - 2 * x, x), x**3 - x**2)
+sassert_repr(Integration.integrate((x + 1) ** 2, x), x + x**2 + (x**3 / 3))
 sassert_repr(Log(x).diff(x), 1 / x)
 sassert_repr(Log(x).diff(x), 1 / x)
-sassert_repr(integrate(1 / x, x), Log(x))
-sassert_repr(integrate(1 / x, (x, 1, 2)), Log(2))
+sassert_repr(Integration.integrate(1 / x, x), Log(x))
+sassert_repr(Integration.integrate(1 / x, (x, 1, 2)), Log(2))
 
 assert nesting(x**2, x) == 2
 assert nesting(x * y**2, x) == 2

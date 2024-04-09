@@ -647,9 +647,23 @@ class Integration:
     Keeps track of integration work as we go
     """
 
+    def _integrate_bounds(expr: Expr, bounds: Tuple[Symbol, Const, Const]) -> Const:
+        x, a, b = bounds
+        integral = Integration._integrate(expr, bounds[0])
+        return (integral.evalf({x.name: b}) - integral.evalf({x.name: a})).simplify()
+
     @cast
     @staticmethod
-    def integrate(integrand: Expr, var: Symbol):
+    def integrate(
+        expr: Expr, bounds: Union[Symbol, Tuple[Symbol, Const, Const]]
+    ) -> Expr:
+        if type(bounds) == tuple:
+            return Integration._integrate_bounds(expr, bounds)
+        else:
+            return Integration._integrate(expr, bounds)
+
+    @staticmethod
+    def _integrate(integrand: Expr, var: Symbol):
 
         root = Node(integrand, var)
         curr_node = root
