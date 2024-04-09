@@ -79,7 +79,11 @@ if __name__ == "__main__":
 
     # new repr standards test
     expr = 1 - x**2
-    assert expr.__repr__() == "(1 - x^2)"
+    assert expr.__repr__() == "1 - x^2"
+    assert (2 * x).__repr__() == "2*x"
+    assert (2 * (2 + x)).__repr__() == "2*(2 + x)"
+    assert (2 / (2 + x)).__repr__() == "2/(2 + x)"
+    assert repr(2 * (2 + x) ** (-2)) == repr(2 / (2 + x) ** 2) == "2/(2 + x)^2"
 
     # PolynomialDivision test
     test_polynomial_division()

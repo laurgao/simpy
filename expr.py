@@ -21,6 +21,8 @@ def _cast(x):
         return {k: _cast(v) for k, v in x.items()}
     elif isinstance(x, tuple):
         return tuple(_cast(v) for v in x)
+    elif isinstance(x, list):
+        return [_cast(v) for v in x]
     else:
         raise NotImplementedError(f"Cannot cast {x} to Expr")
 
@@ -349,7 +351,7 @@ class Sum(Associative, Expr):
         return Sum([diff(e, var) for e in self.terms])
 
     def __repr__(self):
-        ongoing_str = "("
+        ongoing_str = ""
         for i, term in enumerate(self.terms):
             if i == 0:
                 ongoing_str += f"{term}"
@@ -358,7 +360,7 @@ class Sum(Associative, Expr):
             else:
                 ongoing_str += f" + {term}"
 
-        return ongoing_str + ")"
+        return ongoing_str
 
 
 def _deconstruct_prod(expr: Expr) -> Tuple[Const, List[Expr]]:
@@ -395,35 +397,37 @@ class Prod(Associative, Expr):
             else:
                 return "-" + Prod(self.terms[1:]).__repr__()
 
-        is_division = False
-        denominator = []
-        denominator_ = []
-        for term in self.terms:
-            if isinstance(term, Power):
-                if isinstance(term.exponent, Const) and term.exponent.value < 0:
-                    is_division = True
-                    denominator.append(term)
-                    denominator_.append(Power(term.base, -term.exponent))
+        def _term_repr(term):
+            if isinstance(term, Sum):
+                return "(" + repr(term) + ")"
+            return repr(term)
 
-        if is_division:
-            numerator = [term for term in self.terms if term not in denominator]
-            numerator_str = repr(Prod(numerator).simplify())
-            denominator_str = repr(Prod(denominator_).simplify())
-            return numerator_str + "/" + denominator_str
+        numerator, denominator = self.numerator_denominator
+        if denominator != Const(1):
 
-        return "(" + "*".join(map(repr, self.terms)) + ")"
+            def _x(prod: Prod):
+                if len(prod.terms) == 1:
+                    return _term_repr(prod.terms[0])
+                return "(" + repr(prod) + ")"
+
+            return _x(numerator) + "/" + _x(denominator)
+
+        return "*".join(map(_term_repr, self.terms))
 
     @property
     def numerator_denominator(self) -> Tuple["Expr", "Expr"]:
-        denominator = [1]
-        numerator = [1]
+        denominator = []
+        numerator = []
         for term in self.terms:
             b, x = deconstruct_power(term)
             if isinstance(x, Const) and x.value < 0:
-                denominator.append(Power(b, -x))
+                denominator.append(b if x == Const(-1) else Power(b, (-x).simplify()))
             else:
                 numerator.append(term)
-        return [Prod(numerator).simplify(), Prod(denominator).simplify()]
+        return [
+            Prod(numerator) if len(numerator) > 0 else Const(1),
+            Prod(denominator) if len(denominator) > 0 else Const(1),
+        ]
 
     @property
     def is_subtraction(self):
@@ -520,13 +524,18 @@ class Power(Expr):
     exponent: Expr
 
     def __repr__(self):
+        def _term_repr(term):
+            if isinstance(term, Sum) or isinstance(term, Prod):
+                return "(" + repr(term) + ")"
+            return repr(term)
+
         # special case for sqrt
         if self.exponent == Const(Fraction(1, 2)):
             return _repr(self.base, "sqrt")
         if self.exponent == Const(Fraction(-1, 2)):
             return f"{_repr(self.base, 'sqrt')}^-1"
 
-        return f"{self.base}^{self.exponent}"
+        return f"{_term_repr(self.base)}^{_term_repr(self.exponent)}"
 
     def simplify(self):
         x = self.exponent.simplify()
