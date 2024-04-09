@@ -1,4 +1,4 @@
-from main import *
+from transforms import *
 
 
 def assert_eq(x, y):
@@ -36,7 +36,7 @@ assert count(2, x) == 0
 assert count(Tan(x + 1) ** 2 - 2 * x, x) == 2
 
 
-# I want to test simplification
+# cos^2 + sin^2 = 1 test
 expr = Sin(x) ** 2 + Cos(x) ** 2 + 3
 simplified = expr.simplify()
 assert_eq(simplified, 4)
@@ -44,6 +44,15 @@ assert_eq(simplified, 4)
 expr = Sin(x - 2 * y) ** 2 + 3 + Cos(x - 2 * y) ** 2 + y**2
 simplified = expr.simplify()
 assert_eq(simplified, 4 + y**2)
+
+
+# PullConstant test
+expr = 2 * x**3
+test_node = Node(expr, x)
+transform = PullConstant()
+assert transform.check(test_node)
+transform.forward(test_node)
+assert_eq(test_node.child.expr, x**3)
 
 
 print("passed")

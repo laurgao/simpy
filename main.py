@@ -526,9 +526,9 @@ class Power(Expr):
     def __repr__(self):
         # special case for sqrt
         if self.exponent == Const(Fraction(1, 2)):
-            return f"sqrt{self.base}"
+            return _repr(self.base, "sqrt")
         if self.exponent == Const(Fraction(-1, 2)):
-            return f"(sqrt{self.base})^-1"
+            return f"{_repr(self.base, 'sqrt')}^-1"
 
         return f"{self.base}^{self.exponent}"
 
@@ -596,10 +596,14 @@ class SingleFunc(Expr):
         return self.__class__(inner)
 
     def __repr__(self) -> str:
-        inner_repr = self.inner.__repr__()
-        if inner_repr[0] == "(" and inner_repr[-1] == ")":
-            return f"{self._label}{inner_repr}"
-        return f"{self._label}({inner_repr})"
+        return _repr(self.inner, self._label)
+
+
+def _repr(inner: Expr, label: str) -> str:
+    inner_repr = inner.__repr__()
+    if inner_repr[0] == "(" and inner_repr[-1] == ")":
+        return f"{label}{inner_repr}"
+    return f"{label}({inner_repr})"
 
 
 class Log(SingleFunc):

@@ -5,6 +5,7 @@ from typing import Optional
 from main import *
 
 ExprFn = Callable[[Expr], Expr]
+Number = Union[Fraction, int]
 
 
 @dataclass
@@ -99,10 +100,17 @@ class Node:
             return []
         return [child for child in self.children if not child.is_finished]
 
+    @property
+    def child(self) -> Optional["Node"]:
+        # this is only here because when debugging im lazy and want to type node.child instead of node.children[0]
+        if not self.children:
+            return None
+        return self.children[0]
+
 
 class Transform(ABC):
     "An integral transform -- base class"
-    # forward and backward modify the nodetree directly
+    # forward and backward modify the nodetree directly. check is a pure function
 
     def __init__(self):
         pass
@@ -132,7 +140,7 @@ class PullConstant(Transform):
             # if there is a constant, pull it out
             # # or if there is a symbol that's not the variable, pull it out
             for i, term in enumerate(expr.terms):
-                if var not in expr.symbols():
+                if var not in term.symbols():
                     self._constant = term
                     self._non_constant_part = Prod(
                         expr.terms[:i] + expr.terms[i + 1 :]
@@ -422,9 +430,6 @@ class C(Transform):
         ).simplify()
 
 
-Number = Union[Fraction, int]
-
-
 class D(Transform):
     _variable_change = None  # x^n
 
@@ -476,7 +481,52 @@ class D(Transform):
         ).simplify()
 
 
-HEURISTICS = [D, B, A, C]
+class E(Transform):
+    # u-substitution for smtn like f(ax+b)
+    # u = ax+b
+    # du = a dx
+    # f(ax+b) dx = 1/a f(u) du
+
+    _variable_change: Expr = None
+
+    def check(self, node: Node) -> bool:
+        # most common use case is when ax+b appears a single time
+        # so we're just gonna check for that for now
+        if count(node.expr, node.var) != 1:
+            return False
+
+        # we're gonna assume that the expression is a sum of terms with only those 2 terms bc otherwise no point of subbing.
+        def _check(e: Expr) -> bool:
+            if isinstance(e, Sum) and all(
+                [
+                    node.var not in e.terms[0].symbols()
+                    or c == node.var
+                    or (isinstance(c, Prod) and node.var in c.terms)
+                    for c in e.terms
+                ]
+            ):
+                self._variable_change = e
+                return True
+            else:
+                return any([_check(child) for child in e.children()])
+
+        return _check(node.expr)
+
+    def forward(self, node: Node) -> None:
+        intermediate = generate_intermediate_var()
+        du_dx = self._variable_change.diff(node.var)
+        new_integrand = replace(node.expr, self._variable_change, intermediate) / du_dx
+        new_integrand = new_integrand.simplify()
+        node.children.append(Node(new_integrand, intermediate, self, node))
+
+    def backward(self, node: Node) -> None:
+        super().backward(node)
+        node.parent.solution = replace(
+            node.solution, node.var, self._variable_change
+        ).simplify()
+
+
+HEURISTICS = [D, E, B, A, C]
 SAFE_TRANSFORMS = [Additivity, PullConstant, Expand, PolynomialDivision]
 
 TRIGFUNCTION_INTEGRALS = {
@@ -629,7 +679,6 @@ class Integration:
                 if curr.parent is None:  # is root
                     break
                 try:
-                    # breakpoint()
                     curr.transform.backward(curr)
                     curr = curr.parent
                 except ValueError:
