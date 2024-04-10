@@ -43,66 +43,66 @@ class Expr(ABC):
                 setattr(self, field.name, _cast(getattr(self, field.name)))
 
     # should be overwritten in subclasses
-    def simplify(self):
+    def simplify(self) -> "Expr":
         return self
 
     @cast
-    def __add__(self, other):
+    def __add__(self, other) -> "Expr":
         return Sum([self, other])
 
     @cast
-    def __radd__(self, other):
+    def __radd__(self, other) -> "Expr":
         return Sum([other, self])
 
     @cast
-    def __sub__(self, other):
+    def __sub__(self, other) -> "Expr":
         return self + (-1 * other)
 
     @cast
-    def __rsub__(self, other):
+    def __rsub__(self, other) -> "Expr":
         return other + (-1 * self)
 
     @cast
-    def __mul__(self, other):
+    def __mul__(self, other) -> "Expr":
         return Prod([self, other])
 
     @cast
-    def __rmul__(self, other):
+    def __rmul__(self, other) -> "Expr":
         return Prod([other, self])
 
     @cast
-    def __pow__(self, other):
+    def __pow__(self, other) -> "Expr":
         return Power(self, other)
 
     @cast
-    def __rpow__(self, other):
+    def __rpow__(self, other) -> "Expr":
         return Power(other, self)
 
     @cast
-    def __div__(self, other):
+    def __div__(self, other) -> "Expr":
         return Prod([self, Power(other, -1)])
 
     @cast
-    def __truediv__(self, other):
+    def __truediv__(self, other) -> "Expr":
         return Prod([self, Power(other, -1)])
 
     @cast
-    def __rdiv__(self, other):
+    def __rdiv__(self, other) -> "Expr":
         return Prod([other, Power(self, -1)])
 
     @cast
-    def __rtruediv__(self, other):
+    def __rtruediv__(self, other) -> "Expr":
         return Prod([other, Power(self, -1)])
 
-    def __neg__(self):
+    def __neg__(self) -> "Expr":
         return -1 * self
 
     @cast
-    def __eq__(self, other):
+    def __eq__(self, other) -> bool:
         return self.__repr__() == other.__repr__()
 
     @cast
-    def __ne__(self, other):
+    def __ne__(self, other) -> bool:
         return not (self == other)
 
     # should be overloaded if necessary
@@ -131,7 +131,7 @@ class Expr(ABC):
         return False
 
     # @abstractmethod
-    def diff(self, var: "Symbol"):
+    def diff(self, var: "Symbol") -> "Expr":
         raise NotImplementedError(
             f"Cannot get the derivative of {self.__class__.__name__}"
         )
@@ -140,6 +140,14 @@ class Expr(ABC):
         # I hate this syntax
         str_set = set([symbol.name for e in self.children() for symbol in e.symbols()])
         return [Symbol(name=s) for s in str_set]
+
+    @abstractmethod
+    def __repr__(self) -> str:
+        raise NotImplementedError(f"Cannot represent {self.__class__.__name__}")
+
+    @abstractmethod
+    def latex(self) -> str:
+        raise NotImplementedError(f"Cannot convert {self.__class__.__name__} to latex")
 
 
 @dataclass
@@ -171,7 +179,7 @@ class Associative:
 
 
 class Number(ABC):
-    def diff(self, var):
+    def diff(self, var) -> "Const":
         return Const(0)
 
     def children(self) -> List["Expr"]:
@@ -194,7 +202,7 @@ class Const(Number, Expr):
         if isinstance(self.value, int):
             self.value = Fraction(self.value)
 
-    def __repr__(self):
+    def __repr__(self) -> str:
         if isinstance(self.value, Fraction) and self.value.denominator != 1:
             return "(" + str(self.value) + ")"
         return str(self.value)
@@ -207,6 +215,17 @@ class Const(Number, Expr):
     def evalf(self, subs: Dict[str, "Const"]):
         return self
 
+    def latex(self) -> str:
+        if self.value.denominator == 1:
+            return f"{self.value}"
+        return (
+            "\\frac{"
+            + str(self.value.numerator)
+            + "}{"
+            + str(self.value.denominator)
+            + "}"
+        )
+
 
 @dataclass
 class Pi(Number, Expr):
@@ -216,6 +235,9 @@ class Pi(Number, Expr):
 
     def __repr__(self) -> str:
         return "pi"
+
+    def latex(self) -> str:
+        return "\\pi"
 
 
 @dataclass
@@ -227,6 +249,9 @@ class E(Number, Expr):
     def __repr__(self) -> str:
         return "e"
 
+    def latex(self) -> str:
+        return "e"
+
 
 pi = Pi()
 e = E()
@@ -236,14 +261,14 @@ e = E()
 class Symbol(Expr):
     name: str
 
-    def __repr__(self):
+    def __repr__(self) -> str:
         return self.name
 
     @cast
     def evalf(self, subs: Dict[str, "Const"]):
         return subs.get(self.name, self)
 
-    def diff(self, var):
+    def diff(self, var) -> Const:
         return Const(1) if self == var else Const(0)
 
     def __eq__(self, other):
@@ -255,10 +280,13 @@ class Symbol(Expr):
     def symbols(self) -> List["Expr"]:
         return [self]
 
+    def latex(self) -> str:
+        return self.name
+
 
 @dataclass
 class Sum(Associative, Expr):
-    def simplify(self):
+    def simplify(self) -> "Expr":
         # TODO: this currently would not combine terms like (2+x) and (x+2)
 
         # simplify subexprs and flatten sub-sums
@@ -367,10 +395,10 @@ class Sum(Associative, Expr):
     def evalf(self, subs: Dict[str, "Const"]):
         return Sum([t.evalf(subs) for t in self.terms]).simplify()
 
-    def diff(self, var):
+    def diff(self, var) -> "Sum":
         return Sum([diff(e, var) for e in self.terms])
 
-    def __repr__(self):
+    def __repr__(self) -> str:
         ongoing_str = ""
         for i, term in enumerate(self.terms):
             if i == 0:
@@ -379,6 +407,18 @@ class Sum(Associative, Expr):
                 ongoing_str += f" - {Prod(term.terms[1:]).simplify()}"
             else:
                 ongoing_str += f" + {term}"
+
+        return ongoing_str
+
+    def latex(self) -> str:
+        ongoing_str = ""
+        for i, term in enumerate(self.terms):
+            if i == 0:
+                ongoing_str += term.latex()
+            elif isinstance(term, Prod) and term.is_subtraction:
+                ongoing_str += f" - {Prod(term.terms[1:]).simplify().latex()}"
+            else:
+                ongoing_str += f" + {term.latex()}"
 
         return ongoing_str
 
@@ -409,7 +449,7 @@ def deconstruct_power(expr: Expr) -> Tuple[Expr, Const]:
 
 @dataclass
 class Prod(Associative, Expr):
-    def __repr__(self):
+    def __repr__(self) -> str:
         # special case for subtraction:
         if self.is_subtraction:
             if len(self.terms) == 2:
@@ -434,8 +474,28 @@ class Prod(Associative, Expr):
 
         return "*".join(map(_term_repr, self.terms))
 
+    def latex(self) -> str:
+        # special case for subtraction:
+        if self.is_subtraction:
+            if len(self.terms) == 2:
+                return "-" + repr(self.terms[1])
+            else:
+                return "-" + Prod(self.terms[1:]).latex()
+
+        def _term_latex(term: Expr):
+            if isinstance(term, Sum):
+                return "\\left(" + term.latex() + "\\right)"
+            return term.latex()
+
+        numerator, denominator = self.numerator_denominator
+        if denominator != Const(1):
+            # don't need brackets around num/denom bc the frac bar handles it.
+            return "\\frac{" + numerator.latex() + "}{" + denominator.latex() + "}"
+
+        return " \\cdot ".join(map(_term_latex, self.terms))
+
     @property
-    def numerator_denominator(self) -> Tuple["Expr", "Expr"]:
+    def numerator_denominator(self) -> Tuple["Prod", "Prod"]:
         denominator = []
         numerator = []
         for term in self.terms:
@@ -453,7 +513,7 @@ class Prod(Associative, Expr):
     def is_subtraction(self):
         return self.terms[0] == Const(-1)
 
-    def simplify(self):
+    def simplify(self) -> "Expr":
         # simplify subexprs and flatten sub-products
         new = super().simplify()
 
@@ -529,7 +589,7 @@ class Prod(Associative, Expr):
     def evalf(self, subs: Dict[str, "Const"]):
         return Prod([t.evalf(subs) for t in self.terms]).simplify()
 
-    def diff(self, var):
+    def diff(self, var) -> Sum:
         return Sum(
             [
                 Prod([diff(e, var)] + [t for t in self.terms if t is not e])
@@ -543,7 +603,7 @@ class Power(Expr):
     base: Expr
     exponent: Expr
 
-    def __repr__(self):
+    def __repr__(self) -> str:
         def _term_repr(term):
             if isinstance(term, Sum) or isinstance(term, Prod):
                 return "(" + repr(term) + ")"
@@ -557,7 +617,21 @@ class Power(Expr):
 
         return f"{_term_repr(self.base)}^{_term_repr(self.exponent)}"
 
-    def simplify(self):
+    def latex(self) -> str:
+        def _term_latex(term: Expr):
+            if isinstance(term, Sum) or isinstance(term, Prod):
+                return "\\left(" + term.latex() + "\\right)"
+            return term.latex()
+
+        # special case for sqrt
+        if self.exponent == Const(Fraction(1, 2)):
+            return "\\sqrt{" + self.base.latex() + "}"
+        if self.exponent == Const(Fraction(-1, 2)):
+            return "{\\sqrt{" + self.base.latex() + "}" + "}^{-1}"
+
+        return "{" + _term_latex(self.base) + "}^{" + _term_latex(self.exponent) + "}"
+
+    def simplify(self) -> "Expr":
         x = self.exponent.simplify()
         b = self.base.simplify()
         if x == 0:
@@ -619,12 +693,15 @@ class SingleFunc(Expr):
     def children(self) -> List["Expr"]:
         return [self.inner]
 
-    def simplify(self):
+    def simplify(self) -> "Expr":
         inner = self.inner.simplify()
         return self.__class__(inner)
 
     def __repr__(self) -> str:
         return _repr(self.inner, self._label)
+
+    def latex(self) -> str:
+        return "\\text{" + self._label + "}\\left(" + self.inner.latex() + "\\right)"
 
 
 def _repr(inner: Expr, label: str) -> str:
@@ -649,14 +726,14 @@ class Log(SingleFunc):
         # return Const(math.log(inner.value)) if isinstance(inner, Const) else Log(inner)
         return Log(inner)
 
-    def simplify(self):
+    def simplify(self) -> Expr:
         inner = self.inner.simplify()
         if inner == 1:
             return Const(0)
 
         return Log(inner)
 
-    def diff(self, var):
+    def diff(self, var) -> Expr:
         return self.inner.diff(var) / self.inner
 
 
@@ -709,7 +786,7 @@ class TrigFunction(SingleFunc):
     def _label(self):
         return f"{'a' if self.is_inverse else ''}{self.function}"
 
-    def simplify(self):
+    def simplify(self) -> "Expr":
         inner = self.inner.simplify()
 
         # things like sin(cos(x)) cannot be more simplified.
