@@ -170,46 +170,66 @@ class Associative:
         # sort at the end
 
 
-@dataclass
-class Const(Expr):
-    value: Fraction
-
-    def __post_init__(self):
-        assert (
-            isinstance(self.value, Fraction) or type(self.value) == int
-        ), f"got value={self.value} not allowed Const"
-        self.value = Fraction(self.value)
-
-    def __repr__(self):
-        return str(self.value) if self.value.denominator == 1 else f"({self.value})"
-
-    @cast
-    def __eq__(self, other):
-        return (isinstance(other, Const) and self.value == other.value) or (
-            isinstance(other, Union[int, Fraction]) and self.value == other
-        )
-
-    @cast
-    def __ge__(self, other):
-        if not isinstance(other, Const):
-            return NotImplemented
-        return self.value > other.value
-
-    @cast
-    def __lt__(self, other):
-        if not isinstance(other, Const):
-            return NotImplemented
-        return self.value < other.value
-
-    @cast
-    def evalf(self, subs: Dict[str, "Const"]):
-        return self
-
+class Number(ABC):
     def diff(self, var):
         return Const(0)
 
     def children(self) -> List["Expr"]:
         return []
+
+    @cast
+    def subs(self, subs: Dict[str, "Const"]):
+        return self
+
+
+@dataclass
+class Const(Number, Expr):
+    value: Fraction
+
+    def __post_init__(self):
+        assert (
+            isinstance(self.value, (int, Fraction)) or int(self.value) == self.value
+        ), f"got value={self.value} not allowed Const"
+
+        if isinstance(self.value, int):
+            self.value = Fraction(self.value)
+
+    def __repr__(self):
+        if isinstance(self.value, Fraction) and self.value.denominator != 1:
+            return "(" + str(self.value) + ")"
+        return str(self.value)
+
+    @cast
+    def __eq__(self, other):
+        return isinstance(other, Const) and self.value == other.value
+
+    @cast
+    def evalf(self, subs: Dict[str, "Const"]):
+        return self
+
+
+@dataclass
+class Pi(Number, Expr):
+    @cast
+    def evalf(self, subs: Dict[str, "Const"]):
+        return 3.141592653589793
+
+    def __repr__(self) -> str:
+        return "pi"
+
+
+@dataclass
+class E(Number, Expr):
+    @cast
+    def evalf(self, subs: Dict[str, "Const"]):
+        return 2.718281828459045
+
+    def __repr__(self) -> str:
+        return "e"
+
+
+pi = Pi()
+e = E()
 
 
 @dataclass
@@ -545,7 +565,10 @@ class Power(Expr):
         elif x == 1:
             return b
         elif isinstance(b, Const) and isinstance(x, Const):
-            return Const(b.value**x.value)
+            try:
+                return Const(b.value**x.value)
+            except:
+                pass
         elif isinstance(b, Power):
             return Power(b.base, x * b.exponent).simplify()
         elif isinstance(b, Prod):
@@ -613,6 +636,7 @@ def _repr(inner: Expr, label: str) -> str:
 
 class Log(SingleFunc):
     inner: Expr
+    base: Expr = e
 
     @property
     def _label(self):
