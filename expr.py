@@ -97,14 +97,6 @@ class Expr(ABC):
     def __neg__(self) -> "Expr":
         return -1 * self
 
-    @cast
-    def __eq__(self, other) -> bool:
-        return self.__repr__() == other.__repr__()
-
-    @cast
-    def __ne__(self, other) -> bool:
-        return not (self == other)
-
     # should be overloaded if necessary
     def expandable(self) -> bool:
         return False
@@ -211,15 +203,19 @@ class Const(Number, Expr):
     def __eq__(self, other):
         return isinstance(other, Const) and self.value == other.value
 
+    @cast
     def __ge__(self, other):
         return isinstance(other, Const) and self.value >= other.value
 
+    @cast
     def __gt__(self, other):
         return isinstance(other, Const) and self.value > other.value
 
+    @cast
     def __le__(self, other):
         return isinstance(other, Const) and self.value <= other.value
 
+    @cast
     def __lt__(self, other):
         return isinstance(other, Const) and self.value < other.value
 

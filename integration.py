@@ -577,18 +577,17 @@ def _check_if_solvable(node: Node):
     expr = node.expr
     var = node.var
     answer = None
-    if isinstance(expr, Power):
+
+    if not expr.contains(var):
+        # PullConstant only acts on Prods
+        answer = expr * var
+    elif isinstance(expr, Power):
         if expr.base == var and isinstance(expr.exponent, Const):
             n = expr.exponent
             answer = (1 / (n + 1)) * Power(var, n + 1) if n != -1 else Log(expr.base)
-        elif isinstance(expr.base, Symbol) and expr.base != var:
-            answer = expr * var
-
-    elif isinstance(expr, Symbol):
-        answer = Fraction(1 / 2) * Power(var, 2) if expr == var else expr * var
-    elif isinstance(expr, Const):
-        answer = expr * var
-    elif isinstance(expr, TrigFunction) and not expr.is_inverse:
+    elif isinstance(expr, Symbol) and expr == var:
+        answer = Fraction(1 / 2) * Power(var, 2)
+    elif isinstance(expr, TrigFunction) and not expr.is_inverse and expr.inner == var:
         answer = TRIGFUNCTION_INTEGRALS[expr.function](expr.inner)
 
     if answer is None:

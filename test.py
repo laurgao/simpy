@@ -63,6 +63,23 @@ if __name__ == "__main__":
     sassert_repr(x * 2 - 2 * x, 0)
     sassert_repr(((x + 1) ** 2 - (x + 1) * (x + 1)), 0)
 
+    # Equality
+    assert x == x
+    assert x == Symbol("x")
+    assert not x == y
+    assert x != y
+    assert not x == 2 * x
+    assert (x + 2) == (x + 2)
+    assert (x + 2).simplify() == (2 + x).simplify()  # ideally does this w/o simplify
+    # for some reason defining __eq__ in Expr is not actually called.
+    # smtn children inherits from dataclass ugh idk
+    assert Const(2) == 2
+    assert Const(2) != 3
+    assert 2 == Const(2)
+    assert 2 < Const(3)
+    assert 2 <= Const(2)
+    assert Const(2) == Const(2)
+
     sassert_repr(Integration.integrate(3 * x**2 - 2 * x, x), x**3 - x**2)
     sassert_repr(Integration.integrate((x + 1) ** 2, x), x + x**2 + (x**3 / 3))
     sassert_repr(Log(x).diff(x), 1 / x)
@@ -70,6 +87,8 @@ if __name__ == "__main__":
 
     sassert_repr(Integration.integrate(1 / x, x), Log(x))
     sassert_repr(Integration.integrate(1 / x, (x, 1, 2)), Log(2))
+    sassert_repr(Integration.integrate(y, x), x * y)
+    sassert_repr(Integration.integrate(Tan(y), x), x * Tan(y))
 
     assert nesting(x**2, x) == 2
     assert nesting(x * y**2, x) == 2
