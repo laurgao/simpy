@@ -211,6 +211,18 @@ class Const(Number, Expr):
     def __eq__(self, other):
         return isinstance(other, Const) and self.value == other.value
 
+    def __ge__(self, other):
+        return isinstance(other, Const) and self.value >= other.value
+
+    def __gt__(self, other):
+        return isinstance(other, Const) and self.value > other.value
+
+    def __le__(self, other):
+        return isinstance(other, Const) and self.value <= other.value
+
+    def __lt__(self, other):
+        return isinstance(other, Const) and self.value < other.value
+
     @cast
     def evalf(self, subs: Dict[str, "Const"]):
         return self
@@ -225,6 +237,9 @@ class Const(Number, Expr):
             + str(self.value.denominator)
             + "}"
         )
+
+    def abs(self) -> "Const":
+        return Const(abs(self.value))
 
 
 @dataclass
@@ -423,51 +438,64 @@ class Sum(Associative, Expr):
         return ongoing_str
 
     def factor(self) -> "Expr":
-        # TODO: factor parts of a power.
+        # TODO: this feels like not the most efficient algo
         # assume self is simplified please
-        # Find common factors in the terms.
         # If there is a factor that is common to all terms, factor it out.
         # If there is a factor that is common to some terms, let's just ignore it.
 
         new = self
 
-        def _x(term: Expr) -> List[Expr]:
-            if isinstance(term, Prod):
-                return term.terms
-            return [term]
+        def _df(term: Expr) -> List[Tuple[Expr, int, bool]]:
+            """Deconstruct a term into its factors.
 
-        factors_per_term = [_x(term) for term in new.terms]
+            Returns: List[(factor, abs(exponent), sign(exponent))]
+            """
+            if isinstance(term, Prod):
+                return [_df(f) for f in term.terms]
+            if isinstance(term, Power) and isinstance(
+                term.exponent, Const
+            ):  # can't be prod bc it's simplified
+                return [term.base, term.exponent.abs(), term.exponent.value > 0]
+            return [term, Const(1), True]
+
+        factors_per_term = [_df(term) for term in new.terms]
         common_factors = factors_per_term[0]
 
-        def _isin(x: Expr, y: List[Expr]):
-            for i in y:
-                if i.__repr__() == x.__repr__():
-                    return True
-            return False
-
         for this_terms_factors in factors_per_term[1:]:
-            for factor in common_factors:
-                if not _isin(factor, this_terms_factors):
-                    common_factors = [
-                        t for t in common_factors if t.__repr__() != factor.__repr__()
-                    ]
+            for i, cfactor in enumerate(common_factors):
+                if cfactor is None:
+                    continue
+                is_in_at_least_1 = False
+                for tfactor in this_terms_factors:
+                    if (
+                        cfactor[0].__repr__() == tfactor[0].__repr__()
+                        and cfactor[2] == tfactor[2]
+                    ):
+                        cfactor[1] = min(cfactor[1], tfactor[1])
+                        is_in_at_least_1 = True
+                        break
+                if not is_in_at_least_1:
+                    common_factors[i] = None
 
-        def _makeprod(terms: List[Expr]):
-            return Const(1) if len(terms) == 0 else Prod(terms)
+        common_factors = [f for f in common_factors if f is not None]
+
+        def _makeprod(terms: List[Tuple[Expr, int, bool]]):
+            return (
+                Const(1)
+                if len(terms) == 0
+                else Prod([Power(t[0], t[1] * (1 if t[2] else -1)) for t in terms])
+            )
 
         if len(common_factors) == 0:
             return self
+        common_expr = _makeprod(common_factors)
 
         # factor out the common factors
         new_terms = []
-        for this_terms_factors in factors_per_term:
-            new_terms.append(
-                _makeprod(
-                    [t for t in this_terms_factors if not _isin(t, common_factors)]
-                )
-            )
+        for term in new.terms:
+            new_terms.append(term / common_expr)
 
-        return (_makeprod(common_factors) * Sum(new_terms)).simplify()
+        return (common_expr * Sum(new_terms)).simplify()
 
 
 def _deconstruct_prod(expr: Expr) -> Tuple[Const, List[Expr]]:

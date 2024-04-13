@@ -1,3 +1,5 @@
+from fractions import Fraction as F
+
 from expr import symbols
 from integration import *
 from test_transforms import test_lecture_example, test_x2_sqrt_1_x3
@@ -32,6 +34,24 @@ def test_polynomial_division():
 
     tr.forward(test_node)
     ans = test_node.children[0].expr
+
+
+def test_factor():
+    c3, r3, c4, r4, a, b = symbols("c_3 r_3 c_4 r_4 a b")
+
+    em_hw_expr = (
+        c3 * r3 / (sqrt(a) * sqrt(b))
+        - c3**2 * r3**2 / (c4 * r4 * sqrt(b) * a ** F(3 / 2))
+        - c4 * r4 / (sqrt(a) * b ** F(3 / 2))
+    )
+    em_hw_expr = em_hw_expr.simplify()
+    factored = em_hw_expr.factor()
+    expected_factored = (
+        1
+        / (sqrt(a) * sqrt(b))
+        * (c3 * r3 - c3**2 * r3**2 / (c4 * r4 * a) - c4 * r4 / b)
+    )
+    sassert_repr(factored, expected_factored)
 
 
 if __name__ == "__main__":
@@ -91,5 +111,8 @@ if __name__ == "__main__":
     # run entire integrals
     test_lecture_example()
     test_x2_sqrt_1_x3()
+
+    # Factor test
+    test_factor()
 
     print("passed")
