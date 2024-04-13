@@ -422,6 +422,53 @@ class Sum(Associative, Expr):
 
         return ongoing_str
 
+    def factor(self) -> "Expr":
+        # TODO: factor parts of a power.
+        # assume self is simplified please
+        # Find common factors in the terms.
+        # If there is a factor that is common to all terms, factor it out.
+        # If there is a factor that is common to some terms, let's just ignore it.
+
+        new = self
+
+        def _x(term: Expr) -> List[Expr]:
+            if isinstance(term, Prod):
+                return term.terms
+            return [term]
+
+        factors_per_term = [_x(term) for term in new.terms]
+        common_factors = factors_per_term[0]
+
+        def _isin(x: Expr, y: List[Expr]):
+            for i in y:
+                if i.__repr__() == x.__repr__():
+                    return True
+            return False
+
+        for this_terms_factors in factors_per_term[1:]:
+            for factor in common_factors:
+                if not _isin(factor, this_terms_factors):
+                    common_factors = [
+                        t for t in common_factors if t.__repr__() != factor.__repr__()
+                    ]
+
+        def _makeprod(terms: List[Expr]):
+            return Const(1) if len(terms) == 0 else Prod(terms)
+
+        if len(common_factors) == 0:
+            return self
+
+        # factor out the common factors
+        new_terms = []
+        for this_terms_factors in factors_per_term:
+            new_terms.append(
+                _makeprod(
+                    [t for t in this_terms_factors if not _isin(t, common_factors)]
+                )
+            )
+
+        return (_makeprod(common_factors) * Sum(new_terms)).simplify()
+
 
 def _deconstruct_prod(expr: Expr) -> Tuple[Const, List[Expr]]:
     # 3*x^2*y -> (3, [x^2, y])
@@ -490,7 +537,14 @@ class Prod(Associative, Expr):
         numerator, denominator = self.numerator_denominator
         if denominator != Const(1):
             # don't need brackets around num/denom bc the frac bar handles it.
-            return "\\frac{" + numerator.latex() + "}{" + denominator.latex() + "}"
+            # we simplify here bc if it's single term on top/bottom, even sums don't need brackets.
+            return (
+                "\\frac{"
+                + numerator.simplify().latex()
+                + "}{"
+                + denominator.simplify().latex()
+                + "}"
+            )
 
         return " \\cdot ".join(map(_term_latex, self.terms))
 
