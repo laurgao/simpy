@@ -146,11 +146,24 @@ class Expr(ABC):
 class Associative:
     terms: List[Expr]
 
+    def __post_init__(self):
+        self._flatten_inplace()
+        # self = self._sort()
+
     def _flatten(self) -> "Associative":
         new_terms = []
         for t in self.terms:
             new_terms += t._flatten().terms if isinstance(t, self.__class__) else [t]
         return self.__class__(new_terms)
+
+    def _flatten_inplace(self) -> None:
+        # TODO: eventually convert all flattens to inplace?
+        # and get rid of the _flatten method
+        # no need to do it in simplify because we can then always assume ALL Prod and Sum class objects are flattened
+        new_terms = []
+        for t in self.terms:
+            new_terms += t._flatten().terms if isinstance(t, self.__class__) else [t]
+        self.terms = new_terms
 
     def children(self) -> List["Expr"]:
         return self.terms

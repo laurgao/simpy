@@ -132,6 +132,8 @@ if __name__ == "__main__":
     assert (2 * (2 + x)).__repr__() == "2*(2 + x)"
     assert (2 / (2 + x)).__repr__() == "2/(2 + x)"
     assert repr(2 * (2 + x) ** (-2)) == repr(2 / (2 + x) ** 2) == "2/(2 + x)^2"
+    # make sure denominator is bracketed
+    assert repr(Sin(x) / (2 * x)) == "sin(x)/(2*x)"
 
     # Test integral sin(wt) * cos(wt) = sin^2 (wt) / 2w
     w, t = symbols("w t")
