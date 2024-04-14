@@ -329,10 +329,11 @@ class Additivity(SafeTransform):
 
 
 def _get_last_heuristic_transform(node: Node):
-    if isinstance(node.transform, (PullConstant, Additivity)):
+    if isinstance(node.transform, (PullConstant, Expand, Additivity)):
         # We'll let polynomial division go because it changes things sufficiently that
         # we actually sorta make progress towards the integral.
         # PullConstant and Additivity are like fake, they dont make any substantial changes.
+        # Expand is also like, idk, if we do A and then expand we dont rlly wanna do A again.
 
         # Alternatively, we could just make sure that the last transform didnt have the same
         # key. (but no the lecture example has B tan then polydiv then C tan)
