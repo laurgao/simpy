@@ -329,7 +329,7 @@ class Additivity(Transform):
 class B(Transform):
     """
     u-sub of a trig function
-    ex: integral of f(tanx) -> integral of f(y) / 1 + y^2, sub y = tanx
+    ex: integral of f(tanx) dx -> integral of f(y) / (1 + y^2) dy, sub y = tanx
     """
 
     _variable_change = None
@@ -337,7 +337,7 @@ class B(Transform):
     _key: str = None
     # {label: trigfn class, derivative of inverse trigfunction}
     _table: Dict[str, Tuple[ExprFn, ExprFn]] = {
-        "sin": (Sin, lambda var: 1 / sqrt(1 - var**2)),
+        "sin": (Sin, lambda var: 1 / sqrt(1 - var**2)),  # Asin(x).diff(x)
         "cos": (Cos, lambda var: -1 / sqrt(1 - var**2)),
         "tan": (Tan, lambda var: 1 / (1 + var**2)),
     }
@@ -541,6 +541,9 @@ class E(Transform):
             ):
                 self._variable_change = e
                 return True
+            if isinstance(e, Prod) and not (e / node.var).simplify().contains(node.var):
+                self._variable_change = e
+                return True
             else:
                 return any([_check(child) for child in e.children()])
 
@@ -602,6 +605,8 @@ class F(Transform):
 class G(Transform):
     # u-substitution for if sinx cosx exists in the outer product
     # TODO: generalize this in some form? to other trig fns maybe?
+    # - generalize to if the sin is in a power but the cos is under no power.
+    # like transform D but for trigfns
     _sin: Sin = None
     _cos: Cos = None
     _variable_change: Expr = None
@@ -669,6 +674,45 @@ class G(Transform):
         ).simplify()
 
 
+class H(Transform):
+    # product to sum identities
+    _a: Expr = None
+    _b: Expr = None
+
+    def check(self, node: Node) -> bool:
+        if isinstance(node.expr, Prod):
+            if len(node.expr.terms) == 2 and all(
+                isinstance(term, (Sin, Cos)) for term in node.expr.terms
+            ):
+                self._a, self._b = node.expr.terms
+                return True
+
+        if isinstance(node.expr, Power):
+            if isinstance(node.expr.base, (Sin, Cos)) and node.expr.exponent == 2:
+                self._a = self._b = node.expr.base
+                return True
+
+        return False
+
+    def forward(self, node: Node) -> None:
+        a, b = self._a, self._b
+        if isinstance(a, Sin) and isinstance(b, Cos):
+            temp = Sin(a.inner + b.inner) + Sin(a.inner - b.inner)
+        elif isinstance(a, Cos) and isinstance(b, Sin):
+            temp = Sin(a.inner + b.inner) - Sin(a.inner - b.inner)
+        elif isinstance(a, Cos) and isinstance(b, Cos):
+            temp = Cos(a.inner + b.inner) + Cos(a.inner - b.inner)
+        elif isinstance(a, Sin) and isinstance(b, Sin):
+            temp = Cos(a.inner + b.inner) - Cos(a.inner - b.inner)
+
+        new_integrand = temp / 2
+        node.children.append(Node(new_integrand, node.var, self, node))
+
+    def backward(self, node: Node) -> None:
+        super().backward(node)
+        node.parent.solution = node.solution
+
+
 def _replace_factory(condition: Callable[[Expr], bool], perform: ExprFn) -> ExprFn:
     def _replace(expr: Expr):
         if condition(expr):
@@ -693,7 +737,7 @@ def _replace_factory(condition: Callable[[Expr], bool], perform: ExprFn) -> Expr
     return _replace
 
 
-HEURISTICS = [D, E, B, A, C, F, G]
+HEURISTICS = [D, E, B, A, C, F, G, H]
 SAFE_TRANSFORMS = [Additivity, PullConstant, Expand, PolynomialDivision]
 
 TRIGFUNCTION_INTEGRALS = {
@@ -803,7 +847,9 @@ def _nesting_node(node: Node) -> Node:
 def _get_node_with_best_nesting(
     nodes: List[Node], fn: Callable[[List[Node]], Node]
 ) -> Node:
-    results = [nesting(node.expr, node.var) for node in nodes]
+    # patch for making cos^2x work
+    expanded = [n.expr.expand() if n.expr.expandable() else n.expr for n in nodes]
+    results = [nesting(e, node.var) for e, node in zip(expanded, nodes)]
     best_value = fn(results)
     return nodes[results.index(best_value)]
 

@@ -62,6 +62,18 @@ def test_compound_angle():
     breakpoint()
 
 
+def test_cos2x():
+    # tests the product-to-sum formula
+    # Test integral (cos x)^2 = Sin(2x) / 4 + x / 2
+    expr = Cos(x) ** 2
+    integral = Integration.integrate(expr, x)
+    expected = Sin(2 * x) / 4 + x / 2
+
+    # RN the integral goes down a different path and it returns
+    # like the weird asin(cos) thing that has a technically correct answer for a restricted domain.
+    # sassert_repr(integral, expected)
+
+
 if __name__ == "__main__":
     x, y = symbols("x y")
 

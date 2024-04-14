@@ -179,7 +179,7 @@ class Associative:
 
     @abstractmethod
     def simplify(self) -> "Associative":
-        return self.__class__([t.simplify() for t in self.terms])._flatten()
+        return self.__class__([t.simplify() for t in self.terms])
         # sort at the end
 
 
@@ -914,6 +914,17 @@ class Sin(TrigFunction):
     def diff(self, var) -> Expr:
         return Cos(self.inner) * self.inner.diff(var)
 
+    def simplify(self) -> "Expr":
+        new = super().simplify()
+
+        if not isinstance(new, Sin):
+            return new
+
+        if new.inner == Const(0):
+            return Const(0)
+
+        return new
+
 
 class Cos(TrigFunction):
     def __init__(self, inner):
@@ -921,6 +932,17 @@ class Cos(TrigFunction):
 
     def diff(self, var) -> Expr:
         return -Sin(self.inner) * self.inner.diff(var)
+
+    def simplify(self) -> "Expr":
+        new = super().simplify()
+
+        if not isinstance(new, Cos):
+            return new
+
+        if new.inner == Const(0):
+            return Const(1)
+
+        return new
 
 
 class Tan(TrigFunction):
