@@ -298,8 +298,6 @@ class Symbol(Expr):
 @dataclass
 class Sum(Associative, Expr):
     def simplify(self) -> "Expr":
-        # TODO: this currently would not combine terms like (2+x) and (x+2)
-
         # simplify subexprs and flatten sub-sums
         s = super().simplify()
 
@@ -537,6 +535,8 @@ class Prod(Associative, Expr):
         if denominator != Const(1):
 
             def _x(prod: Prod):
+                if not isinstance(prod, Prod):
+                    return _term_repr(prod)
                 if len(prod.terms) == 1:
                     return _term_repr(prod.terms[0])
                 return "(" + repr(prod) + ")"

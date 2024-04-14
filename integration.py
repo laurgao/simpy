@@ -560,7 +560,70 @@ class E(Transform):
         ).simplify()
 
 
-HEURISTICS = [D, E, B, A, C]
+class F(Transform):
+    """Compound angle formulae"""
+
+    def check(self, node: Node) -> bool:
+        def _check(e: Expr) -> bool:
+            if (
+                isinstance(e, (Sin, Cos))
+                and isinstance(e.inner, Sum)
+                and len(e.inner.terms) == 2  # for now lets j do 2 terms
+            ):
+                return True
+            else:
+                return any([_check(child) for child in e.children()])
+
+        return _check(node.expr)
+
+    def forward(self, node: Node) -> None:
+        condition = (
+            lambda expr: isinstance(expr, (Sin, Cos))
+            and isinstance(expr.inner, Sum)
+            and len(expr.inner.terms) == 2
+        )
+
+        def _perform(expr: Union[Sin, Cos]) -> Expr:
+            a, b = expr.inner.terms
+            if isinstance(expr, Sin):
+                return Sin(a) * Cos(b) + Cos(a) * Sin(b)
+            elif isinstance(expr, Cos):
+                return Cos(a) * Cos(b) - Sin(a) * Sin(b)
+
+        new_integrand = _replace_factory(condition, _perform)(node.expr)
+
+        node.children.append(Node(new_integrand, node.var, self, node))
+
+    def backward(self, node: Node) -> None:
+        super().backward(node)
+        node.parent.solution = node.solution
+
+
+def _replace_factory(condition: Callable[[Expr], bool], perform: ExprFn) -> ExprFn:
+    def _replace(expr: Expr):
+        if condition(expr):
+            return perform(expr)
+
+        # find all instances of old in expr and replace with new
+        if isinstance(expr, Sum):
+            return Sum([_replace(e) for e in expr.terms])
+        if isinstance(expr, Prod):
+            return Prod([_replace(e) for e in expr.terms])
+        if isinstance(expr, Power):
+            return Power(base=_replace(expr.base), exponent=_replace(expr.exponent))
+        # i love recursion
+        if isinstance(expr, SingleFunc):
+            return expr.__class__(_replace(expr.inner))
+
+        if isinstance(expr, Const):
+            return expr
+        if isinstance(expr, Symbol):
+            return expr
+
+    return _replace
+
+
+HEURISTICS = [D, E, B, A, C, F]
 SAFE_TRANSFORMS = [Additivity, PullConstant, Expand, PolynomialDivision]
 
 TRIGFUNCTION_INTEGRALS = {

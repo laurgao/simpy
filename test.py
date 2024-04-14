@@ -1,6 +1,6 @@
 from fractions import Fraction as F
 
-from expr import symbols
+from expr import pi, symbols
 from integration import *
 from test_transforms import test_lecture_example, test_x2_sqrt_1_x3
 
@@ -52,6 +52,14 @@ def test_factor():
         * (c3 * r3 - c3**2 * r3**2 / (c4 * r4 * a) - c4 * r4 / b)
     )
     sassert_repr(factored, expected_factored)
+
+
+def test_compound_angle():
+    w, phi, t = symbols("w phi t")
+    ac_power_expr = 1 / (2 * pi) * Cos(w * t + phi) * Cos(w * t)
+    ac_power_expr = ac_power_expr.simplify()
+    result = Integration.integrate(ac_power_expr, t)
+    breakpoint()
 
 
 if __name__ == "__main__":
@@ -130,6 +138,7 @@ if __name__ == "__main__":
     # run entire integrals
     test_lecture_example()
     test_x2_sqrt_1_x3()
+    test_compound_angle()
 
     # Factor test
     test_factor()
