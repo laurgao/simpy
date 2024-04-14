@@ -426,7 +426,7 @@ class Sum(Associative, Expr):
             if i == 0:
                 ongoing_str += f"{term}"
             elif isinstance(term, Prod) and term.is_subtraction:
-                ongoing_str += f" - {Prod(term.terms[1:]).simplify()}"
+                ongoing_str += f" - {(term * -1).simplify()}"
             else:
                 ongoing_str += f" + {term}"
 
@@ -438,7 +438,7 @@ class Sum(Associative, Expr):
             if i == 0:
                 ongoing_str += term.latex()
             elif isinstance(term, Prod) and term.is_subtraction:
-                ongoing_str += f" - {Prod(term.terms[1:]).simplify().latex()}"
+                ongoing_str += f" - {(term * -1).simplify().latex()}"
             else:
                 ongoing_str += f" + {term.latex()}"
 
@@ -532,17 +532,17 @@ def deconstruct_power(expr: Expr) -> Tuple[Expr, Const]:
 @dataclass
 class Prod(Associative, Expr):
     def __repr__(self) -> str:
-        # special case for subtraction:
-        if self.is_subtraction:
-            if len(self.terms) == 2:
-                return "-" + repr(self.terms[1])
-            else:
-                return "-" + Prod(self.terms[1:]).__repr__()
-
         def _term_repr(term):
             if isinstance(term, Sum):
                 return "(" + repr(term) + ")"
             return repr(term)
+
+        # special case for subtraction:
+        if self.is_subtraction:
+            new_prod = (self * -1).simplify()
+            if not isinstance(new_prod, Prod):
+                return f"-{_term_repr(new_prod)}"
+            return "-" + new_prod.__repr__()
 
         numerator, denominator = self.numerator_denominator
         if denominator != Const(1):
@@ -559,17 +559,17 @@ class Prod(Associative, Expr):
         return "*".join(map(_term_repr, self.terms))
 
     def latex(self) -> str:
-        # special case for subtraction:
-        if self.is_subtraction:
-            if len(self.terms) == 2:
-                return "-" + repr(self.terms[1])
-            else:
-                return "-" + Prod(self.terms[1:]).latex()
-
         def _term_latex(term: Expr):
             if isinstance(term, Sum):
                 return "\\left(" + term.latex() + "\\right)"
             return term.latex()
+
+        # special case for subtraction:
+        if self.is_subtraction:
+            new = (self * -1).simplify()
+            if not isinstance(new, Prod):
+                return "-" + _term_latex(new)
+            return "-" + new.latex()
 
         numerator, denominator = self.numerator_denominator
         if denominator != Const(1):
@@ -590,6 +590,14 @@ class Prod(Associative, Expr):
         denominator = []
         numerator = []
         for term in self.terms:
+            # handle consts seperately
+            if isinstance(term, Const):
+                if term.value.numerator != 1:
+                    numerator.append(Const(term.value.numerator))
+                if term.value.denominator != 1:
+                    denominator.append(Const(term.value.denominator))
+                continue
+
             b, x = deconstruct_power(term)
             if isinstance(x, Const) and x.value < 0:
                 denominator.append(b if x == Const(-1) else Power(b, (-x).simplify()))
@@ -602,7 +610,7 @@ class Prod(Associative, Expr):
 
     @property
     def is_subtraction(self):
-        return self.terms[0] == Const(-1)
+        return isinstance(self.terms[0], Const) and self.terms[0].value < 0
 
     def simplify(self) -> "Expr":
         # simplify subexprs and flatten sub-products
