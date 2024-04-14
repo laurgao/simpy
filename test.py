@@ -62,6 +62,15 @@ def test_compound_angle():
     breakpoint()
 
 
+def test_sin2x():
+    # tests the product-to-sum formula
+    # Test integral (sin x)^2 = x / 2 - Sin(2x) / 4
+    expr = Sin(x) ** 2
+    integral = Integration.integrate(expr, x)
+    expected = x / 2 - Sin(2 * x) / 4
+    sassert_repr(integral, expected)
+
+
 def test_cos2x():
     # tests the product-to-sum formula
     # Test integral (cos x)^2 = Sin(2x) / 4 + x / 2
@@ -164,6 +173,7 @@ if __name__ == "__main__":
     # run entire integrals
     test_lecture_example()
     test_x2_sqrt_1_x3()
+    test_sin2x()
     test_compound_angle()
 
     # Factor test

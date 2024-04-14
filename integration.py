@@ -703,7 +703,7 @@ class H(Transform):
         elif isinstance(a, Cos) and isinstance(b, Cos):
             temp = Cos(a.inner + b.inner) + Cos(a.inner - b.inner)
         elif isinstance(a, Sin) and isinstance(b, Sin):
-            temp = Cos(a.inner + b.inner) - Cos(a.inner - b.inner)
+            temp = Cos(a.inner - b.inner) - Cos(a.inner + b.inner)
 
         new_integrand = temp / 2
         node.children.append(Node(new_integrand, node.var, self, node))
