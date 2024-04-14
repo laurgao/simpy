@@ -163,7 +163,11 @@ class Transform(ABC):
         raise NotImplementedError("Not implemented")
 
 
-class PullConstant(Transform):
+class SafeTransform(Transform, ABC):
+    pass
+
+
+class PullConstant(SafeTransform):
     _constant: Expr = None
     _non_constant_part: Expr = None
 
@@ -191,7 +195,7 @@ class PullConstant(Transform):
         node.parent.solution = (self._constant * node.solution).simplify()
 
 
-class PolynomialDivision(Transform):
+class PolynomialDivision(SafeTransform):
     _numerator: Polynomial = None
     _denominator: Polynomial = None
 
@@ -292,7 +296,7 @@ class PolynomialDivision(Transform):
         node.parent.solution = node.solution
 
 
-class Expand(Transform):
+class Expand(SafeTransform):
     def forward(self, node: Node):
         node.children = [Node(node.expr.expand(), node.var, self, node)]
 
@@ -304,7 +308,7 @@ class Expand(Transform):
         node.parent.solution = node.solution
 
 
-class Additivity(Transform):
+class Additivity(SafeTransform):
     def forward(self, node: Node):
         node.type = "AND"
         node.children = [Node(e, node.var, self, node) for e in node.expr.terms]
@@ -322,6 +326,20 @@ class Additivity(Transform):
         node.parent.solution = Sum(
             [child.solution for child in node.parent.children]
         ).simplify()
+
+
+def _get_last_heuristic_transform(node: Node):
+    if isinstance(node.transform, (PullConstant, Additivity)):
+        # We'll let polynomial division go because it changes things sufficiently that
+        # we actually sorta make progress towards the integral.
+        # PullConstant and Additivity are like fake, they dont make any substantial changes.
+
+        # Alternatively, we could just make sure that the last transform didnt have the same
+        # key. (but no the lecture example has B tan then polydiv then C tan)
+
+        # Idk this thing rn is a lil messy and there might be a better way to do it.
+        return _get_last_heuristic_transform(node.parent)
+    return node.transform
 
 
 # Let's just add all the transforms we've used for now.
@@ -354,6 +372,13 @@ class B(Transform):
         self._variable_change = cls(node.var)
 
     def check(self, node: Node) -> bool:
+        # Since B and C essentially undo each other, we want to make sure that the last
+        # heuristic transform wasn't C.
+
+        t = _get_last_heuristic_transform(node)
+        if isinstance(t, C):
+            return False
+
         for k, v in self._table.items():
             cls, dy_dx = v
             count_ = count(node.expr, cls(node.var))
@@ -413,7 +438,8 @@ class A(Transform):
 
     def check(self, node: Node) -> bool:
         # make sure that this node didn't get here by this transform
-        if isinstance(node.transform, A):
+        t = _get_last_heuristic_transform(node)
+        if isinstance(t, A):
             return False
 
         expr = node.expr
@@ -444,7 +470,8 @@ class C(Transform):
         self._variable_change = var_change(node.var)
 
     def check(self, node: Node) -> bool:
-        if isinstance(node.transform, B):
+        t = _get_last_heuristic_transform(node)
+        if isinstance(t, B):
             # If it just went through B, C is guaranteed to have a match.
             # going through C will just undo B.
             return False
@@ -847,9 +874,7 @@ def _nesting_node(node: Node) -> Node:
 def _get_node_with_best_nesting(
     nodes: List[Node], fn: Callable[[List[Node]], Node]
 ) -> Node:
-    # patch for making cos^2x work
-    expanded = [n.expr.expand() if n.expr.expandable() else n.expr for n in nodes]
-    results = [nesting(e, node.var) for e, node in zip(expanded, nodes)]
+    results = [nesting(node.expr, node.var) for node in nodes]
     best_value = fn(results)
     return nodes[results.index(best_value)]
 

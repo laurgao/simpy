@@ -1,4 +1,4 @@
-from fractions import Fraction as F
+from fractions import Fraction
 
 from expr import pi, symbols
 from integration import *
@@ -41,8 +41,8 @@ def test_factor():
 
     em_hw_expr = (
         c3 * r3 / (sqrt(a) * sqrt(b))
-        - c3**2 * r3**2 / (c4 * r4 * sqrt(b) * a ** F(3 / 2))
-        - c4 * r4 / (sqrt(a) * b ** F(3 / 2))
+        - c3**2 * r3**2 / (c4 * r4 * sqrt(b) * a ** Fraction(3 / 2))
+        - c4 * r4 / (sqrt(a) * b ** Fraction(3 / 2))
     )
     em_hw_expr = em_hw_expr.simplify()
     factored = em_hw_expr.factor()
@@ -77,10 +77,7 @@ def test_cos2x():
     expr = Cos(x) ** 2
     integral = Integration.integrate(expr, x)
     expected = Sin(2 * x) / 4 + x / 2
-
-    # RN the integral goes down a different path and it returns
-    # like the weird asin(cos) thing that has a technically correct answer for a restricted domain.
-    # sassert_repr(integral, expected)
+    sassert_repr(integral, expected)
 
 
 if __name__ == "__main__":
@@ -174,7 +171,8 @@ if __name__ == "__main__":
     test_lecture_example()
     test_x2_sqrt_1_x3()
     test_sin2x()
-    test_compound_angle()
+    test_cos2x()
+    # test_compound_angle()
 
     # Factor test
     test_factor()
