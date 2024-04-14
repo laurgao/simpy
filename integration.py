@@ -599,6 +599,76 @@ class F(Transform):
         node.parent.solution = node.solution
 
 
+class G(Transform):
+    # u-substitution for if sinx cosx exists in the outer product
+    # TODO: generalize this in some form? to other trig fns maybe?
+    _sin: Sin = None
+    _cos: Cos = None
+    _variable_change: Expr = None
+
+    def check(self, node: Node) -> bool:
+        if not isinstance(node.expr, Prod):
+            return False
+
+        def is_constant_product_of_var(expr, var):
+            if expr == var:
+                return True
+            if not (expr / var).simplify().contains(var):
+                return True
+            return False
+
+        # sins = [term.inner for term in node.expr.terms if isinstance(term, Sin)]
+        # coses = [term.inner for term in node.expr.terms if isinstance(term, Cos)]
+        sins: List[Sin] = []
+        coses: List[Cos] = []
+        for term in node.expr.terms:
+            if isinstance(term, Sin):
+                if not is_constant_product_of_var(term.inner, node.var):
+                    continue
+
+                sins.append(term)
+
+                for cos in coses:
+                    if term.inner == cos.inner:
+                        self._sin = term
+                        self._cos = cos
+                        return True
+
+            if isinstance(term, Cos):
+                if not is_constant_product_of_var(term.inner, node.var):
+                    continue
+
+                coses.append(term)
+
+                for sin in sins:
+                    if term.inner == sin.inner:
+                        self._sin = sin
+                        self._cos = term
+                        return True
+
+        return False
+
+    def forward(self, node: Node) -> None:
+        intermediate = generate_intermediate_var()
+        dy_dx = self._sin.diff(node.var)
+        new_integrand = (
+            replace(
+                node.expr,
+                self._sin,
+                intermediate,
+            )
+            / dy_dx
+        )
+        node.children.append(Node(new_integrand, intermediate, self, node))
+        self._variable_change = self._sin
+
+    def backward(self, node: Node) -> None:
+        super().backward(node)
+        node.parent.solution = replace(
+            node.solution, node.var, self._variable_change
+        ).simplify()
+
+
 def _replace_factory(condition: Callable[[Expr], bool], perform: ExprFn) -> ExprFn:
     def _replace(expr: Expr):
         if condition(expr):
@@ -623,7 +693,7 @@ def _replace_factory(condition: Callable[[Expr], bool], perform: ExprFn) -> Expr
     return _replace
 
 
-HEURISTICS = [D, E, B, A, C, F]
+HEURISTICS = [D, E, B, A, C, F, G]
 SAFE_TRANSFORMS = [Additivity, PullConstant, Expand, PolynomialDivision]
 
 TRIGFUNCTION_INTEGRALS = {

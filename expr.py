@@ -898,15 +898,24 @@ class Sin(TrigFunction):
     def __init__(self, inner):
         super().__init__(inner, function="sin")
 
+    def diff(self, var) -> Expr:
+        return Cos(self.inner) * self.inner.diff(var)
+
 
 class Cos(TrigFunction):
     def __init__(self, inner):
         super().__init__(inner, function="cos")
 
+    def diff(self, var) -> Expr:
+        return -Sin(self.inner) * self.inner.diff(var)
+
 
 class Tan(TrigFunction):
     def __init__(self, inner):
         super().__init__(inner, function="tan")
+
+    def diff(self, var) -> Expr:
+        return Sec(self.inner) ** 2 * self.inner.diff(var)
 
 
 class Csc(TrigFunction):

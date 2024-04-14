@@ -87,6 +87,7 @@ if __name__ == "__main__":
     assert 2 < Const(3)
     assert 2 <= Const(2)
     assert Const(2) == Const(2)
+    assert Cos(x * 2) == Cos(x * 2)
 
     sassert_repr(Integration.integrate(3 * x**2 - 2 * x, x), x**3 - x**2)
     sassert_repr(Integration.integrate((x + 1) ** 2, x), x + x**2 + (x**3 / 3))
@@ -131,6 +132,13 @@ if __name__ == "__main__":
     assert (2 * (2 + x)).__repr__() == "2*(2 + x)"
     assert (2 / (2 + x)).__repr__() == "2/(2 + x)"
     assert repr(2 * (2 + x) ** (-2)) == repr(2 / (2 + x) ** 2) == "2/(2 + x)^2"
+
+    # Test integral sin(wt) * cos(wt) = sin^2 (wt) / 2w
+    w, t = symbols("w t")
+    expr = Sin(w * t) * Cos(w * t)
+    integral = Integration.integrate(expr, t)
+    expected = Sin(w * t) ** 2 / (2 * w)
+    sassert_repr(integral, expected)
 
     # PolynomialDivision test
     test_polynomial_division()
