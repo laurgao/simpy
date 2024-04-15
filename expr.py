@@ -802,6 +802,13 @@ class SingleFunc(Expr):
     def latex(self) -> str:
         return "\\text{" + self._label + "}\\left(" + self.inner.latex() + "\\right)"
 
+    @cast
+    def evalf(self, subs: Dict[str, "Const"]):
+        inner = self.inner.evalf(subs)
+        # TODO: Support floats in .evalf
+        # return Const(math.log(inner.value)) if isinstance(inner, Const) else Log(inner)
+        return self.__class__(inner)
+
 
 def _repr(inner: Expr, label: str) -> str:
     inner_repr = inner.__repr__()
@@ -817,13 +824,6 @@ class Log(SingleFunc):
     @property
     def _label(self):
         return "ln"
-
-    @cast
-    def evalf(self, subs: Dict[str, "Const"]):
-        inner = self.inner.evalf(subs)
-        # TODO: Support floats in .evalf
-        # return Const(math.log(inner.value)) if isinstance(inner, Const) else Log(inner)
-        return Log(inner)
 
     def simplify(self) -> Expr:
         inner = self.inner.simplify()
@@ -931,6 +931,10 @@ class Sin(TrigFunction):
         if new.inner == Const(0):
             return Const(0)
 
+        x = (new.inner / pi).simplify()
+        if isinstance(x, Const) and x.value.denominator == 1:
+            return Const(0)
+
         return new
 
 
@@ -949,6 +953,9 @@ class Cos(TrigFunction):
 
         if new.inner == Const(0):
             return Const(1)
+
+        if isinstance(new.inner, Prod) and new.inner.is_subtraction:
+            return Cos((new.inner * -1).simplify())
 
         return new
 

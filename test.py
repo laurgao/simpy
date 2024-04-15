@@ -55,11 +55,16 @@ def test_factor():
 
 
 def test_compound_angle():
-    w, phi, t = symbols("w phi t")
-    ac_power_expr = 1 / (2 * pi) * Cos(w * t + phi) * Cos(w * t)
-    ac_power_expr = ac_power_expr.simplify()
-    result = Integration.integrate(ac_power_expr, t)
-    breakpoint()
+    # Finds the average power of an AC circuit
+    w, phi, t = symbols("w \\phi t")
+    ac_power_integrand = Cos(w * t - phi) * Cos(w * t)
+    ac_power_integrand = ac_power_integrand.simplify()
+    period = 2 * pi / w
+    ac_power = 1 / period * Integration.integrate(ac_power_integrand, (t, 0, period))
+    ac_power = ac_power.simplify()
+
+    expected = Cos(phi) / 2
+    sassert_repr(ac_power, expected)
 
 
 def test_sin2x():
@@ -156,6 +161,9 @@ if __name__ == "__main__":
     assert repr((x / 2).simplify()) == "x/2"
     assert repr((x * Fraction(1, 2)).simplify()) == "x/2"
     assert repr((3 - 2 * x).simplify()) == "3 - 2*x"
+    # make sure consts show up before pi
+    assert repr((pi * 2).simplify()) == "2*pi"
+    assert repr((pi * -2).simplify()) == "-2*pi"
 
     # Test integral sin(wt) * cos(wt) = sin^2 (wt) / 2w
     w, t = symbols("w t")
@@ -172,7 +180,7 @@ if __name__ == "__main__":
     test_x2_sqrt_1_x3()
     test_sin2x()
     test_cos2x()
-    # test_compound_angle()
+    test_compound_angle()
 
     # Factor test
     test_factor()
