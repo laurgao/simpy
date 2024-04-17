@@ -204,7 +204,7 @@ class Const(Number, Expr):
             isinstance(self.value, (int, Fraction)) or int(self.value) == self.value
         ), f"got value={self.value} not allowed Const"
 
-        if isinstance(self.value, int):
+        if not isinstance(self.value, Fraction):
             self.value = Fraction(self.value)
 
     def __repr__(self) -> str:
@@ -735,22 +735,21 @@ class Power(Expr):
         b = self.base.simplify()
         if x == 0:
             return Const(1)
-        elif x == 1:
+        if x == 1:
             return b
-        elif isinstance(b, Const) and isinstance(x, Const):
+        if isinstance(b, Const) and isinstance(x, Const):
             try:
                 return Const(b.value**x.value)
             except:
                 pass
-        elif isinstance(b, Power):
+        if isinstance(b, Power):
             return Power(b.base, x * b.exponent).simplify()
-        elif isinstance(b, Prod):
+        if isinstance(b, Prod):
             # when you construct this new power entity you have to simplify it.
             # because what if the term raised to this exponent can be simplified?
             # ex: if you have (ab)^n where a = c^m
             return Prod([Power(term, x).simplify() for term in b.terms])
-        else:
-            return Power(self.base.simplify(), x)
+        return Power(self.base.simplify(), x)
 
     def expandable(self) -> bool:
         return (
