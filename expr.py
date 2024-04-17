@@ -733,7 +733,7 @@ class Power(Expr):
     def simplify(self) -> "Expr":
         x = self.exponent.simplify()
         b = self.base.simplify()
-        if x == 0:
+        if x == 0 and b != 0:
             return Const(1)
         if x == 1:
             return b

@@ -85,8 +85,33 @@ def test_cos2x():
     sassert_repr(integral, expected)
 
 
+def test_some_simplification():
+    r1, r2, w, v = symbols("r_1 r_2 \\omega v_0")
+    c = 1 / (r2 * w) * sqrt(r2 / r1 - 1)
+    c = c.simplify()
+    l = -r1 / (r2 * w) * sqrt(r2 / r1 - 1)
+    l = l.simplify()
+    r_s = r1
+    x_s = (w * l).simplify()
+    # z_s = r_s + x_s * 1j
+    r_l = (r2 / (1 + w**2 * c**2 * r2**2)).simplify()
+    x_l = (w * c * r2 / (1 + w**2 * c**2 * r2**2)).simplify()
+    # z_l = r_l + x_l * 1j # simpy doesn't support complex numbers i think.
+
+    z_eq = sqrt((r_s + r_l) ** 2 + (x_s + x_l) ** 2)
+    z_eq = z_eq.simplify()
+    i_0 = v / z_eq
+    i_0 = i_0.simplify()
+    pload = Fraction(1, 2) * r_l * i_0**2
+    pload = pload.simplify()
+    sassert_repr(
+        pload, v**2 / (8 * r1)
+    )  # the power dissipated through the load when z_l = conjugate(z_s)
+
+
 if __name__ == "__main__":
     x, y = symbols("x y")
+    test_some_simplification()
 
     sassert_repr(x * 0, 0)
     sassert_repr(x * 2, 2 * x)
@@ -111,6 +136,16 @@ if __name__ == "__main__":
     assert 2 <= Const(2)
     assert Const(2) == Const(2)
     assert Cos(x * 2) == Cos(x * 2)
+
+    # const exponent simplification
+    sassert_repr(x**0, 1)
+    sassert_repr(x**1, x)
+    sassert_repr(x**2, x * x)
+    sassert_repr(x**3, x * x * x)
+    sassert_repr(Const(2) ** 2, 4)
+    sassert_repr(sqrt(4), 2)
+    sassert_repr(sqrt(x**2), x)
+    assert sqrt(3).__repr__() == "sqrt(3)"
 
     sassert_repr(Integration.integrate(3 * x**2 - 2 * x, x), x**3 - x**2)
     sassert_repr(Integration.integrate((x + 1) ** 2, x), x + x**2 + (x**3 / 3))
