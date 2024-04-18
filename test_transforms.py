@@ -28,9 +28,3 @@ def test_x2_sqrt_1_x3():
 
     assert integral == expected, f"{integral} != {expected}"
 
-
-if __name__ == "__main__":
-    # test_sin3x()
-    # test_lecture_example()
-    test_x2_sqrt_1_x3()
-    print("Passed")
