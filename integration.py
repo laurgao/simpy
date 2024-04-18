@@ -542,6 +542,8 @@ class LinearUSub(Transform):
         ).simplify()
 
 
+# Leave RewriteTrig, InverseTrigUSub near the end bc they are deprioritized
+# and more fucky
 HEURISTICS = [PolynomialUSub, LinearUSub, TrigUSub2, RewriteTrig, InverseTrigUSub]
 SAFE_TRANSFORMS = [Additivity, PullConstant, Expand, PolynomialDivision]
 
