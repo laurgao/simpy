@@ -164,8 +164,11 @@ class Associative:
 
     @abstractmethod
     def simplify(self) -> "Associative":
+        """Simplify the expression.
+        
+        Inheriter should call self._sort() at the end. 
+        """
         return self.__class__([t.simplify() for t in self.terms])._flatten()
-        # sort at the end
 
 
 @dataclass
