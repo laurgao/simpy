@@ -283,13 +283,17 @@ class Pi(Number, Expr):
 class E(Number, Expr):
     @cast
     def evalf(self, subs: Dict[str, "Const"]):
-        return 2.718281828459045
+        return self
+        # return 2.718281828459045
 
     def __repr__(self) -> str:
         return "e"
 
     def latex(self) -> str:
         return "e"
+
+    def __eq__(self, other) -> bool:
+        return isinstance(other, E)
 
 
 pi = Pi()
@@ -1007,7 +1011,7 @@ class ArcTan(TrigFunction):
         super().__init__(inner, function="tan", is_inverse=True)
 
 
-def symbols(symbols: str):
+def symbols(symbols: str) -> Union[Symbol, List[Symbol]]:
     symbols = [Symbol(name=s) for s in symbols.split(" ")]
     return symbols if len(symbols) > 1 else symbols[0]
 

@@ -32,6 +32,7 @@ from expr import (
     contains_cls,
     count,
     deconstruct_power,
+    e,
     nesting,
     sqrt,
     symbols,
@@ -810,6 +811,12 @@ def _check_if_solvable(node: Node):
         if expr.base == var and isinstance(expr.exponent, Const):
             n = expr.exponent
             answer = (1 / (n + 1)) * Power(var, n + 1) if n != -1 else Log(expr.base)
+        elif (
+            expr.base == e
+            and not (expr.exponent / var).simplify().contains(var)
+            and not expr.base.contains(var)
+        ):
+            answer = (var / expr.exponent) * expr
     elif isinstance(expr, Symbol) and expr == var:
         answer = Fraction(1 / 2) * Power(var, 2)
     elif isinstance(expr, TrigFunction) and not expr.is_inverse and expr.inner == var:
@@ -905,24 +912,27 @@ class Integration:
     Keeps track of integration work as we go
     """
 
-    def _integrate_bounds(expr: Expr, bounds: Tuple[Symbol, Const, Const]) -> Const:
+    def _integrate_bounds(
+        expr: Expr, bounds: Tuple[Symbol, Const, Const], verbose: bool
+    ) -> Expr:
         x, a, b = bounds
-        integral = Integration._integrate(expr, bounds[0])
+        integral = Integration._integrate(expr, bounds[0], verbose)
         return (integral.evalf({x.name: b}) - integral.evalf({x.name: a})).simplify()
 
     @cast
     @staticmethod
     def integrate(
-        expr: Expr, bounds: Union[Symbol, Tuple[Symbol, Const, Const]]
+        expr: Expr,
+        bounds: Union[Symbol, Tuple[Symbol, Const, Const]],
+        verbose: bool = False,
     ) -> Expr:
         if type(bounds) == tuple:
-            return Integration._integrate_bounds(expr, bounds)
+            return Integration._integrate_bounds(expr, bounds, verbose)
         else:
-            return Integration._integrate(expr, bounds)
+            return Integration._integrate(expr, bounds, verbose)
 
     @staticmethod
-    def _integrate(integrand: Expr, var: Symbol):
-
+    def _integrate(integrand: Expr, var: Symbol, verbose: bool) -> Expr:
         root = Node(integrand, var)
         curr_node = root
         while True:
@@ -959,7 +969,8 @@ class Integration:
         if root.solution is None:
             raise ValueError("something went wrong while going backwards...")
 
-        _print_success_tree(root)
+        if verbose:
+            _print_success_tree(root)
         return root.solution
 
 
