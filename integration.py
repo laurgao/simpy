@@ -9,10 +9,33 @@ from typing import Callable, Dict, List, Literal, Optional, Tuple, Union
 
 import numpy as np
 
-from expr import (ArcCos, ArcSin, ArcTan, Const, Cos, Cot, Csc, Expr, Log,
-                  Power, Prod, Sec, Sin, SingleFunc, Sum, Symbol, Tan,
-                  TrigFunction, cast, contains_cls, count, deconstruct_power,
-                  nesting, sqrt, symbols)
+from expr import (
+    ArcCos,
+    ArcSin,
+    ArcTan,
+    Const,
+    Cos,
+    Cot,
+    Csc,
+    Expr,
+    Log,
+    Power,
+    Prod,
+    Sec,
+    Sin,
+    SingleFunc,
+    Sum,
+    Symbol,
+    Tan,
+    TrigFunction,
+    cast,
+    contains_cls,
+    count,
+    deconstruct_power,
+    nesting,
+    sqrt,
+    symbols,
+)
 
 ExprFn = Callable[[Expr], Expr]
 Number = Union[Fraction, int]
@@ -377,6 +400,7 @@ class TrigUSub2(Transform):
 
 class RewriteTrig(Transform):
     """Rewrites trig functions in terms of (sin, cos), (tan, sec), and (cot, csc)"""
+
     def forward(self, node: Node):
         expr = node.expr
         r1 = replace_class(
@@ -477,8 +501,9 @@ class PolynomialUSub(Transform):
     you're gonna replace u=x^n
     ex: x/sqrt(1-x^2)
     """
+
     _variable_change = None  # x^n
-    
+
     def check(self, node: Node) -> bool:
         if not isinstance(node.expr, Prod):
             return False
@@ -573,7 +598,7 @@ class LinearUSub(Transform):
         ).simplify()
 
 
-class F(Transform):
+class CompoundAngle(Transform):
     """Compound angle formulae"""
 
     def check(self, node: Node) -> bool:
@@ -612,8 +637,9 @@ class F(Transform):
         node.parent.solution = node.solution
 
 
-class G(Transform):
-    # u-substitution for if sinx cosx exists in the outer product
+class SinUSub(Transform):
+    """u-substitution for if sinx cosx exists in the outer product"""
+
     # TODO: generalize this in some form? to other trig fns maybe?
     # - generalize to if the sin is in a power but the cos is under no power.
     # like transform D but for trigfns
@@ -684,8 +710,9 @@ class G(Transform):
         ).simplify()
 
 
-class H(Transform):
-    # product to sum identities
+class ProductToSum(Transform):
+    """product to sum identities for sin & cos"""
+
     _a: Expr = None
     _b: Expr = None
 
