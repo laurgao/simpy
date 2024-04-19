@@ -9,33 +9,10 @@ from typing import Callable, Dict, List, Literal, Optional, Tuple, Union
 
 import numpy as np
 
-from expr import (
-    ArcCos,
-    ArcSin,
-    ArcTan,
-    Const,
-    Cos,
-    Cot,
-    Csc,
-    Expr,
-    Log,
-    Power,
-    Prod,
-    Sec,
-    Sin,
-    SingleFunc,
-    Sum,
-    Symbol,
-    Tan,
-    TrigFunction,
-    cast,
-    contains_cls,
-    count,
-    deconstruct_power,
-    nesting,
-    sqrt,
-    symbols,
-)
+from expr import (ArcCos, ArcSin, ArcTan, Const, Cos, Cot, Csc, Expr, Log,
+                  Power, Prod, Sec, Sin, SingleFunc, Sum, Symbol, Tan,
+                  TrigFunction, cast, contains_cls, count, deconstruct_power,
+                  nesting, sqrt, symbols)
 
 ExprFn = Callable[[Expr], Expr]
 Number = Union[Fraction, int]
@@ -345,10 +322,12 @@ def _get_last_heuristic_transform(node: Node):
 
 # Let's just add all the transforms we've used for now.
 # and we will make this shit good and generalized later.
-class B(Transform):
+class TrigUSub2(Transform):
     """
     u-sub of a trig function
-    ex: integral of f(tanx) dx -> integral of f(y) / (1 + y^2) dy, sub y = tanx
+    this is the weird u-sub where if u=sinx, dx != du/cosx but dx = du/sqrt(1-u^2)
+    ex: integral of f(tanx) -> integral of f(u) / 1 + y^2, sub u = tanx
+    -> dx = du/(1+x^2)
     """
 
     _variable_change = None
@@ -396,7 +375,8 @@ class B(Transform):
         ).simplify()
 
 
-class A(Transform):
+class RewriteTrig(Transform):
+    """Rewrites trig functions in terms of (sin, cos), (tan, sec), and (cot, csc)"""
     def forward(self, node: Node):
         expr = node.expr
         r1 = replace_class(
@@ -440,7 +420,7 @@ class A(Transform):
     def check(self, node: Node) -> bool:
         # make sure that this node didn't get here by this transform
         t = _get_last_heuristic_transform(node)
-        if isinstance(t, A):
+        if isinstance(node.transform, RewriteTrig):
             return False
 
         expr = node.expr
@@ -451,7 +431,7 @@ class A(Transform):
         node.parent.solution = node.solution
 
 
-class C(Transform):
+class InverseTrigUSub(Transform):
     _key = None
     _variable_change = None
 
@@ -472,7 +452,7 @@ class C(Transform):
 
     def check(self, node: Node) -> bool:
         t = _get_last_heuristic_transform(node)
-        if isinstance(t, B):
+        if isinstance(node.transform, TrigUSub2):
             # If it just went through B, C is guaranteed to have a match.
             # going through C will just undo B.
             return False
@@ -492,12 +472,13 @@ class C(Transform):
         ).simplify()
 
 
-class D(Transform):
+class PolynomialUSub(Transform):
+    """check that x^n-1 is a term and every other instance of x is x^n
+    you're gonna replace u=x^n
+    ex: x/sqrt(1-x^2)
+    """
     _variable_change = None  # x^n
-
-    # u substitution for x/sqrt(1-x^2)
-    # u just need to check that x^n-1 is a term and every other instance of x is x^n
-    # you're gonna replace u=x^n
+    
     def check(self, node: Node) -> bool:
         if not isinstance(node.expr, Prod):
             return False
@@ -543,11 +524,12 @@ class D(Transform):
         ).simplify()
 
 
-class E(Transform):
-    # u-substitution for smtn like f(ax+b)
-    # u = ax+b
-    # du = a dx
-    # f(ax+b) dx = 1/a f(u) du
+class LinearUSub(Transform):
+    """u-substitution for smtn like f(ax+b)
+    u = ax+b
+    du = a dx
+    \int f(ax+b) dx = 1/a \int f(u) du
+    """
 
     _variable_change: Expr = None
 
@@ -765,7 +747,9 @@ def _replace_factory(condition: Callable[[Expr], bool], perform: ExprFn) -> Expr
     return _replace
 
 
-HEURISTICS = [D, E, B, A, C, F, G, H]
+# Leave RewriteTrig, InverseTrigUSub near the end bc they are deprioritized
+# and more fucky
+HEURISTICS = [PolynomialUSub, LinearUSub, TrigUSub2, RewriteTrig, InverseTrigUSub]
 SAFE_TRANSFORMS = [Additivity, PullConstant, Expand, PolynomialDivision]
 
 TRIGFUNCTION_INTEGRALS = {
