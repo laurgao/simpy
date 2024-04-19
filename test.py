@@ -1,7 +1,11 @@
-from main import *
+from expr import symbols
+from integration import *
+from test_transforms import test_lecture_example, test_x2_sqrt_1_x3
+
 
 def assert_eq(x, y):
     assert x == y, f"{x} == {y} is False. ({x-y}).simplify() = {(x+y).simplify()}"
+
 
 @cast
 def sassert_repr(a, b):
@@ -9,18 +13,79 @@ def sassert_repr(a, b):
     assert repr(xs) == repr(ys), f"{xs} != {ys} (original {a} != {b})"
 
 
-x, = symbols('x')
+def test_polynomial_division():
+    expr = x**4 * (1 + x**2) ** -1
 
-sassert_repr(x*0, 0)
-sassert_repr(x*2, 2*x)
-sassert_repr(x**2, x*x)
-sassert_repr(x*2 - 2*x, 0)
-sassert_repr(((x+1)**2 - (x+1)*(x+1)), 0)
+    test_node = Node(expr, x)
+    tr = PolynomialDivision()
+    assert tr.check(test_node)
 
-sassert_repr(integrate(3*x**2 - 2*x, x), x**3 - x**2)
-sassert_repr(integrate((x+1)**2, x), x + x**2 + (x**3/3))
-sassert_repr(Log(x).diff(x), 1/x)
-sassert_repr(Log(x).diff(x), 1/x)
-sassert_repr(integrate(1/x, x), Log(x))
+    tr.forward(test_node)
+    sassert_repr(test_node.children[0].expr, x**2 - 1 + 1 / (1 + x**2))
 
-print('passed')
+    # 2nd test
+    expr = x**3 / (1 - x**2)
+
+    test_node = Node(expr, x)
+    tr = PolynomialDivision()
+    assert tr.check(test_node)
+
+    tr.forward(test_node)
+    ans = test_node.children[0].expr
+
+
+if __name__ == "__main__":
+    x, y = symbols("x y")
+
+    sassert_repr(x * 0, 0)
+    sassert_repr(x * 2, 2 * x)
+    sassert_repr(x**2, x * x)
+    sassert_repr(x * 2 - 2 * x, 0)
+    sassert_repr(((x + 1) ** 2 - (x + 1) * (x + 1)), 0)
+
+    sassert_repr(Integration.integrate(3 * x**2 - 2 * x, x), x**3 - x**2)
+    sassert_repr(Integration.integrate((x + 1) ** 2, x), x + x**2 + (x**3 / 3))
+    sassert_repr(Log(x).diff(x), 1 / x)
+    sassert_repr(Log(x).diff(x), 1 / x)
+
+    sassert_repr(Integration.integrate(1 / x, x), Log(x))
+    sassert_repr(Integration.integrate(1 / x, (x, 1, 2)), Log(2))
+
+    assert nesting(x**2, x) == 2
+    assert nesting(x * y**2, x) == 2
+    assert nesting(x * (1 / y**2 * 3), x) == 2
+
+    sassert_repr(x + (2 + y), x + 2 + y)
+
+    assert count(2, x) == 0
+    assert count(Tan(x + 1) ** 2 - 2 * x, x) == 2
+
+    # cos^2 + sin^2 = 1 test
+    expr = Sin(x) ** 2 + Cos(x) ** 2 + 3
+    simplified = expr.simplify()
+    assert_eq(simplified, 4)
+
+    expr = Sin(x - 2 * y) ** 2 + 3 + Cos(x - 2 * y) ** 2 + y**2
+    simplified = expr.simplify()
+    assert_eq(simplified, 4 + y**2)
+
+    # PullConstant test
+    expr = 2 * x**3
+    test_node = Node(expr, x)
+    transform = PullConstant()
+    assert transform.check(test_node)
+    transform.forward(test_node)
+    assert_eq(test_node.child.expr, x**3)
+
+    # new repr standards test
+    expr = 1 - x**2
+    assert expr.__repr__() == "(1 - x^2)"
+
+    # PolynomialDivision test
+    test_polynomial_division()
+
+    # run entire integrals
+    test_lecture_example()
+    test_x2_sqrt_1_x3()
+
+    print("passed")
