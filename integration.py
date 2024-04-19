@@ -751,6 +751,57 @@ class ProductToSum(Transform):
         node.parent.solution = node.solution
 
 
+class ByParts(Transform):
+    _stuff: List[Tuple[Expr, Expr, Expr, Expr]] = None
+
+    """Integration by parts"""
+
+    def __init__(self):
+        self._stuff = []
+
+    def check(self, node: Node) -> bool:
+        if not isinstance(node.expr, Prod):
+            return False
+        if not len(node.expr.terms) == 2:
+            return False
+
+        def _check(u: Expr, dv: Expr) -> bool:
+            du = u.diff(node.var)
+            try:
+                v = Integration.integrate(dv, node.var)
+            except NotImplementedError:
+                return False
+
+            self._stuff.append((u, du, v, dv))
+            return True
+
+        a, b = node.expr.terms
+        return _check(a, b) or _check(b, a)
+
+    def forward(self, node: Node) -> None:
+        # This is tricky bc you have 2 layers of children here.
+        for u, du, v, dv in self._stuff:
+            child1 = u * v
+            integrand2 = du * v * -1
+            funky_node = Node(node.expr, node.var, self, node, type="AND")
+            funky_node.children = [
+                Node(
+                    node.expr,
+                    node.var,
+                    Additivity(),
+                    funky_node,
+                    type="SOLUTION",
+                    solution=child1,
+                ),
+                Node(integrand2, node.var, Additivity(), funky_node),
+            ]
+            node.children.append(funky_node)
+
+    def backward(self, node: Node) -> None:
+        super().backward(node)
+        node.parent.solution = node.solution
+
+
 def _replace_factory(condition: Callable[[Expr], bool], perform: ExprFn) -> ExprFn:
     def _replace(expr: Expr):
         if condition(expr):
@@ -784,6 +835,7 @@ HEURISTICS = [
     SinUSub,
     ProductToSum,
     TrigUSub2,
+    ByParts,
     RewriteTrig,
     InverseTrigUSub,
 ]

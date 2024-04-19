@@ -270,7 +270,8 @@ class Const(Number, Expr):
 class Pi(Number, Expr):
     @cast
     def evalf(self, subs: Dict[str, "Const"]):
-        return 3.141592653589793
+        # return 3.141592653589793
+        return self
 
     def __repr__(self) -> str:
         return "pi"
@@ -944,9 +945,13 @@ class Sin(TrigFunction):
         if new.inner == Const(0):
             return Const(0)
 
-        x = (new.inner / pi).simplify()
-        if isinstance(x, Const) and x.value.denominator == 1:
+        pi_coeff = (new.inner / pi).simplify()
+        if isinstance(pi_coeff, Const) and pi_coeff.value.denominator == 1:
             return Const(0)
+        if pi_coeff == Fraction(1, 2):
+            return Const(1)
+        if pi_coeff == Fraction(3, 2):
+            return Const(-1)
 
         return new
 
@@ -963,12 +968,21 @@ class Cos(TrigFunction):
 
         if not isinstance(new, Cos):
             return new
+        if isinstance(new.inner, Prod) and new.inner.is_subtraction:
+            return Cos((new.inner * -1).simplify())
+        if new.inner.symbols() != []:
+            return new
 
         if new.inner == Const(0):
             return Const(1)
 
-        if isinstance(new.inner, Prod) and new.inner.is_subtraction:
-            return Cos((new.inner * -1).simplify())
+        if "pi" in new.inner.__repr__():
+            pi_coeff = (new.inner / pi).simplify()  # % 2
+            # implement modulus at some point
+            if pi_coeff == 1:
+                return Const(-1)
+            if pi_coeff == Fraction(1, 2) or pi_coeff == Fraction(3, 2):
+                return Const(0)
 
         return new
 
@@ -989,6 +1003,10 @@ class Csc(TrigFunction):
 class Sec(TrigFunction):
     def __init__(self, inner):
         super().__init__(inner, function="sec")
+
+    def diff(self, var) -> Expr:
+        # TODO: handle when self.inner doesnt contain var
+        return Sec(self.inner) * Tan(self.inner) * self.inner.diff(var)
 
 
 class Cot(TrigFunction):

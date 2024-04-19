@@ -16,3 +16,7 @@ sassert_repr(ans, 6 * e**12 - 6 * e**6)
 
 integrand = x * Cos(x)
 ans = Integration.integrate(integrand, (x, 3 * pi / 2, pi))
+sassert_repr(ans, 3 * pi / 2 - 1)
+
+
+print("All tests pass")
