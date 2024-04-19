@@ -6,7 +6,7 @@ import re
 from abc import ABC, abstractmethod
 from dataclasses import dataclass, fields
 from fractions import Fraction
-from functools import reduce
+from functools import cmp_to_key, reduce
 from typing import Callable, Dict, List, Literal, Optional, Tuple, Union
 
 
@@ -148,7 +148,7 @@ class Associative:
 
     def __post_init__(self):
         self._flatten_inplace()
-        # self = self._sort()
+        self._sort_inplace()
 
     def _flatten(self) -> "Associative":
         new_terms = []
@@ -168,19 +168,31 @@ class Associative:
     def children(self) -> List["Expr"]:
         return self.terms
 
-    def _sort(self) -> "Associative":
-        def _key(term: Expr) -> str:
-            n = nesting(term)
-            power = deconstruct_power(term)[1]
-            return f"{n} {power} {term.__repr__()}"
-            # the idea is you sort first by nesting, then by power, then by the term alphabetical
+    def _sort_inplace(self) -> "Associative":
+        def _compare(a: Expr, b: Expr) -> int:
+            """Returns -1 if a < b, 0 if a == b, 1 if a > b.
+            The idea is you sort first by nesting, then by power, then by the term alphabetical
+            """
+            def _deconstruct_const_power(expr: Expr) -> Const:
+                if isinstance(expr, Power) and isinstance(expr.exponent, Const):
+                    return expr.exponent
+                return Const(1)
+            
+            n = nesting(a) - nesting(b)
+            if n != 0:
+                return n
+            power = _deconstruct_const_power(a).value - _deconstruct_const_power(b).value
+            if power != 0:
+                return power
+            return 1 if a.__repr__() > b.__repr__() else -1 
 
-        return self.__class__(sorted(self.terms, key=_key))
+        key = cmp_to_key(_compare)
+
+        self.terms = sorted(self.terms, key=key)
 
     @abstractmethod
     def simplify(self) -> "Associative":
-        return self.__class__([t.simplify() for t in self.terms])
-        # sort at the end
+        raise NotImplementedError(f"Cannot simplify {self.__class__.__name__}")
 
 
 class Number(ABC):
@@ -312,38 +324,35 @@ class Symbol(Expr):
 class Sum(Associative, Expr):
     def simplify(self) -> "Expr":
         # simplify subexprs and flatten sub-sums
-        s = super().simplify()
+        terms = [t.simplify() for t in self.terms]
 
         # accumulate all constants
-        const = sum(t.value for t in s.terms if isinstance(t, Const))
+        const = sum(t.value for t in terms if isinstance(t, Const))
 
         # return immediately if there are no non constant items
-        non_constant_terms = [t for t in s.terms if not isinstance(t, Const)]
+        non_constant_terms = [t for t in terms if not isinstance(t, Const)]
         if len(non_constant_terms) == 0:
             return Const(const)
 
-        # otherwise, bring the constant to the front (if != 1)
-        s = Sum(([] if const == 0 else [Const(const)]) + non_constant_terms)
-
         # accumulate all like terms
-        new_terms = []
-        for i, term in enumerate(s.terms):
+        new_terms = [Const(const)] if const != 0 else []
+        for i, term in enumerate(non_constant_terms):
             if term is None:
                 continue
 
             new_coeff, non_const_factors1 = _deconstruct_prod(term)
 
             # check if any later terms are the same
-            for j in range(i + 1, len(s.terms)):
-                if s.terms[j] is None:
+            for j in range(i + 1, len(non_constant_terms)):
+                term2 = non_constant_terms[j]
+                if term2 is None:
                     continue
 
-                term2 = s.terms[j]
                 coeff2, non_const_factors2 = _deconstruct_prod(term2)
 
                 if non_const_factors1 == non_const_factors2:
                     new_coeff += coeff2
-                    s.terms[j] = None
+                    non_constant_terms[j] = None
 
             new_terms.append(Prod([new_coeff] + non_const_factors1).simplify())
 
@@ -411,7 +420,7 @@ class Sum(Associative, Expr):
                             ]
                             return Sum(new_terms).simplify()
 
-        return new_sum._sort()
+        return new_sum
 
     @cast
     def evalf(self, subs: Dict[str, "Const"]):
@@ -614,48 +623,46 @@ class Prod(Associative, Expr):
 
     def simplify(self) -> "Expr":
         # simplify subexprs and flatten sub-products
-        new = super().simplify()
+        simplified_terms = [t.simplify() for t in self.terms]
 
         # accumulate all like terms
         terms = []
-        for i, term in enumerate(new.terms):
+        for i, term in enumerate(simplified_terms):
             if term is None:
                 continue
 
             base, expo = deconstruct_power(term)
 
             # other terms with same base
-            for j in range(i + 1, len(new.terms)):
-                if new.terms[j] is None:
+            for j in range(i + 1, len(simplified_terms)):
+                if simplified_terms[j] is None:
                     continue
-                other = new.terms[j]
+                other = simplified_terms[j]
                 base2, expo2 = deconstruct_power(other)
                 if base2 == base:  # TODO: real expr equality
                     expo += expo2
-                    new.terms[j] = None
+                    simplified_terms[j] = None
 
             terms.append(Power(base, expo).simplify())
 
-        new.terms = terms
-
         # Check for zero
-        if any(t == 0 for t in new.terms):
+        if any(t == 0 for t in terms):
             return Const(0)
 
         # accumulate constants to the front
         const = reduce(
-            lambda x, y: x * y, [t.value for t in new.terms if isinstance(t, Const)], 1
+            lambda x, y: x * y, [t.value for t in terms if isinstance(t, Const)], 1
         )
 
         # return immediately if there are no non constant items
-        non_constant_terms = [t for t in new.terms if not isinstance(t, Const)]
+        non_constant_terms = [t for t in terms if not isinstance(t, Const)]
         if len(non_constant_terms) == 0:
             return Const(const)
 
         # otherwise, bring the constant to the front (if != 1)
-        new.terms = ([] if const == 1 else [Const(const)]) + non_constant_terms
+        terms = ([] if const == 1 else [Const(const)]) + non_constant_terms
 
-        return new.terms[0] if len(new.terms) == 1 else new._sort()
+        return terms[0] if len(terms) == 1 else Prod(terms)
 
     @cast
     def expandable(self) -> bool:
@@ -669,7 +676,7 @@ class Prod(Associative, Expr):
         self = self._flatten()
         self = Prod([t.expand() if t.expandable() else t for t in self.terms])
 
-        # expand sums that are left
+        # expand sums that are leftterms
         sums = [t for t in self.terms if isinstance(t, Sum)]
         other = [t for t in self.terms if not isinstance(t, Sum)]
 
