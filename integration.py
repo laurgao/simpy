@@ -379,7 +379,7 @@ class TrigUSub2(Transform):
         # heuristic transform wasn't C.
 
         t = _get_last_heuristic_transform(node)
-        if isinstance(t, C):
+        if isinstance(t, InverseTrigUSub):
             return False
 
         for k, v in self._table.items():
@@ -776,7 +776,16 @@ def _replace_factory(condition: Callable[[Expr], bool], perform: ExprFn) -> Expr
 
 # Leave RewriteTrig, InverseTrigUSub near the end bc they are deprioritized
 # and more fucky
-HEURISTICS = [PolynomialUSub, LinearUSub, TrigUSub2, RewriteTrig, InverseTrigUSub]
+HEURISTICS = [
+    PolynomialUSub,
+    LinearUSub,
+    CompoundAngle,
+    SinUSub,
+    ProductToSum,
+    TrigUSub2,
+    RewriteTrig,
+    InverseTrigUSub,
+]
 SAFE_TRANSFORMS = [Additivity, PullConstant, Expand, PolynomialDivision]
 
 TRIGFUNCTION_INTEGRALS = {

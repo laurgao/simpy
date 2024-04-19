@@ -173,18 +173,21 @@ class Associative:
             """Returns -1 if a < b, 0 if a == b, 1 if a > b.
             The idea is you sort first by nesting, then by power, then by the term alphabetical
             """
+
             def _deconstruct_const_power(expr: Expr) -> Const:
                 if isinstance(expr, Power) and isinstance(expr.exponent, Const):
                     return expr.exponent
                 return Const(1)
-            
+
             n = nesting(a) - nesting(b)
             if n != 0:
                 return n
-            power = _deconstruct_const_power(a).value - _deconstruct_const_power(b).value
+            power = (
+                _deconstruct_const_power(a).value - _deconstruct_const_power(b).value
+            )
             if power != 0:
                 return power
-            return 1 if a.__repr__() > b.__repr__() else -1 
+            return 1 if a.__repr__() > b.__repr__() else -1
 
         key = cmp_to_key(_compare)
 
