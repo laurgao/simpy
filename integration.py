@@ -571,9 +571,8 @@ class LinearUSub(Transform):
         def _check(e: Expr) -> bool:
             if isinstance(e, Sum) and all(
                 [
-                    node.var not in e.terms[0].symbols()
-                    or c == node.var
-                    or (isinstance(c, Prod) and node.var in c.terms)
+                    not c.contains(node.var)
+                    or not (c / node.var).simplify().contains(node.var)
                     for c in e.terms
                 ]
             ):
