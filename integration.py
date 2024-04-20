@@ -237,6 +237,10 @@ class PolynomialDivision(SafeTransform):
                 if isinstance(expression, Sum):
                     return all([_is_polynomial(term) for term in expression.terms])
 
+                if isinstance(expression, Prod):
+                    # You'd need this if it's a term in a sum
+                    return isinstance((expression / node.var).simplify(), Const)
+
                 raise NotImplementedError(f"Not implemented: {expression}")
 
             if not _is_polynomial(factor):
@@ -772,43 +776,47 @@ class ByParts(Transform):
 
         parents = _parents(node)
         byparts_trs = [p.transform for p in parents if isinstance(p.transform, ByParts)]
-        # if len(byparts_trs) >= 50:
-        #     return False
+        if len(byparts_trs) >= 50:
+            return False
         intermediary = [tr._stuff[0] for tr in byparts_trs]
         integrands = [(du * v).simplify() for (u, du, v, dv) in intermediary]
-        if len(byparts_trs) >= 10:
-
-            def _deconstruct_const_power(expr: Expr) -> Const:
-                if isinstance(expr, Power) and isinstance(expr.exponent, Const):
-                    return expr.exponent.value
-                return 1
+        NUM = 5  # I'm worried 5 is too small but 10 causes like a stupidly long time to conclude for kh example 3
+        # You know i really should just have a timeout. maybe.
+        if len(byparts_trs) >= NUM:
 
             def _compare_complexity(expr1, expr2) -> int:
                 n = nesting(expr1) - nesting(expr2)
                 if n != 0:
                     return n
 
-                power = abs(_deconstruct_const_power(expr1)) - abs(
-                    _deconstruct_const_power(expr2)
+                f1 = (
+                    lambda x: isinstance(x, Power)
+                    and x.base.contains(node.var)
+                    and isinstance(x.exponent, Const)
                 )
+                f2 = lambda x: abs(x.exponent.value)
+
+                _find_highest_power = _find_largest_factory(f1, f2)
+
+                power = _find_highest_power(expr1) - _find_highest_power(expr2)
                 return power
 
             # If the last 10 integrations by parts are all the same ??? return False
             # I still dont understand why ln(x+6) gets stuck at 11 but oh well
-            if all(intermediary[i] == intermediary[i + 1] for i in range(9)):
+            if all(intermediary[i] == intermediary[i + 1] for i in range(NUM - 1)):
                 return False
 
             # If the last 10 are in ascending order of complexity, return False
             if all(
                 _compare_complexity(integrands[i], integrands[i + 1]) > 0
-                for i in range(9)
+                for i in range(NUM - 1)
             ):
                 return False
 
         # Now fr it's the actual integration by parts logic
         def _check(u: Expr, dv: Expr) -> bool:
             du = u.diff(node.var)
-            v = Integration.integrate(dv, node.var)
+            v = Integration._integrate(dv, node.var, warn_failure=False)
             if v is None:
                 return False
 
@@ -850,7 +858,7 @@ class ByParts(Transform):
 
 
 def _replace_factory(condition: Callable[[Expr], bool], perform: ExprFn) -> ExprFn:
-    def _replace(expr: Expr):
+    def _replace(expr: Expr) -> Expr:
         if condition(expr):
             return perform(expr)
 
@@ -871,6 +879,18 @@ def _replace_factory(condition: Callable[[Expr], bool], perform: ExprFn) -> Expr
             return expr
 
     return _replace
+
+
+def _find_largest_factory(condition: Callable[[Expr], bool], perform: ExprFn) -> ExprFn:
+    def _search(expr: Expr):
+        if condition(expr):
+            return perform(expr)
+        if not expr.children():
+            return 0
+
+        return max(_search(c) for c in expr.children())
+
+    return _search
 
 
 # Leave RewriteTrig, InverseTrigUSub near the end bc they are deprioritized
@@ -1033,7 +1053,9 @@ class Integration:
             return Integration._integrate(expr, bounds, verbose)
 
     @staticmethod
-    def _integrate(integrand: Expr, var: Symbol, verbose: bool) -> Expr:
+    def _integrate(
+        integrand: Expr, var: Symbol, verbose: bool = False, warn_failure=True
+    ) -> Expr:
         root = Node(integrand, var)
         curr_node = root
         while True:
@@ -1049,8 +1071,8 @@ class Integration:
                 curr_node = answer
 
         if root.is_failed:
-            warnings.warn(f"Failed to integrate {integrand} wrt {var}")
-            breakpoint()
+            if warn_failure:
+                warnings.warn(f"Failed to integrate {integrand} wrt {var}")
             return None
 
         # now we have a solved tree or a failed tree

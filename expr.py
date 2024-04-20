@@ -1053,15 +1053,24 @@ class ArcSin(TrigFunction):
     def __init__(self, inner):
         super().__init__(inner, function="sin", is_inverse=True)
 
+    def diff(self, var):
+        return 1 / sqrt(1 - self.inner**2) * self.inner.diff(var)
+
 
 class ArcCos(TrigFunction):
     def __init__(self, inner):
         super().__init__(inner, function="cos", is_inverse=True)
 
+    def diff(self, var):
+        return -1 / sqrt(1 - self.inner**2) * self.inner.diff(var)
+
 
 class ArcTan(TrigFunction):
     def __init__(self, inner):
         super().__init__(inner, function="tan", is_inverse=True)
+
+    def diff(self, var):
+        return 1 / (1 + self.inner**2) * self.inner.diff(var)
 
 
 def symbols(symbols: str) -> Union[Symbol, List[Symbol]]:
