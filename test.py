@@ -173,6 +173,9 @@ if __name__ == "__main__":
     assert count(2, x) == 0
     assert count(Tan(x + 1) ** 2 - 2 * x, x) == 2
 
+    # Expand test
+    sassert_repr((1 / (x * (x + 6))).expand(), 1 / (x**2 + x * 6))
+
     # cos^2 + sin^2 = 1 test
     expr = Sin(x) ** 2 + Cos(x) ** 2 + 3
     simplified = expr.simplify()

@@ -603,7 +603,9 @@ class Prod(Associative, Expr):
         return " \\cdot ".join(map(_term_latex, self.terms))
 
     @property
-    def numerator_denominator(self) -> Tuple["Prod", "Prod"]:
+    def numerator_denominator(
+        self,
+    ) -> Tuple[Union["Prod", Const], Union["Prod", Const]]:
         denominator = []
         numerator = []
         for term in self.terms:
@@ -675,29 +677,43 @@ class Prod(Associative, Expr):
     @cast
     def expandable(self) -> bool:
         # a product is expandable if it contains any sums
-        return any(isinstance(t, Sum) for t in self.terms) or any(
-            t.expandable() for t in self.terms
-        )
+        num, denom = self.numerator_denominator
+
+        def _check_one(p: Union[Prod, Const]) -> bool:
+            """Returns expandable or not for one side of the divisor bar"""
+            if isinstance(p, Const):
+                return False
+            return any(isinstance(t, Sum) for t in p.terms) or any(
+                t.expandable() for t in p.terms
+            )
+
+        return _check_one(num) or _check_one(denom)
 
     def expand(self):
         # expand sub-expressions
-        self = self._flatten()
-        self = Prod([t.expand() if t.expandable() else t for t in self.terms])
+        num, denom = self.numerator_denominator
 
-        # expand sums that are leftterms
-        sums = [t for t in self.terms if isinstance(t, Sum)]
-        other = [t for t in self.terms if not isinstance(t, Sum)]
+        def _expand_one(p: Prod) -> Expr:
+            subexpanded = [t.expand() if t.expandable() else t for t in p.terms]
 
-        if not sums:
-            return self
+            # expand sums that are left
+            sums = [t for t in subexpanded if isinstance(t, Sum)]
+            other = [t for t in subexpanded if not isinstance(t, Sum)]
 
-        # for every combination of terms in the sums, multiply them and add
-        # (using itertools)
-        expanded = []
-        for terms in itertools.product(*[s.terms for s in sums]):
-            expanded.append(Prod(other + list(terms)).simplify())
+            if not sums:
+                return Prod(subexpanded)
 
-        return Sum(expanded).simplify()
+            # for every combination of terms in the sums, multiply them and add
+            # (using itertools)
+            expanded = []
+            for terms in itertools.product(*[s.terms for s in sums]):
+                expanded.append(Prod(other + list(terms)).simplify())
+
+            return Sum(expanded).simplify()
+
+        num = _expand_one(num) if num.expandable() else num
+        denom = _expand_one(denom) if denom.expandable() else denom
+        return (num / denom).simplify()
 
     @cast
     def evalf(self, subs: Dict[str, "Const"]):
@@ -723,11 +739,15 @@ class Power(Expr):
                 return "(" + repr(term) + ")"
             return repr(term)
 
+        # special case for reciprocals
+        if self.exponent == Const(-1):
+            return "1/" + _term_repr(self.base)
+
         # special case for sqrt
         if self.exponent == Const(Fraction(1, 2)):
             return _repr(self.base, "sqrt")
         if self.exponent == Const(Fraction(-1, 2)):
-            return f"{_repr(self.base, 'sqrt')}^-1"
+            return f"1/{_repr(self.base, 'sqrt')}"
 
         return f"{_term_repr(self.base)}^{_term_repr(self.exponent)}"
 
