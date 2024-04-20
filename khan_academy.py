@@ -30,3 +30,9 @@ def test_partial_fractions():
     ans = Integration.integrate(integrand, x)
     expected_ans = Fraction(4, 3) * Log(x) - Fraction(1, 3) * Log(x + 6)
     sassert_repr(ans, expected_ans)
+
+
+def test_arcsin():
+    ans = Integration.integrate(ArcSin(x), x)
+    expected_ans = x * ArcSin(x) + sqrt(1 - x**2)
+    sassert_repr(ans, expected_ans)

@@ -740,6 +740,14 @@ class ByParts(Transform):
 
     def check(self, node: Node) -> bool:
         if not isinstance(node.expr, Prod):
+            if isinstance(node.expr, SingleFunc) and node.expr.inner == node.var: # Special case for Log, ArcSin, etc.
+                # TODO universalize it more?? how to make it more universal without making inf loops?
+                dv = 1
+                v = node.var
+                u = node.expr
+                du = u.diff(node.var)
+                self._stuff.append((u, du, v, dv))
+                return True
             return False
         if not len(node.expr.terms) == 2:
             return False
@@ -907,8 +915,6 @@ def _check_if_solveable(integrand: Expr, var: Symbol) -> Optional[Expr]:
         return Fraction(1 / 2) * Power(var, 2)
     if isinstance(integrand, TrigFunction) and not integrand.is_inverse and integrand.inner == var:
         return TRIGFUNCTION_INTEGRALS[integrand.function](integrand.inner)
-    if isinstance(integrand, Log) and integrand.inner == var:
-        return var * Log(var) - var
     return None
 
 def _check_if_node_solvable(node: Node):

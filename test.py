@@ -2,7 +2,8 @@ from fractions import Fraction
 
 from expr import pi, symbols
 from integration import *
-from khan_academy import test_ex, test_partial_fractions, test_xcosx
+from khan_academy import (test_arcsin, test_ex, test_partial_fractions,
+                          test_xcosx)
 from test_transforms import test_lecture_example, test_x2_sqrt_1_x3
 
 
@@ -173,6 +174,7 @@ if __name__ == "__main__":
     sassert_repr(Log(x).diff(x), 1 / x)
     sassert_repr(Log(x).diff(x), 1 / x)
 
+    sassert_repr(Integration.integrate(x ** 12, x), x ** 13 / 13)
     sassert_repr(Integration.integrate(1 / x, x), Log(x))
     sassert_repr(Integration.integrate(1 / x, (x, 1, 2)), Log(2))
     sassert_repr(Integration.integrate(y, x), x * y)
@@ -250,6 +252,7 @@ if __name__ == "__main__":
     test_ex()
     test_xcosx()
     test_partial_fractions()
+    test_arcsin()
 
     # test_sin2x()
     # test_cos2x() 
