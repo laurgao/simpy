@@ -603,9 +603,7 @@ class Prod(Associative, Expr):
         return " \\cdot ".join(map(_term_latex, self.terms))
 
     @property
-    def numerator_denominator(
-        self,
-    ) -> Tuple[Union["Prod", Const], Union["Prod", Const]]:
+    def numerator_denominator(self) -> Tuple[Expr, Expr]:
         denominator = []
         numerator = []
         for term in self.terms:
@@ -622,10 +620,18 @@ class Prod(Associative, Expr):
                 denominator.append(b if x == Const(-1) else Power(b, (-x).simplify()))
             else:
                 numerator.append(term)
-        return [
-            Prod(numerator) if len(numerator) > 0 else Const(1),
-            Prod(denominator) if len(denominator) > 0 else Const(1),
-        ]
+
+        num_expr = (
+            Prod(numerator)
+            if len(numerator) > 1
+            else numerator[0] if len(numerator) == 1 else Const(1)
+        )
+        denom_expr = (
+            Prod(denominator)
+            if len(denominator) > 1
+            else denominator[0] if len(denominator) == 1 else Const(1)
+        )
+        return [num_expr, denom_expr]
 
     @property
     def is_subtraction(self):
@@ -679,10 +685,10 @@ class Prod(Associative, Expr):
         # a product is expandable if it contains any sums
         num, denom = self.numerator_denominator
 
-        def _check_one(p: Union[Prod, Const]) -> bool:
+        def _check_one(p: Expr) -> bool:
             """Returns expandable or not for one side of the divisor bar"""
-            if isinstance(p, Const):
-                return False
+            if not isinstance(p, Prod):
+                return p.expandable()
             return any(isinstance(t, Sum) for t in p.terms) or any(
                 t.expandable() for t in p.terms
             )
@@ -693,7 +699,10 @@ class Prod(Associative, Expr):
         # expand sub-expressions
         num, denom = self.numerator_denominator
 
-        def _expand_one(p: Prod) -> Expr:
+        def _expand_one(p: Expr) -> Expr:
+            if not isinstance(p, Prod):
+                return p.expand()
+
             subexpanded = [t.expand() if t.expandable() else t for t in p.terms]
 
             # expand sums that are left

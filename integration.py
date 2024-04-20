@@ -808,10 +808,14 @@ class ByParts(Transform):
         # Now fr it's the actual integration by parts logic
         def _check(u: Expr, dv: Expr) -> bool:
             du = u.diff(node.var)
-            try:
-                v = Integration.integrate(dv, node.var)
-            except NotImplementedError:
+            v = Integration.integrate(dv, node.var)
+            if v is None:
                 return False
+
+            # Should I add some more checks?
+            # One thing that happens is that the magnitude of the power keeps getting bigger.
+            # How about I compare the last 10 integrands of integration by parts and if all of them are getting more
+            # complex as time goes on then i call it a fail and dont allow more integration by parts.
 
             self._stuff.append((u, du, v, dv))
             return True
