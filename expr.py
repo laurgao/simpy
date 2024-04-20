@@ -999,6 +999,9 @@ class Csc(TrigFunction):
     def __init__(self, inner):
         super().__init__(inner, function="csc")
 
+    def diff(self, var) -> Expr:
+        return (1 / Sin(self.inner)).diff(var)
+
 
 class Sec(TrigFunction):
     def __init__(self, inner):
@@ -1012,6 +1015,9 @@ class Sec(TrigFunction):
 class Cot(TrigFunction):
     def __init__(self, inner):
         super().__init__(inner, function="cot")
+
+    def diff(self, var) -> Expr:
+        return (1 / Tan(self.inner)).diff(var)
 
 
 class ArcSin(TrigFunction):

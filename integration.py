@@ -2,6 +2,7 @@
 
 import random
 import string
+import warnings
 from abc import ABC, abstractmethod
 from dataclasses import dataclass
 from fractions import Fraction
@@ -234,9 +235,7 @@ class PolynomialDivision(SafeTransform):
                     return True
 
                 if isinstance(expression, Sum):
-                    return all(
-                        [_is_polynomial(term, node.var) for term in expression.terms]
-                    )
+                    return all([_is_polynomial(term) for term in expression.terms])
 
                 raise NotImplementedError(f"Not implemented: {expression}")
 
@@ -244,8 +243,8 @@ class PolynomialDivision(SafeTransform):
                 return False
 
         ## Make sure numerator and denominator are good
-        numerator = 1
-        denominator = 1
+        numerator = Const(1)
+        denominator = Const(1)
         for factor in expr.terms:
             b, x = deconstruct_power(factor)
             if x.value > 0:
@@ -258,7 +257,6 @@ class PolynomialDivision(SafeTransform):
             # there is nothing to divide. this is not a division.
             return False
         denominator = denominator.simplify()
-
         try:
             numerator_list = to_polynomial(numerator, node.var)
             denominator_list = to_polynomial(denominator, node.var)
@@ -765,6 +763,49 @@ class ByParts(Transform):
         if not len(node.expr.terms) == 2:
             return False
 
+        # I want to get all the byparts transforms of the parental lineage
+        def _parents(node: Node) -> List[Node]:
+            """Returns the node and all its parents as we ascend the tree"""
+            if node.parent is None:
+                return [node]
+            return [node] + _parents(node.parent)
+
+        parents = _parents(node)
+        byparts_trs = [p.transform for p in parents if isinstance(p.transform, ByParts)]
+        # if len(byparts_trs) >= 50:
+        #     return False
+        intermediary = [tr._stuff[0] for tr in byparts_trs]
+        integrands = [(du * v).simplify() for (u, du, v, dv) in intermediary]
+        if len(byparts_trs) >= 10:
+
+            def _deconstruct_const_power(expr: Expr) -> Const:
+                if isinstance(expr, Power) and isinstance(expr.exponent, Const):
+                    return expr.exponent.value
+                return 1
+
+            def _compare_complexity(expr1, expr2) -> int:
+                n = nesting(expr1) - nesting(expr2)
+                if n != 0:
+                    return n
+
+                power = abs(_deconstruct_const_power(expr1)) - abs(
+                    _deconstruct_const_power(expr2)
+                )
+                return power
+
+            # If the last 10 integrations by parts are all the same ??? return False
+            # I still dont understand why ln(x+6) gets stuck at 11 but oh well
+            if all(intermediary[i] == intermediary[i + 1] for i in range(9)):
+                return False
+
+            # If the last 10 are in ascending order of complexity, return False
+            if all(
+                _compare_complexity(integrands[i], integrands[i + 1]) > 0
+                for i in range(9)
+            ):
+                return False
+
+        # Now fr it's the actual integration by parts logic
         def _check(u: Expr, dv: Expr) -> bool:
             du = u.diff(node.var)
             try:
@@ -783,7 +824,9 @@ class ByParts(Transform):
         for u, du, v, dv in self._stuff:
             child1 = u * v
             integrand2 = du * v * -1
-            funky_node = Node(node.expr, node.var, self, node, type="AND")
+            tr = ByParts()
+            tr._stuff = [(u, du, v, dv)]
+            funky_node = Node(node.expr, node.var, tr, node, type="AND")
             funky_node.children = [
                 Node(
                     node.expr,
@@ -873,6 +916,8 @@ def _check_if_solvable(node: Node):
         answer = Fraction(1 / 2) * Power(var, 2)
     elif isinstance(expr, TrigFunction) and not expr.is_inverse and expr.inner == var:
         answer = TRIGFUNCTION_INTEGRALS[expr.function](expr.inner)
+    elif isinstance(expr, Log) and expr.inner == var:
+        answer = var * Log(var) - var
 
     if answer is None:
         return
@@ -1000,8 +1045,9 @@ class Integration:
                 curr_node = answer
 
         if root.is_failed:
+            warnings.warn(f"Failed to integrate {integrand} wrt {var}")
             breakpoint()
-            raise NotImplementedError(f"Failed to integrate {integrand} wrt {var}")
+            return None
 
         # now we have a solved tree or a failed tree
         # we can go back and get the answer
@@ -1103,6 +1149,8 @@ def to_polynomial(expr: Expr, var: Symbol) -> Polynomial:
     if isinstance(expr, Symbol):
         assert expr == var
         return np.array([0, 1])
+    if isinstance(expr, Const):
+        return np.array([expr.value])
 
     raise NotImplementedError(f"weird expr: {expr}")
 
