@@ -99,6 +99,13 @@ def test_cos2x():
     expected = Sin(2 * x) / 4 + x / 2
     sassert_repr(integral, expected)
 
+def test_linear_usub_with_multiple_subs():
+    # Last I checked, this fails without LinearUSub
+    integrand = Sin(2*x) / Cos(2*x)
+    integral = Integration.integrate(integrand, x)
+    expected = -Log(Cos(2*x))/2
+    sassert_repr(integral, expected)
+
 
 def test_some_simplification():
     r1, r2, w, v = symbols("r_1 r_2 \\omega v_0")
@@ -253,6 +260,7 @@ if __name__ == "__main__":
     test_xcosx()
     test_partial_fractions()
     test_arcsin()
+    test_linear_usub_with_multiple_subs()
 
     # test_sin2x()
     # test_cos2x() 

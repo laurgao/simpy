@@ -540,27 +540,37 @@ class LinearUSub(Transform):
     _variable_change: Expr = None
 
     def check(self, node: Node) -> bool:
-        # most common use case is when ax+b appears a single time
-        # so we're just gonna check for that for now
-        if count(node.expr, node.var) != 1:
+        if count(node.expr, node.var) < 1: # just to cover our bases bc the later thing assume it appears >=1 
             return False
 
-        # we're gonna assume that the expression is a sum of terms with only those 2 terms bc otherwise no point of subbing.
+        def _is_a_linear_sum_or_prod(expr: Expr) -> bool:
+            if isinstance(expr, Sum):
+                return all(
+                    [
+                        not c.contains(node.var)
+                        or not (c / node.var).simplify().contains(node.var)
+                        for c in expr.terms
+                    ]
+                )
+            if isinstance(expr, Prod):
+                # Is a constant multiple of var
+                return not (expr / node.var).simplify().contains(node.var)
+            return False
+
         def _check(e: Expr) -> bool:
-            if isinstance(e, Sum) and all(
-                [
-                    not c.contains(node.var)
-                    or not (c / node.var).simplify().contains(node.var)
-                    for c in e.terms
-                ]
-            ):
+            if not e.contains(node.var):
+                return True
+            if _is_a_linear_sum_or_prod(e):
+                if self._variable_change is not None:
+                    return e == self._variable_change
                 self._variable_change = e
                 return True
-            if isinstance(e, Prod) and not (e / node.var).simplify().contains(node.var):
-                self._variable_change = e
-                return True
+            if not e.children():
+                # This must mean that we contain the var and it has no children, which means that we are the var.
+                # have to do this because all([]) = True. Covering my bases.
+                return False
             else:
-                return any([_check(child) for child in e.children()])
+                return all([_check(child) for child in e.children()])
 
         return _check(node.expr)
 
