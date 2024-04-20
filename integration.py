@@ -10,14 +10,16 @@ from typing import Callable, Dict, List, Literal, Optional, Tuple, Union
 
 import numpy as np
 
+import linalg
 from expr import (ArcCos, ArcSin, ArcTan, Const, Cos, Cot, Csc, Expr, Log,
                   Power, Prod, Sec, Sin, SingleFunc, Sum, Symbol, Tan,
                   TrigFunction, cast, contains_cls, count, deconstruct_power,
                   e, nesting, sqrt, symbols)
+from polynomial import (Polynomial, polynomial_to_expr, rid_ending_zeros,
+                        to_const_polynomial, to_polynomial)
 
 ExprFn = Callable[[Expr], Expr]
 Number = Union[Fraction, int]
-Polynomial = np.ndarray  # has to be 1-D array
 
 
 @dataclass
@@ -792,8 +794,8 @@ class PartialFractions(Transform):
         
         # and that both numerator and denominator are polynomials
         try:
-            numerator_list = to_polynomial(num, node.var)
-            denominator_list = to_polynomial(denom, node.var)
+            numerator_list = to_const_polynomial(num, node.var)
+            denominator_list = to_const_polynomial(denom, node.var)
         except AssertionError:
             return False
         
@@ -816,15 +818,19 @@ class PartialFractions(Transform):
             return False
         
         d1, d2 = denom.terms
-        d1_list = to_polynomial(d1, node.var)
-        d2_list = to_polynomial(d2, node.var)
 
-        matrix = np.array([d1_list, d2_list]).T
-        inv = np.linalg.inv(matrix)
+        # Make sure that it's not the case that one of the denominator factors is just a constant.
+        if not (d1.contains(node.var) and d2.contains(node.var)):
+            return False
+
+        d1_list = to_const_polynomial(d1, node.var)
+        d2_list = to_const_polynomial(d2, node.var)
+
+        matrix = np.array([d2_list, d1_list]).T
+        inv = linalg.invert(matrix)
         if inv is None:
             return False
         ans = inv @ numerator_list
-        breakpoint()
         self._new_integrand = ans[0] / d1 + ans[1] / d2
         return True
     
@@ -1036,6 +1042,7 @@ class Integration:
                 curr_node = answer
 
         if root.is_failed:
+            breakpoint()
             warnings.warn(f"Failed to integrate {integrand} wrt {var}")
             return None
 
@@ -1096,68 +1103,6 @@ def _print_success_tree(root: Node) -> None:
         print("")
 
 
-def to_polynomial(expr: Expr, var: Symbol) -> Polynomial:
-    # TODO: this needs to be rewritten to reuse logic between sum terms and the rest. maybe.
-    if isinstance(expr, Sum):
-        xyz = np.zeros(10)
-        for term in expr.terms:
-            if isinstance(term, Prod):
-                assert len(term.terms) == 2
-                const, power = term.terms
-                assert isinstance(const, Const)
-                if isinstance(power, Symbol):
-                    xyz[1] = int(const.value)
-                    continue
-                assert isinstance(power, Power)
-                assert power.base == var
-                xyz[int(power.exponent.value)] = int(const.value)
-            elif isinstance(term, Power):
-                assert term.base == var
-                xyz[int(term.exponent.value)] = 1
-            elif isinstance(term, Symbol):
-                assert term == var
-                xyz[1] = 1
-            elif isinstance(term, Const):
-                xyz[0] = int(term.value)
-            else:
-                raise NotImplementedError(f"weird term: {term}")
-        return rid_ending_zeros(xyz)
-
-    if isinstance(expr, Prod):
-        # has to be product of 2 terms: a constant and a power.
-        assert len(term.terms) == 2
-        const, power = expr.terms
-        assert isinstance(const, Const)
-        if isinstance(power, Symbol):
-            return np.array([0, int(const.value)])
-        assert isinstance(power, Power)
-        assert power.base == var
-        xyz = np.zeros(int(power.exponent.value) + 1)
-        xyz[-1] = const.value
-        return xyz
-    if isinstance(expr, Power):
-        assert expr.base == var
-        xyz = np.zeros(int(expr.exponent.value) + 1)
-        xyz[-1] = 1
-        return xyz
-    if isinstance(expr, Symbol):
-        assert expr == var
-        return np.array([0, 1])
-    if isinstance(expr, Const):
-        return np.array([expr.value])
-
-    raise NotImplementedError(f"weird expr: {expr}")
-
-
-def polynomial_to_expr(poly: Polynomial, var: Symbol) -> Expr:
-    final = Const(0)
-    for i, element in enumerate(poly):
-        final += element * var**i
-    return final.simplify()
-
-
-def rid_ending_zeros(arr: Polynomial) -> Polynomial:
-    return np.trim_zeros(arr, "b")
 
 
 def random_id(length):
