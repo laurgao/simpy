@@ -36,3 +36,11 @@ def test_arcsin():
     ans = Integration.integrate(ArcSin(x), x)
     expected_ans = x * ArcSin(x) + sqrt(1 - x**2)
     sassert_repr(ans, expected_ans)
+
+    ans = Integration.integrate(ArcCos(x), x)
+    expected_ans = x * ArcCos(x) - sqrt(1 - x**2)
+    sassert_repr(ans, expected_ans)
+
+    ans = Integration.integrate(ArcTan(x), x)
+    expected_ans = x * ArcTan(x) - Log(1 + x**2) / 2
+    sassert_repr(ans, expected_ans)

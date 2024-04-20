@@ -32,8 +32,8 @@ def _cast(x):
 
 
 def cast(func):
-    def wrapper(*args) -> "Expr":
-        return func(*[_cast(a) for a in args])
+    def wrapper(*args, **kwargs) -> "Expr":
+        return func(*[_cast(a) for a in args], **kwargs)
 
     return wrapper
 
@@ -876,6 +876,13 @@ class Log(SingleFunc):
         inner = self.inner.simplify()
         if inner == 1:
             return Const(0)
+        
+        # IDK if this should be in simplify or if it should be like expand, in a diff function
+        # like you can move stuff together or move stuff apart
+        if isinstance(inner, Power):
+            return (Log(inner.base) * inner.exponent).simplify()
+        if isinstance(inner, Prod):
+            return Sum([Log(t) for t in inner.terms]).simplify()
 
         return Log(inner)
 
