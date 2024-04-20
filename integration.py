@@ -425,7 +425,7 @@ class RewriteTrig(Transform):
     def check(self, node: Node) -> bool:
         # make sure that this node didn't get here by this transform
         t = _get_last_heuristic_transform(node)
-        if isinstance(node.transform, RewriteTrig):
+        if isinstance(t, RewriteTrig):
             return False
 
         expr = node.expr
