@@ -1035,6 +1035,9 @@ class Sin(TrigFunction):
         pi_coeff = (new.inner / pi).simplify()
         if isinstance(pi_coeff, Const) and str(pi_coeff.value) in self._SPECIAL_KEYS:
             return self._special_values[str(pi_coeff.value)]
+        # temp fix bc we dont have modulus:
+        if isinstance(pi_coeff, Const) and pi_coeff.value.denominator == 1:
+            return Const(0)
 
         return new
 
