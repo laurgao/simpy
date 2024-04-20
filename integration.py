@@ -10,34 +10,10 @@ from typing import Callable, Dict, List, Literal, Optional, Tuple, Union
 
 import numpy as np
 
-from expr import (
-    ArcCos,
-    ArcSin,
-    ArcTan,
-    Const,
-    Cos,
-    Cot,
-    Csc,
-    Expr,
-    Log,
-    Power,
-    Prod,
-    Sec,
-    Sin,
-    SingleFunc,
-    Sum,
-    Symbol,
-    Tan,
-    TrigFunction,
-    cast,
-    contains_cls,
-    count,
-    deconstruct_power,
-    e,
-    nesting,
-    sqrt,
-    symbols,
-)
+from expr import (ArcCos, ArcSin, ArcTan, Const, Cos, Cot, Csc, Expr, Log,
+                  Power, Prod, Sec, Sin, SingleFunc, Sum, Symbol, Tan,
+                  TrigFunction, cast, contains_cls, count, deconstruct_power,
+                  e, nesting, sqrt, symbols)
 
 ExprFn = Callable[[Expr], Expr]
 Number = Union[Fraction, int]
@@ -50,23 +26,50 @@ class Node:
     var: Symbol  # variable that THIS EXPR is integrated by.
     transform: Optional["Transform"] = None  # the transform that led to this node
     parent: Optional["Node"] = None  # None for root node only
-    children: Optional[List["Node"]] = (
+
+    # Children is private so that we aren't allowed to mutate children without going through checks.
+    _children: Optional[List["Node"]] = (
         None  # smtn smtn setting it to [] by default causes errors
     )
     type: Literal["AND", "OR", "UNSET", "SOLUTION", "FAILURE"] = "UNSET"
+    is_filler: bool = False
+    # Filler nodes are ones where their expr is meaningless, just a duplicate of the one above by design.
+    # they exist to carry information other than their expr.
     solution: Optional[Expr] = (
         None  # only for SOLUTION nodes (& their parents when we go backwards)
     )
+    integration_object: "Integration" = None
     # failure = can't proceed forward.
 
     def __post_init__(self):
         self.expr = self.expr.simplify()
-        if self.children is None:
-            self.children = []
+        old_children = self._children
+        self._children = []
+        if old_children is not None:  # Legacy
+            for c in old_children:
+                self.add_child(c)
+        if self.integration_object is None:
+            self.integration_object = self.root.integration_object
 
     def __repr__(self):
         num_children = len(self.children) if self.children else 0
         return f"Node({self.expr.__repr__()}, {self.var}, transform {self.transform.__class__.__name__}, {num_children} children, {self.type})"
+
+    @property
+    def children(self) -> List["Node"]:
+        return self._children
+
+    def add_child(self, child: "Node") -> None:
+        parents = _parents(self)
+        info = lambda p: f"expr={p.expr} var={p.var}"
+        parents_info = [info(p) for p in parents if not p.is_filler]
+        if info(child) in parents_info:
+            return
+        self._children.append(child)
+
+    def add_children(self, children: List["Node"]) -> None:
+        for c in children:
+            self.add_child(c)
 
     @property
     def leaves(self) -> List["Node"]:
@@ -190,7 +193,7 @@ class PullConstant(SafeTransform):
         return False
 
     def forward(self, node: Node):
-        node.children = [Node(self._non_constant_part, node.var, self, node)]
+        node.add_child(Node(self._non_constant_part, node.var, self, node))
 
     def backward(self, node: Node) -> None:
         super().backward(node)
@@ -292,7 +295,7 @@ class PolynomialDivision(SafeTransform):
         )
         quotient_expr = polynomial_to_expr(quotient, var)
         answer = (quotient_expr + remainder).simplify()
-        node.children = [Node(answer, var, self, node)]
+        node.add_child(Node(answer, var, self, node))
 
     def backward(self, node: Node) -> None:
         super().backward(node)
@@ -301,7 +304,7 @@ class PolynomialDivision(SafeTransform):
 
 class Expand(SafeTransform):
     def forward(self, node: Node):
-        node.children = [Node(node.expr.expand(), node.var, self, node)]
+        node.add_child(Node(node.expr.expand(), node.var, self, node))
 
     def check(self, node: Node) -> bool:
         return node.expr.expandable()
@@ -314,7 +317,7 @@ class Expand(SafeTransform):
 class Additivity(SafeTransform):
     def forward(self, node: Node):
         node.type = "AND"
-        node.children = [Node(e, node.var, self, node) for e in node.expr.terms]
+        node.add_children([Node(e, node.var, self, node) for e in node.expr.terms])
 
     def check(self, node: Node) -> bool:
         return isinstance(node.expr, Sum)
@@ -373,7 +376,7 @@ class TrigUSub2(Transform):
         cls, dy_dx = self._table[self._key]
         new_integrand = replace(expr, cls(node.var), intermediate) * dy_dx(intermediate)
         new_node = Node(new_integrand, intermediate, self, node)
-        node.children.append(new_node)
+        node.add_child(new_node)
 
         self._variable_change = cls(node.var)
 
@@ -441,7 +444,7 @@ class RewriteTrig(Transform):
         for thing in stuff:
             if thing.__repr__() == expr.__repr__():
                 stuff.remove(thing)
-        node.children += [Node(option, node.var, self, node) for option in stuff]
+        node.add_children([Node(option, node.var, self, node) for option in stuff])
         node.type = "OR"
 
     def check(self, node: Node) -> bool:
@@ -473,7 +476,7 @@ class InverseTrigUSub(Transform):
         cls, q, dy_dx, var_change = self._table[self._key]
         dy_dx = dy_dx(intermediate)
         new_thing = (replace(node.expr, node.var, cls(intermediate)) * dy_dx).simplify()
-        node.children.append(Node(new_thing, intermediate, self, node))
+        node.add_child(Node(new_thing, intermediate, self, node))
 
         self._variable_change = var_change(node.var)
 
@@ -543,7 +546,7 @@ class PolynomialUSub(Transform):
         dx_dy = self._variable_change.diff(node.var)
         new_integrand = replace(node.expr, self._variable_change, intermediate) / dx_dy
         new_integrand = new_integrand.simplify()
-        node.children.append(Node(new_integrand, intermediate, self, node))
+        node.add_child(Node(new_integrand, intermediate, self, node))
 
     def backward(self, node: Node) -> None:
         super().backward(node)
@@ -591,7 +594,7 @@ class LinearUSub(Transform):
         du_dx = self._variable_change.diff(node.var)
         new_integrand = replace(node.expr, self._variable_change, intermediate) / du_dx
         new_integrand = new_integrand.simplify()
-        node.children.append(Node(new_integrand, intermediate, self, node))
+        node.add_child(Node(new_integrand, intermediate, self, node))
 
     def backward(self, node: Node) -> None:
         super().backward(node)
@@ -632,7 +635,7 @@ class CompoundAngle(Transform):
 
         new_integrand = _replace_factory(condition, _perform)(node.expr)
 
-        node.children.append(Node(new_integrand, node.var, self, node))
+        node.add_child(Node(new_integrand, node.var, self, node))
 
     def backward(self, node: Node) -> None:
         super().backward(node)
@@ -702,7 +705,7 @@ class SinUSub(Transform):
             )
             / dy_dx
         )
-        node.children.append(Node(new_integrand, intermediate, self, node))
+        node.add_child(Node(new_integrand, intermediate, self, node))
         self._variable_change = self._sin
 
     def backward(self, node: Node) -> None:
@@ -710,6 +713,14 @@ class SinUSub(Transform):
         node.parent.solution = replace(
             node.solution, node.var, self._variable_change
         ).simplify()
+
+
+# I want to get all the byparts transforms of the parental lineage
+def _parents(node: Node) -> List[Node]:
+    """Returns the node and all its parents as we ascend the tree"""
+    if node.parent is None:
+        return [node]
+    return [node] + _parents(node.parent)
 
 
 class ProductToSum(Transform):
@@ -745,7 +756,7 @@ class ProductToSum(Transform):
             temp = Cos(a.inner - b.inner) - Cos(a.inner + b.inner)
 
         new_integrand = temp / 2
-        node.children.append(Node(new_integrand, node.var, self, node))
+        node.add_child(Node(new_integrand, node.var, self, node))
 
     def backward(self, node: Node) -> None:
         super().backward(node)
@@ -761,21 +772,20 @@ class ByParts(Transform):
         self._stuff = []
 
     def check(self, node: Node) -> bool:
+        integration_object = node.integration_object
+        if integration_object._byparts_nest >= 3:
+            return False
+
         if not isinstance(node.expr, Prod):
             return False
         if not len(node.expr.terms) == 2:
             return False
 
-        # I want to get all the byparts transforms of the parental lineage
-        def _parents(node: Node) -> List[Node]:
-            """Returns the node and all its parents as we ascend the tree"""
-            if node.parent is None:
-                return [node]
-            return [node] + _parents(node.parent)
-
         parents = _parents(node)
         byparts_trs = [p.transform for p in parents if isinstance(p.transform, ByParts)]
-        if len(byparts_trs) >= 50:
+        if (
+            len(byparts_trs) >= 10
+        ):  # fuckit lol im not gonna integrate anything complicated
             return False
         intermediary = [tr._stuff[0] for tr in byparts_trs]
         integrands = [(du * v).simplify() for (u, du, v, dv) in intermediary]
@@ -800,11 +810,6 @@ class ByParts(Transform):
                 power = _find_highest_power(expr1) - _find_highest_power(expr2)
                 return power
 
-            # If the last 10 integrations by parts are all the same ??? return False
-            # I still dont understand why ln(x+6) gets stuck at 11 but oh well
-            if all(intermediary[i] == intermediary[i + 1] for i in range(NUM - 1)):
-                return False
-
             # If the last 10 are in ascending order of complexity, return False
             if all(
                 _compare_complexity(integrands[i], integrands[i + 1]) > 0
@@ -818,6 +823,10 @@ class ByParts(Transform):
             v = _check_if_solveable(dv, node.var)
             if v is None:
                 return False
+
+            integration_object._byparts_nest += 1
+            # v = integration_object._integrate(dv, node.var)
+            integration_object._byparts_nest -= 1
 
             # Should I add some more checks?
             # One thing that happens is that the magnitude of the power keeps getting bigger.
@@ -837,19 +846,21 @@ class ByParts(Transform):
             integrand2 = du * v * -1
             tr = ByParts()
             tr._stuff = [(u, du, v, dv)]
-            funky_node = Node(node.expr, node.var, tr, node, type="AND")
-            funky_node.children = [
-                Node(
-                    node.expr,
-                    node.var,
-                    Additivity(),
-                    funky_node,
-                    type="SOLUTION",
-                    solution=child1,
-                ),
-                Node(integrand2, node.var, Additivity(), funky_node),
-            ]
-            node.children.append(funky_node)
+            funky_node = Node(node.expr, node.var, tr, node, type="AND", is_filler=True)
+            funky_node.add_children(
+                [
+                    Node(
+                        node.expr,
+                        node.var,
+                        Additivity(),
+                        funky_node,
+                        type="SOLUTION",
+                        solution=child1,
+                    ),
+                    Node(integrand2, node.var, Additivity(), funky_node),
+                ]
+            )
+            node.add_child(funky_node)
 
     def backward(self, node: Node) -> None:
         super().backward(node)
@@ -892,7 +903,7 @@ def _find_largest_factory(condition: Callable[[Expr], bool], perform: ExprFn) ->
     return _search
 
 
-# Leave RewriteTrig, InverseTrigUSub near the end bc they are deprioritized
+# Leave RewriteTrig, InverseTrigUSub, ByParts near the end bc they are deprioritized
 # and more fucky
 HEURISTICS = [
     PolynomialUSub,
@@ -901,9 +912,9 @@ HEURISTICS = [
     SinUSub,
     ProductToSum,
     TrigUSub2,
-    ByParts,
     RewriteTrig,
     InverseTrigUSub,
+    ByParts,
 ]
 SAFE_TRANSFORMS = [Additivity, PullConstant, Expand, PolynomialDivision]
 
@@ -1029,11 +1040,17 @@ class Integration:
     Keeps track of integration work as we go
     """
 
+    _byparts_nest = None
+
+    def __init__(self, byparts_nest) -> None:
+        self._byparts_nest = byparts_nest
+
     def _integrate_bounds(
         expr: Expr, bounds: Tuple[Symbol, Const, Const], verbose: bool
     ) -> Expr:
         x, a, b = bounds
-        integral = Integration._integrate(expr, bounds[0], verbose)
+        obj = Integration(0)
+        integral = obj._integrate(expr, bounds[0], verbose)
         return (integral.evalf({x.name: b}) - integral.evalf({x.name: a})).simplify()
 
     @cast
@@ -1046,13 +1063,11 @@ class Integration:
         if type(bounds) == tuple:
             return Integration._integrate_bounds(expr, bounds, verbose)
         else:
-            return Integration._integrate(expr, bounds, verbose)
+            obj = Integration(0)
+            return obj._integrate(expr, bounds, verbose)
 
-    @staticmethod
-    def _integrate(
-        integrand: Expr, var: Symbol, verbose: bool = False, warn_failure=True
-    ) -> Expr:
-        root = Node(integrand, var)
+    def _integrate(self, integrand: Expr, var: Symbol, verbose: bool = False) -> Expr:
+        root = Node(integrand, var, integration_object=self)
         curr_node = root
         while True:
             answer = _cycle(curr_node)
@@ -1067,7 +1082,7 @@ class Integration:
                 curr_node = answer
 
         if root.is_failed:
-            if warn_failure:
+            if self._byparts_nest == 0:
                 warnings.warn(f"Failed to integrate {integrand} wrt {var}")
             return None
 
@@ -1117,20 +1132,30 @@ def _integrate_heuristically(node: Node):
         node.type = "OR"
 
 
+def _print_tree(root: Node) -> None:
+    print(f"[{root.distance_from_root}] {root.expr}")
+    if not root.children:
+        print(root.type)
+        print("")
+        return
+    for child in root.children:
+        _print_tree(child)
+
+
 def _print_success_tree(root: Node) -> None:
     if not root.is_solved:
         return
     print(f"[{root.distance_from_root}] {root.expr}")
     if not root.children:
+        print("")
         return
     for child in root.children:
         _print_success_tree(child)
-        print("")
 
 
 def to_polynomial(expr: Expr, var: Symbol) -> Polynomial:
     if isinstance(expr, Sum):
-        xyz = np.zeros(10)
+        xyz = np.zeros(11)
         for term in expr.terms:
             if isinstance(term, Prod):
                 const, power = term.terms
