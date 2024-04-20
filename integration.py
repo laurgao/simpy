@@ -1109,10 +1109,20 @@ def _integrate_heuristically(node: Node):
         node.type = "OR"
 
 
+def _print_tree(root: Node) -> None:
+    print(f"[{root.distance_from_root}] {root.expr} ({root.transform.__class__.__name__})")
+    if not root.children:
+        print(root.type)
+        print("")
+        return
+    for child in root.children:
+        _print_tree(child)
+
+
 def _print_success_tree(root: Node) -> None:
     if not root.is_solved:
         return
-    print(f"[{root.distance_from_root}] {root.expr}")
+    print(f"[{root.distance_from_root}] {root.expr} ({root.transform.__class__.__name__})")
     if not root.children:
         print("")
         return
