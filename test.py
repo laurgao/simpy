@@ -2,6 +2,7 @@ from fractions import Fraction
 
 from expr import pi, symbols
 from integration import *
+from khan_academy import test_ex, test_xcosx
 from test_transforms import test_lecture_example, test_x2_sqrt_1_x3
 
 
@@ -200,6 +201,7 @@ if __name__ == "__main__":
     assert (2 * (2 + x)).__repr__() == "2*(2 + x)"
     assert (2 / (2 + x)).__repr__() == "2/(2 + x)"
     assert repr(2 * (2 + x) ** (-2)) == repr(2 / (2 + x) ** 2) == "2/(2 + x)^2"
+    assert repr(1 / sqrt(1 - x**2)) == "1/sqrt(1 - x^2)"
     # make sure denominator is bracketed
     assert repr(Sin(x) / (2 * x)) == "sin(x)/(2*x)"
     # make sure products with negative consts and dividing by consts are treated better
@@ -222,13 +224,18 @@ if __name__ == "__main__":
 
     # ln integral
     assert (x * Log(x) - x).diff(x).simplify() == Log(x)
+    ans = Integration._integrate(Log(x), x)
+    sassert_repr(ans, x * Log(x) - x)
 
     # run entire integrals
-    # test_lecture_example()  # recursion overflow bc of integration by parts
+    test_lecture_example() 
     test_x2_sqrt_1_x3()
-    test_sin2x()
-    # test_cos2x()  # recursion overflow
-    # test_compound_angle()  # recursion overflow
+    test_compound_angle()
+    test_ex()
+    test_xcosx()
+
+    # test_sin2x()
+    # test_cos2x() 
 
     # Factor test
     test_factor()
