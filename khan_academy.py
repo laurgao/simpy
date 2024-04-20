@@ -25,3 +25,8 @@ def test_xcosx():
     ans = Integration.integrate(integrand, (x, 3 * pi / 2, pi))
     sassert_repr(ans, 3 * pi / 2 - 1)
 
+def test_partial_fractions():
+    integrand = (x + 8) / (x * (x + 6))
+    ans = Integration.integrate(integrand, x)
+    expected_ans = Fraction(4, 3) * Log(x) - Fraction(1, 3) * Log(x + 6)
+    sassert_repr(ans, expected_ans)

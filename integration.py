@@ -1074,8 +1074,9 @@ def _integrate_safely(node: Node):
         tr = transform()
         if tr.check(node):
             tr.forward(node)
-            for child in node.children:
-                _integrate_safely(child)
+            break
+    for child in node.children:
+        _integrate_safely(child)
 
 
 def _integrate_heuristically(node: Node):
@@ -1097,12 +1098,10 @@ def _print_success_tree(root: Node) -> None:
         return
     print(f"[{root.distance_from_root}] {root.expr}")
     if not root.children:
+        print("")
         return
     for child in root.children:
         _print_success_tree(child)
-        print("")
-
-
 
 
 def random_id(length):
