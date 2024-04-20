@@ -14,6 +14,35 @@ from functools import cmp_to_key, reduce
 from typing import Callable, Dict, List, Literal, Optional, Tuple, Union
 
 
+def nesting(expr: "Expr", var: Optional["Symbol"] = None) -> int:
+    """
+    Compute the nesting amount (complexity) of an expression
+    If var is provided, only count the nesting of the subexpression containing var
+
+    >>> nesting(x**2, x)
+    2
+    >>> nesting(x * y**2, x)
+    2
+    >>> nesting(x * (1 / y**2 * 3), x)
+    2
+    """
+
+    if var is not None and not expr.contains(var):
+        return 0
+
+    # special case
+    if isinstance(expr, Prod) and expr.terms[0] == Const(-1) and len(expr.terms) == 2:
+        return nesting(expr.terms[1], var)
+
+    if isinstance(expr, Symbol) and (var is None or expr.name == var.name):
+        return 1
+    elif len(expr.children()) == 0:
+        return 0
+    else:
+        return 1 + max(nesting(sub_expr, var) for sub_expr in expr.children())
+
+
+
 def _cast(x):
     if type(x) == int or isinstance(x, Fraction):
         return Const(x)
@@ -928,6 +957,8 @@ class TrigFunction(SingleFunc):
     function: Literal["sin", "cos", "tan", "sec", "csc", "cot"]
     is_inverse: bool = False
 
+    _SPECIAL_KEYS = ["0", "1/4", "1/3", "1/2", "2/3", "3/4", "1", "5/4", "4/3", "3/2", "5/3", "7/4"]
+
     # have to have __init__ here bc if i use @dataclass on TrigFunction
     # repr no longer inherits from SingleFunc
     def __init__(self, inner, function, is_inverse=False):
@@ -969,7 +1000,23 @@ class TrigFunction(SingleFunc):
         return self.__class__(inner)
 
 
+
 class Sin(TrigFunction):
+    _special_values = {
+        "0": Const(0),
+        "1/4": 1/sqrt(2),
+        "1/3": sqrt(3)/2,
+        "1/2": Const(1),
+        "2/3": 1/sqrt(2),
+        "3/4": sqrt(3)/2,
+        "1": Const(0),
+        "5/4": -1/sqrt(2),
+        "4/3": -sqrt(3)/2,
+        "3/2": -Const(1),
+        "5/3": -1/sqrt(2),
+        "7/4": -sqrt(3)/2,
+    }
+
     def __init__(self, inner):
         super().__init__(inner, function="sin")
 
@@ -986,17 +1033,27 @@ class Sin(TrigFunction):
             return Const(0)
 
         pi_coeff = (new.inner / pi).simplify()
-        if isinstance(pi_coeff, Const) and pi_coeff.value.denominator == 1:
-            return Const(0)
-        if pi_coeff == Fraction(1, 2):
-            return Const(1)
-        if pi_coeff == Fraction(3, 2):
-            return Const(-1)
+        if isinstance(pi_coeff, Const) and str(pi_coeff.value) in self._SPECIAL_KEYS:
+            return self._special_values[str(pi_coeff.value)]
 
         return new
 
 
 class Cos(TrigFunction):
+    _special_values = {
+        "0": Const(1),
+        "1/4": 1/sqrt(2),
+        "1/3": Fraction(1,2),
+        "1/2": Const(0),
+        "2/3": -Fraction(1, 2),
+        "3/4": -1/sqrt(2),
+        "1": Const(-1),
+        "5/4": -1/sqrt(2),
+        "4/3": -Fraction(1,2),
+        "3/2": -Const(0),
+        "5/3": Fraction(1,2),
+        "7/4": 1/sqrt(2),
+    }
     def __init__(self, inner):
         super().__init__(inner, function="cos")
 
@@ -1019,10 +1076,8 @@ class Cos(TrigFunction):
         if "pi" in new.inner.__repr__():
             pi_coeff = (new.inner / pi).simplify()  # % 2
             # implement modulus at some point
-            if pi_coeff == 1:
-                return Const(-1)
-            if pi_coeff == Fraction(1, 2) or pi_coeff == Fraction(3, 2):
-                return Const(0)
+            if isinstance(pi_coeff, Const) and str(pi_coeff.value) in self._SPECIAL_KEYS:
+                return self._special_values[str(pi_coeff.value)]
 
         return new
 
@@ -1033,6 +1088,25 @@ class Tan(TrigFunction):
 
     def diff(self, var) -> Expr:
         return Sec(self.inner) ** 2 * self.inner.diff(var)
+    
+    def simplify(self) -> "Expr":
+        new = super().simplify()
+
+        if not isinstance(new, Tan):
+            return new
+
+        if new.inner == Const(0):
+            return Const(0)
+        
+        # tan(n*pi) = 0 for all n in Z
+        if "pi" in new.inner.__repr__():
+            pi_coeff = (new.inner / pi).simplify()
+            if isinstance(pi_coeff, Const) and str(pi_coeff.value) in self._SPECIAL_KEYS:
+                return (Sin(new.inner) / Cos(new.inner)).simplify()
+            
+            # tan(pi/2) is undefined. inf or undefined data structure? generic divbyzero handling.
+
+        return new
 
 
 class Csc(TrigFunction):
@@ -1050,6 +1124,17 @@ class Sec(TrigFunction):
     def diff(self, var) -> Expr:
         # TODO: handle when self.inner doesnt contain var
         return Sec(self.inner) * Tan(self.inner) * self.inner.diff(var)
+    
+    def simplify(self) -> "Expr":
+        new = super().simplify()
+        if not isinstance(new, Sec):
+            return new
+        
+        pi_coeff = (new.inner / pi).simplify()
+        if isinstance(pi_coeff, Const) and str(pi_coeff.value) in self._SPECIAL_KEYS:
+            return (1 / Cos(new.inner)).simplify()
+
+        return new
 
 
 class Cot(TrigFunction):
@@ -1095,34 +1180,6 @@ def diff(expr: Expr, var: Symbol) -> Expr:
         return expr.diff(var)
     else:
         raise NotImplementedError(f"Differentiation of {expr} not implemented")
-
-
-def nesting(expr: Expr, var: Optional[Symbol] = None) -> int:
-    """
-    Compute the nesting amount (complexity) of an expression
-    If var is provided, only count the nesting of the subexpression containing var
-
-    >>> nesting(x**2, x)
-    2
-    >>> nesting(x * y**2, x)
-    2
-    >>> nesting(x * (1 / y**2 * 3), x)
-    2
-    """
-
-    if var is not None and not expr.contains(var):
-        return 0
-
-    # special case
-    if isinstance(expr, Prod) and expr.terms[0] == Const(-1) and len(expr.terms) == 2:
-        return nesting(expr.terms[1], var)
-
-    if isinstance(expr, Symbol) and (var is None or expr.name == var.name):
-        return 1
-    elif len(expr.children()) == 0:
-        return 0
-    else:
-        return 1 + max(nesting(sub_expr, var) for sub_expr in expr.children())
 
 
 def contains_cls(expr: Expr, cls) -> bool:
