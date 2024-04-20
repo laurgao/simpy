@@ -816,7 +816,7 @@ class ByParts(Transform):
         # Now fr it's the actual integration by parts logic
         def _check(u: Expr, dv: Expr) -> bool:
             du = u.diff(node.var)
-            v = Integration._integrate(dv, node.var, warn_failure=False)
+            v = _check_if_solveable(dv, node.var)
             if v is None:
                 return False
 
@@ -917,32 +917,29 @@ TRIGFUNCTION_INTEGRALS = {
     "cot": lambda x: Log(Sin(x)),
 }
 
-
-def _check_if_solvable(node: Node):
-    expr = node.expr
-    var = node.var
-    answer = None
-
-    if not expr.contains(var):
-        # PullConstant only acts on Prods
-        answer = expr * var
-    elif isinstance(expr, Power):
-        if expr.base == var and isinstance(expr.exponent, Const):
-            n = expr.exponent
-            answer = (1 / (n + 1)) * Power(var, n + 1) if n != -1 else Log(expr.base)
-        elif (
-            expr.base == e
-            and not (expr.exponent / var).simplify().contains(var)
-            and not expr.base.contains(var)
+def _check_if_solveable(integrand: Expr, var: Symbol) -> Optional[Expr]:
+    if not integrand.contains(var):
+        return integrand * var
+    if isinstance(integrand, Power):
+        if integrand.base == var and isinstance(integrand.exponent, Const):
+            n = integrand.exponent
+            return (1 / (n + 1)) * Power(var, n + 1) if n != -1 else Log(integrand.base)
+        if (
+            integrand.base == e
+            and not (integrand.exponent / var).simplify().contains(var)
+            and not integrand.base.contains(var)
         ):
-            answer = (var / expr.exponent) * expr
-    elif isinstance(expr, Symbol) and expr == var:
-        answer = Fraction(1 / 2) * Power(var, 2)
-    elif isinstance(expr, TrigFunction) and not expr.is_inverse and expr.inner == var:
-        answer = TRIGFUNCTION_INTEGRALS[expr.function](expr.inner)
-    elif isinstance(expr, Log) and expr.inner == var:
-        answer = var * Log(var) - var
+            return (var / integrand.exponent) * integrand
+    if isinstance(integrand, Symbol) and integrand == var:
+        return Fraction(1 / 2) * Power(var, 2)
+    if isinstance(integrand, TrigFunction) and not integrand.is_inverse and integrand.inner == var:
+        return TRIGFUNCTION_INTEGRALS[integrand.function](integrand.inner)
+    if isinstance(integrand, Log) and integrand.inner == var:
+        return var * Log(var) - var
+    return None
 
+def _check_if_node_solvable(node: Node):
+    answer = _check_if_solveable(node.expr, node.var)
     if answer is None:
         return
 
@@ -957,7 +954,7 @@ def _cycle(node: Node) -> Optional[Union[Node, Literal["SOLVED"]]]:
     # now we have a tree with all the safe transforms applied
     # 2. LOOK IN TABLE
     for leaf in node.unfinished_leaves:
-        _check_if_solvable(leaf)
+        _check_if_node_solvable(leaf)
 
     if len(node.unfinished_leaves) == 0:
         return "SOLVED"
