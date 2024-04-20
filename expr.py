@@ -1,5 +1,9 @@
-# TODO: tasks for the future:
-# - method to convert from our expression to sympy for testing
+"""RULES OF EXPRs:
+
+1. Exprs shall NOT be mutated in place after __post_init__.
+For example, if I put a Const into a numpy array, I don't want to have to copy it. i can trust that its value stays the same forever.
+
+"""
 
 import itertools
 import re
@@ -466,8 +470,8 @@ class Sum(Associative, Expr):
         # assume self is simplified please
         # If there is a factor that is common to all terms, factor it out.
         # If there is a factor that is common to some terms, let's just ignore it.
-
-        new = self
+        # TODO: doesn't factor ex. quadratics into 2 binomials. implement some form of multi-term polynomial factoring at some point
+        # (needed for partial fractions)
 
         def _df(term: Expr) -> List[Tuple[Expr, int, bool]]:
             """Deconstruct a term into its factors.
@@ -475,14 +479,14 @@ class Sum(Associative, Expr):
             Returns: List[(factor, abs(exponent), sign(exponent))]
             """
             if isinstance(term, Prod):
-                return [_df(f) for f in term.terms]
+                return [_df(f)[0] for f in term.terms]
             if isinstance(term, Power) and isinstance(
                 term.exponent, Const
             ):  # can't be prod bc it's simplified
-                return [term.base, term.exponent.abs(), term.exponent.value > 0]
-            return [term, Const(1), True]
+                return [[term.base, term.exponent.abs(), term.exponent.value > 0]]
+            return [[term, Const(1), True]]
 
-        factors_per_term = [_df(term) for term in new.terms]
+        factors_per_term = [_df(term) for term in self.terms]
         common_factors = factors_per_term[0]
 
         for this_terms_factors in factors_per_term[1:]:
@@ -516,7 +520,7 @@ class Sum(Associative, Expr):
 
         # factor out the common factors
         new_terms = []
-        for term in new.terms:
+        for term in self.terms:
             new_terms.append(term / common_expr)
 
         return (common_expr * Sum(new_terms)).simplify()

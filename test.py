@@ -16,6 +16,19 @@ def sassert_repr(a, b):
     assert repr(xs) == repr(ys), f"{xs} != {ys} (original {a} != {b})"
 
 
+def test_to_polynomial():
+    x = symbols("x")
+    expr = 6 * x + x **2 
+    assert np.array_equal(to_polynomial(expr, x), np.array([0, 6, 1]))
+
+
+def test_factor():
+    x = symbols("x")
+    expr = 6 * x + x **2 
+    expected = x * (x + 6)
+    assert expr.factor() == expected
+
+
 def test_polynomial_division():
     expr = x**4 * (1 + x**2) ** -1
 
@@ -221,6 +234,9 @@ if __name__ == "__main__":
 
     # PolynomialDivision test
     test_polynomial_division()
+
+    test_to_polynomial()
+    test_factor()
 
     # ln integral
     assert (x * Log(x) - x).diff(x).simplify() == Log(x)

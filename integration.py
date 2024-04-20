@@ -780,6 +780,62 @@ class ByParts(Transform):
         node.parent.solution = node.solution
 
 
+class PartialFractions(Transform):
+    _new_integrand: Expr = None
+    def check(self, node: Node) -> bool:
+        # First, make sure that this is a fraction
+        if not isinstance(node.expr, Prod):
+            return False
+        num, denom = node.expr.numerator_denominator
+        if denom == Const(1):
+            return False
+        
+        # and that both numerator and denominator are polynomials
+        try:
+            numerator_list = to_polynomial(num, node.var)
+            denominator_list = to_polynomial(denom, node.var)
+        except AssertionError:
+            return False
+        
+        # numerator has to be a smaller order than the denom
+        if len(numerator_list) > len(denominator_list):
+            return False
+        
+        # The denominator has to be a product
+        if not isinstance(denom, (Prod, Sum)):
+            return False
+        if isinstance(denom, Sum):
+            new = denom.factor()
+            if not isinstance(new, Prod):
+                return False
+            denom = new
+
+        # ok im stupid so im gonna only do the case for 2 factors for now
+        # shouldnt be hard to generalize
+        if len(denom.terms) != 2:
+            return False
+        
+        d1, d2 = denom.terms
+        d1_list = to_polynomial(d1, node.var)
+        d2_list = to_polynomial(d2, node.var)
+
+        matrix = np.array([d1_list, d2_list]).T
+        inv = np.linalg.inv(matrix)
+        if inv is None:
+            return False
+        ans = inv @ numerator_list
+        breakpoint()
+        self._new_integrand = ans[0] / d1 + ans[1] / d2
+        return True
+    
+    def forward(self, node: Node) -> None:
+        node.children.append(Node(self._new_integrand, node.var, self, node))
+    
+    def backward(self, node: Node) -> None:
+        super().backward(node)
+        node.parent.solution = node.solution
+
+
 def _replace_factory(condition: Callable[[Expr], bool], perform: ExprFn) -> ExprFn:
     def _replace(expr: Expr) -> Expr:
         if condition(expr):
@@ -817,7 +873,7 @@ HEURISTICS = [
     RewriteTrig,
     InverseTrigUSub,
 ]
-SAFE_TRANSFORMS = [Additivity, PullConstant, Expand, PolynomialDivision]
+SAFE_TRANSFORMS = [Additivity, PullConstant, Expand, PolynomialDivision, PartialFractions]
 
 TRIGFUNCTION_INTEGRALS = {
     "sin": lambda x: -Cos(x),
@@ -955,6 +1011,7 @@ class Integration:
         bounds: Union[Symbol, Tuple[Symbol, Const, Const]],
         verbose: bool = False,
     ) -> Expr:
+        """Returns None if the integral cannot be solved."""
         if type(bounds) == tuple:
             return Integration._integrate_bounds(expr, bounds, verbose)
         else:
@@ -1040,14 +1097,17 @@ def _print_success_tree(root: Node) -> None:
 
 
 def to_polynomial(expr: Expr, var: Symbol) -> Polynomial:
+    # TODO: this needs to be rewritten to reuse logic between sum terms and the rest. maybe.
     if isinstance(expr, Sum):
         xyz = np.zeros(10)
         for term in expr.terms:
             if isinstance(term, Prod):
+                assert len(term.terms) == 2
                 const, power = term.terms
                 assert isinstance(const, Const)
                 if isinstance(power, Symbol):
                     xyz[1] = int(const.value)
+                    continue
                 assert isinstance(power, Power)
                 assert power.base == var
                 xyz[int(power.exponent.value)] = int(const.value)
@@ -1065,6 +1125,7 @@ def to_polynomial(expr: Expr, var: Symbol) -> Polynomial:
 
     if isinstance(expr, Prod):
         # has to be product of 2 terms: a constant and a power.
+        assert len(term.terms) == 2
         const, power = expr.terms
         assert isinstance(const, Const)
         if isinstance(power, Symbol):
