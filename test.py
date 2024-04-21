@@ -131,6 +131,12 @@ def test_some_simplification():
     )  # the power dissipated through the load when z_l = conjugate(z_s)
 
 
+def test_product_combine_like_terms():
+    # this wasnt working bc the denominator "power" wasn't flattening in simplification.
+    expr = (2*Sin(x)*Cos(x)**2)/(Sin(x)*Cos(x)**2)
+    expr = expr.simplify()
+    assert expr == 2
+
 if __name__ == "__main__":
     x, y = symbols("x y")
     test_some_simplification()
@@ -146,6 +152,8 @@ if __name__ == "__main__":
     sassert_repr(x**2, x * x)
     sassert_repr(x * 2 - 2 * x, 0)
     sassert_repr(((x + 1) ** 2 - (x + 1) * (x + 1)), 0)
+
+    test_product_combine_like_terms()
 
     # Equality
     assert x == x

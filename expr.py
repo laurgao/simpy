@@ -672,7 +672,8 @@ class Prod(Associative, Expr):
 
     def simplify(self) -> "Expr":
         # simplify subexprs and flatten sub-products
-        simplified_terms = [t.simplify() for t in self.terms]
+        simplified_and_flattened = Prod([t.simplify() for t in self.terms])
+        simplified_terms = simplified_and_flattened.terms
 
         # accumulate all like terms
         terms = []
