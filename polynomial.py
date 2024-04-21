@@ -46,6 +46,7 @@ def _to_const_polynomial(expr: Expr, var: Symbol, answer: List[Const] = None, mu
         
 
 def to_const_polynomial(expr: Expr, var: Symbol) -> Polynomial:
+    expr = expr.expand() if expr.expandable() else expr
     return np.array(_to_const_polynomial(expr, var))
 
 

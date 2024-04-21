@@ -232,7 +232,7 @@ class PolynomialDivision(SafeTransform):
 
 class Expand(SafeTransform):
     def forward(self, node: Node):
-        node.children = [Node(node.expr.expand(), node.var, self, node)]
+        node.children.append(Node(node.expr.expand(), node.var, self, node))
 
     def check(self, node: Node) -> bool:
         return node.expr.expandable()
@@ -814,6 +814,8 @@ class PartialFractions(Transform):
         inv = linalg.invert(matrix)
         if inv is None:
             return False
+        if numerator_list.size == 1:
+            numerator_list = np.array([numerator_list[0], 0])
         ans = inv @ numerator_list
         self._new_integrand = ans[0] / d1 + ans[1] / d2
         return True
@@ -863,7 +865,9 @@ HEURISTICS = [
     RewriteTrig,
     InverseTrigUSub,
 ]
-SAFE_TRANSFORMS = [Additivity, PullConstant, Expand, PolynomialDivision, PartialFractions]
+SAFE_TRANSFORMS = [Additivity, PullConstant, PartialFractions, 
+                   Expand, # expand is not safe bc it destroys partialfractions :o
+                   PolynomialDivision]
 
 STANDARD_TRIG_INTEGRALS = {
     "sin(x)": lambda x: -Cos(x),

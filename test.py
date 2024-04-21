@@ -193,6 +193,9 @@ if __name__ == "__main__":
     test_some_simplification()
 
     # Basic integrals
+    sassert_repr(Integration.integrate(2, (x, 5, 3)), -4)
+    print(Integration.integrate(x ** -7, x))
+    sassert_repr(Integration.integrate(x ** Fraction(7, 3), x), Fraction(3, 10) * x ** Fraction(10,3))
     sassert_repr(Integration.integrate(3 * x**2 - 2 * x, x), x**3 - x**2)
     sassert_repr(Integration.integrate((x + 1) ** 2, x), x + x**2 + (x**3 / 3))
     sassert_repr(Log(x).diff(x), 1 / x)
@@ -272,7 +275,7 @@ if __name__ == "__main__":
     test_compound_angle()
     test_ex()
     test_xcosx()
-    # test_partial_fractions()
+    test_partial_fractions()
     test_arcsin()
     test_linear_usub_with_multiple_subs()
     # test_sec2x_tan2x()
@@ -280,11 +283,9 @@ if __name__ == "__main__":
     test_cos2x()
     more_test()
 
-    # This integral will run integration by parts forever naively
-    # make sure that this is handled and doesn't cause a recursion error
     integrand = Log(x + 6) / x**2
     integral = Integration.integrate(integrand, x)
-    assert integral is None
-
-
+    expected = Log(x) / 6 - Log(x + 6) / x - Log(x+6) / 6
+    sassert_repr(integral, expected)
+    
     print("passed")
