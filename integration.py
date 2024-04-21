@@ -500,7 +500,7 @@ class PolynomialUSub(Transform):
                 and term.base == node.var
                 and not term.exponent.contains(node.var)
             ):
-                n = term.exponent + 1
+                n = (term.exponent + 1).simplify()
                 rest = Prod(node.expr.terms[:i] + node.expr.terms[i + 1 :]).simplify()
                 break
 
@@ -510,6 +510,9 @@ class PolynomialUSub(Transform):
                 break
 
         if n is None:
+            return False
+        if n == 0:
+            # How are you gonna sub u = x^0 = 1, du = 0 dx
             return False
 
         self._variable_change = Power(node.var, n).simplify()  # x^n
@@ -777,7 +780,7 @@ class ByParts(Transform):
     def forward(self, node: Node) -> None:
         # This is tricky bc you have 2 layers of children here.
         for u, du, v, dv in self._stuff:
-            child1 = u * v
+            child1 = (u * v).simplify()
             integrand2 = (du * v * -1).simplify()
 
             tr = ByParts()
