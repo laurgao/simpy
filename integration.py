@@ -457,7 +457,7 @@ class InverseTrigUSub(Transform):
 
     def check(self, node: Node) -> bool:
         t = _get_last_heuristic_transform(node)
-        if isinstance(node.transform, TrigUSub2):
+        if isinstance(t, TrigUSub2):
             # If it just went through B, C is guaranteed to have a match.
             # going through C will just undo B.
             return False
@@ -912,13 +912,11 @@ HEURISTICS = [
 ]
 SAFE_TRANSFORMS = [Additivity, PullConstant, Expand, PolynomialDivision, PartialFractions]
 
-TRIGFUNCTION_INTEGRALS = {
-    "sin": lambda x: -Cos(x),
-    "cos": Sin,
-    "tan": lambda x: -Log(Cos(x)),
-    "csc": lambda x: -Log(Csc(x) - Cot(x)),
-    "sec": lambda x: Log(Sec(x) + Tan(x)),
-    "cot": lambda x: Log(Sin(x)),
+STANDARD_TRIG_INTEGRALS = {
+    "sin(x)": lambda x: -Cos(x),
+    "cos(x)": Sin,
+    "sec(x)^2": Tan, # Integration calculator says this is a standard integral. + it doesn't get solved on simpy if i dont add this.
+    "sec(x)": lambda x: Log(Tan(x) + Sec(x)) # not a standard integral but it's fucked so im leaving it (unless?)
 }
 
 def _check_if_solveable(integrand: Expr, var: Symbol) -> Optional[Expr]:
@@ -936,8 +934,10 @@ def _check_if_solveable(integrand: Expr, var: Symbol) -> Optional[Expr]:
             return (var / integrand.exponent) * integrand
     if isinstance(integrand, Symbol) and integrand == var:
         return Fraction(1 / 2) * Power(var, 2)
-    if isinstance(integrand, TrigFunction) and not integrand.is_inverse and integrand.inner == var:
-        return TRIGFUNCTION_INTEGRALS[integrand.function](integrand.inner)
+    if repr(integrand) in STANDARD_TRIG_INTEGRALS:
+        # jank but i give up on life
+        return STANDARD_TRIG_INTEGRALS[repr(replace(integrand, var, Symbol("x")))](var)
+    
     return None
 
 def _check_if_node_solvable(node: Node):
@@ -1153,7 +1153,7 @@ def random_id(length):
 
 
 def generate_intermediate_var() -> Symbol:
-    return symbols(f"intermediate_{random_id(10)}")
+    return symbols(f"u_{random_id(10)}")
 
 
 def replace(expr: Expr, old: Expr, new: Expr) -> Expr:
