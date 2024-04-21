@@ -363,29 +363,27 @@ class Symbol(Expr):
 
 @dataclass
 class Sum(Associative, Expr):
+    def expand(self) -> Expr:
+        return Sum([t.expand() if t.expandable() else t for t in self.terms])
+
     def simplify(self) -> "Expr":
         # simplify subexprs and flatten sub-sums
         terms = [t.simplify() for t in self.terms]
 
-        # accumulate all constants
-        const = sum(t.value for t in terms if isinstance(t, Const))
-
-        # return immediately if there are no non constant items
-        non_constant_terms = [t for t in terms if not isinstance(t, Const)]
-        if len(non_constant_terms) == 0:
-            return Const(const)
-
         # accumulate all like terms
-        new_terms = [Const(const)] if const != 0 else []
-        for i, term in enumerate(non_constant_terms):
+        new_terms = []
+        for i, term in enumerate(terms):
             if term is None:
+                continue
+            if isinstance(term, Const):
+                new_terms.append(term)
                 continue
 
             new_coeff, non_const_factors1 = _deconstruct_prod(term)
 
             # check if any later terms are the same
-            for j in range(i + 1, len(non_constant_terms)):
-                term2 = non_constant_terms[j]
+            for j in range(i + 1, len(terms)):
+                term2 = terms[j]
                 if term2 is None:
                     continue
 
@@ -393,16 +391,22 @@ class Sum(Associative, Expr):
 
                 if non_const_factors1 == non_const_factors2:
                     new_coeff += coeff2
-                    non_constant_terms[j] = None
+                    terms[j] = None
 
             new_terms.append(Prod([new_coeff] + non_const_factors1).simplify())
 
-        # if Const(1) in new_terms and Prod([-1, Power(TrigFunction(anysymbol, "sin"), 2)]) in new_terms:
-        # get rid of 1-term sums
-        if len(new_terms) == 1:
-            return new_terms[0]
+        # accumulate all constants
+        const = sum(t.value for t in new_terms if isinstance(t, Const))
+        non_constant_terms = [t for t in new_terms if not isinstance(t, Const)]
+        if const == 0 and len(non_constant_terms) == 0:
+            return Const(0)
+        final_terms = ([Const(const)] if const != 0 else []) + non_constant_terms
 
-        new_sum = Sum(new_terms)
+        # get rid of 1-term sums
+        if len(final_terms) == 1:
+            return final_terms[0]
+
+        new_sum = Sum(final_terms)
 
         if contains_cls(new_sum, TrigFunction):
             # I WANT TO DO IT so that it's more robust.
