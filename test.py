@@ -2,8 +2,8 @@ from fractions import Fraction
 
 from expr import pi, symbols
 from integration import *
-from khan_academy import (test_arcsin, test_ex, test_partial_fractions,
-                          test_sec2x_tan2x, test_xcosx)
+from khan_academy import (more_test, test_arcsin, test_ex,
+                          test_partial_fractions, test_sec2x_tan2x, test_xcosx)
 from test_transforms import test_lecture_example, test_x2_sqrt_1_x3
 
 
@@ -24,7 +24,7 @@ def sassert_repr(a: Expr, b: Expr):
 def test_to_polynomial():
     x = symbols("x")
     expr = 6 * x + x **2 
-    assert np.array_equal(to_polynomial(expr, x), np.array([0, 6, 1]))
+    assert np.array_equal(to_const_polynomial(expr, x), np.array([Const(0), Const(6), Const(1)]))
 
 
 def test_factor():
@@ -276,9 +276,9 @@ if __name__ == "__main__":
     test_arcsin()
     test_linear_usub_with_multiple_subs()
     # test_sec2x_tan2x()
-
     test_sin2x()
-    test_cos2x() 
+    test_cos2x()
+    more_test()
 
     # This integral will run integration by parts forever naively
     # make sure that this is handled and doesn't cause a recursion error

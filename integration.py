@@ -16,7 +16,7 @@ from expr import (ArcCos, ArcSin, ArcTan, Const, Cos, Cot, Csc, Expr, Log,
                   TrigFunction, cast, contains_cls, count, deconstruct_power,
                   e, nesting, sqrt, symbols)
 from polynomial import (Polynomial, polynomial_to_expr, rid_ending_zeros,
-                        to_const_polynomial, to_polynomial)
+                        to_const_polynomial)
 
 ExprFn = Callable[[Expr], Expr]
 Number = Union[Fraction, int]
@@ -188,63 +188,15 @@ class PolynomialDivision(SafeTransform):
         if not isinstance(expr, Prod):
             return False
 
-        ## Don't contain any SingleFunc with inner containing var
-        def _contains_singlefunc_w_inner(expr: Expr) -> bool:
-            if isinstance(expr, SingleFunc) and expr.inner.contains(node.var):
-                return True
-
-            return any([_contains_singlefunc_w_inner(e) for e in expr.children()])
-
-        if _contains_singlefunc_w_inner(expr):
-            return False
-
-        ## Make sure each factor is a polynomial
-        for factor in expr.terms:
-
-            def _is_polynomial(expression: Expr):
-                if isinstance(expression, Power):
-                    if not (
-                        isinstance(expression.exponent, Const)
-                        and expression.exponent.value.denominator == 1
-                    ):
-                        return False
-                    return True
-                if isinstance(expression, Const) or isinstance(expression, Symbol):
-                    return True
-
-                if isinstance(expression, Sum):
-                    return all([_is_polynomial(term) for term in expression.terms])
-
-                if isinstance(expression, Prod):
-                    # You'd need this if it's a term in a sum
-                    return isinstance((expression / node.var).simplify(), Const)
-
-                raise NotImplementedError(f"Not implemented: {expression}")
-
-            if not _is_polynomial(factor):
-                return False
-
-        ## Make sure numerator and denominator are good
-        numerator = Const(1)
-        denominator = Const(1)
-        for factor in expr.terms:
-            b, x = deconstruct_power(factor)
-            if x.value > 0:
-                numerator *= factor
-            else:
-                denominator *= Power(b, -x).simplify()
-
-        numerator = numerator.simplify()
-        if denominator == 1:
-            # there is nothing to divide. this is not a division.
-            return False
-        denominator = denominator.simplify()
+        ## Make sure numerator and denominator are both polynomials
+        numerator, denominator = expr.numerator_denominator
         try:
-            numerator_list = to_polynomial(numerator, node.var)
-            denominator_list = to_polynomial(denominator, node.var)
+            numerator_list = to_const_polynomial(numerator, node.var)
+            denominator_list = to_const_polynomial(denominator, node.var)
         except AssertionError:
             return False
 
+        # You can divide if they're same order
         if len(numerator_list) < len(denominator_list):
             return False
 
@@ -254,14 +206,15 @@ class PolynomialDivision(SafeTransform):
 
     def forward(self, node: Node):
         var = node.var
-        quotient = np.zeros(len(self._numerator) - len(self._denominator) + 1)
+        quotient = [Const(0)] * (len(self._numerator) - len(self._denominator) + 1)
+        quotient = np.array(quotient)
 
         while self._numerator.size >= self._denominator.size:
             quotient_degree = len(self._numerator) - len(self._denominator)
-            quotient_coeff = self._numerator[-1] / self._denominator[-1]
+            quotient_coeff = (self._numerator[-1] / self._denominator[-1]).simplify()
             quotient[quotient_degree] = quotient_coeff
             self._numerator -= np.concatenate(
-                ([0] * quotient_degree, self._denominator * quotient_coeff)
+                ([Const(0)] * quotient_degree, self._denominator * quotient_coeff)
             )
             self._numerator = rid_ending_zeros(self._numerator)
 

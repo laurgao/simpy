@@ -49,59 +49,6 @@ def to_const_polynomial(expr: Expr, var: Symbol) -> Polynomial:
     return np.array(_to_const_polynomial(expr, var))
 
 
-def to_polynomial(expr: Expr, var: Symbol) -> Polynomial:
-    # TODO: this needs to be rewritten to reuse logic between sum terms and the rest. maybe.
-    if isinstance(expr, Sum):
-        xyz = np.zeros(10)
-        for term in expr.terms:
-            if isinstance(term, Prod):
-                assert len(term.terms) == 2
-                const, power = term.terms
-                assert isinstance(const, Const)
-                if isinstance(power, Symbol):
-                    xyz[1] = int(const.value)
-                    continue
-                assert isinstance(power, Power)
-                assert power.base == var
-                xyz[int(power.exponent.value)] = int(const.value)
-            elif isinstance(term, Power):
-                assert term.base == var
-                xyz[int(term.exponent.value)] = 1
-            elif isinstance(term, Symbol):
-                assert term == var
-                xyz[1] = 1
-            elif isinstance(term, Const):
-                xyz[0] = int(term.value)
-            else:
-                raise NotImplementedError(f"weird term: {term}")
-        return rid_ending_zeros(xyz)
-
-    if isinstance(expr, Prod):
-        # has to be product of 2 terms: a constant and a power.
-        assert len(expr.terms) == 2
-        const, power = expr.terms
-        assert isinstance(const, Const)
-        if isinstance(power, Symbol):
-            return np.array([0, int(const.value)])
-        assert isinstance(power, Power)
-        assert power.base == var
-        xyz = np.zeros(int(power.exponent.value) + 1)
-        xyz[-1] = const.value
-        return xyz
-    if isinstance(expr, Power):
-        assert expr.base == var
-        xyz = np.zeros(int(expr.exponent.value) + 1)
-        xyz[-1] = 1
-        return xyz
-    if isinstance(expr, Symbol):
-        assert expr == var
-        return np.array([0, 1])
-    if isinstance(expr, Const):
-        return np.array([expr.value])
-
-    raise NotImplementedError(f"weird expr: {expr}")
-
-
 def polynomial_to_expr(poly: Polynomial, var: Symbol) -> Expr:
     final = Const(0)
     for i, element in enumerate(poly):
@@ -110,4 +57,12 @@ def polynomial_to_expr(poly: Polynomial, var: Symbol) -> Expr:
 
 
 def rid_ending_zeros(arr: Polynomial) -> Polynomial:
-    return np.trim_zeros(arr, "b")
+    lis = [el.simplify() for el in arr]
+    num_zeros = 0
+    for i in reversed(range(len(lis))):
+        if lis[i] == 0:
+            num_zeros += 1
+        else:
+            break
+    new_list = lis[:len(lis) - num_zeros]
+    return np.array(new_list)
