@@ -716,47 +716,39 @@ class Prod(Associative, Expr):
 
     @cast
     def expandable(self) -> bool:
-        # a product is expandable if it contains any sums
+        # a product is expandable if it contains any sums in the numerator
+        # OR if it contains sums in the denominator AND the denominator has another term other than the sum
+        # (so, a singular sum in a numerator is expandable but a single sum in the denominator isn't.)
         num, denom = self.numerator_denominator
+        num_expandable = any(isinstance(t, Sum) for t in num.terms) if isinstance(num, Prod) else isinstance(num, Sum)
+        denom_expandable = any(isinstance(t, Sum) for t in denom.terms) if isinstance(denom, Prod) else False
+        has_sub_expandable = any(t.expandable() for t in self.terms)
+        return num_expandable or denom_expandable or has_sub_expandable
 
-        def _check_one(p: Expr) -> bool:
-            """Returns expandable or not for one side of the divisor bar"""
-            if not isinstance(p, Prod):
-                return p.expandable()
-            return any(isinstance(t, Sum) for t in p.terms) or any(
-                t.expandable() for t in p.terms
-            )
-
-        return _check_one(num) or _check_one(denom)
 
     def expand(self):
         # expand sub-expressions
         num, denom = self.numerator_denominator
+        if denom.expandable():
+            denom = denom.expand()
 
-        def _expand_one(p: Expr) -> Expr:
-            if not isinstance(p, Prod):
-                return p.expand()
+        if not isinstance(num, Prod):
+            num = Prod([num])
 
-            subexpanded = [t.expand() if t.expandable() else t for t in p.terms]
+        # now we assume denom is good and we move on with life as usual
+        expanded_terms = [t.expand() if t.expandable() else t for t in num.terms]
+        sums = [t for t in expanded_terms if isinstance(t, Sum)]
+        other = [t for t in expanded_terms if not isinstance(t, Sum)]
+        if not sums:
+            return (Prod(expanded_terms) / denom).simplify()
 
-            # expand sums that are left
-            sums = [t for t in subexpanded if isinstance(t, Sum)]
-            other = [t for t in subexpanded if not isinstance(t, Sum)]
-
-            if not sums:
-                return Prod(subexpanded)
-
-            # for every combination of terms in the sums, multiply them and add
-            # (using itertools)
-            expanded = []
-            for terms in itertools.product(*[s.terms for s in sums]):
-                expanded.append(Prod(other + list(terms)).simplify())
-
-            return Sum(expanded).simplify()
-
-        num = _expand_one(num) if num.expandable() else num
-        denom = _expand_one(denom) if denom.expandable() else denom
-        return (num / denom).simplify()
+        # for every combination of terms in the sums, multiply them and add
+        # (using itertools)
+        final_sum_terms = []
+        for terms in itertools.product(*[s.terms for s in sums]):
+            final_sum_terms.append(Prod(other + list(terms)) / denom)
+        
+        return Sum(final_sum_terms).simplify()
 
     @cast
     def evalf(self, subs: Dict[str, "Const"]):
@@ -913,6 +905,11 @@ class Log(SingleFunc):
             return (Log(inner.base) * inner.exponent).simplify()
         if isinstance(inner, Prod):
             return Sum([Log(t) for t in inner.terms]).simplify()
+        
+        # let's agree on some standards
+        # i dont love this, can change
+        if isinstance(inner, (Sec, Csc, Cot)):
+            return -1 * Log(inner.reciprocal_class(inner.inner)).simplify()
 
         return Log(inner)
 
@@ -957,6 +954,7 @@ class TrigFunction(SingleFunc):
     inner: Expr
     function: Literal["sin", "cos", "tan", "sec", "csc", "cot"]
     is_inverse: bool = False
+    reciprocal_class = None
 
     _SPECIAL_KEYS = ["0", "1/4", "1/3", "1/2", "2/3", "3/4", "1", "5/4", "4/3", "3/2", "5/3", "7/4"]
 
@@ -1114,6 +1112,8 @@ class Tan(TrigFunction):
 
 
 class Csc(TrigFunction):
+    reciprocal_class = Sin
+
     def __init__(self, inner):
         super().__init__(inner, function="csc")
 
@@ -1122,6 +1122,8 @@ class Csc(TrigFunction):
 
 
 class Sec(TrigFunction):
+    reciprocal_class = Cos
+
     def __init__(self, inner):
         super().__init__(inner, function="sec")
 
@@ -1142,6 +1144,8 @@ class Sec(TrigFunction):
 
 
 class Cot(TrigFunction):
+    reciprocal_class = Tan
+
     def __init__(self, inner):
         super().__init__(inner, function="cot")
 

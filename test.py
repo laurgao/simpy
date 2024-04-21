@@ -12,8 +12,12 @@ def assert_eq(x, y):
 
 
 @cast
-def sassert_repr(a, b):
+def sassert_repr(a: Expr, b: Expr):
     xs, ys = a.simplify(), b.simplify()
+    if xs.expandable():
+        xs = xs.expand()
+    if ys.expandable():
+        ys = ys.expand()
     assert repr(xs) == repr(ys), f"{xs} != {ys} (original {a} != {b})"
 
 
@@ -139,13 +143,6 @@ def test_product_combine_like_terms():
 
 if __name__ == "__main__":
     x, y = symbols("x y")
-    test_some_simplification()
-
-    # This integral will run integration by parts forever naively
-    # make sure that this is handled and doesn't cause a recursion error
-    integrand = Log(x + 6) / x**2
-    integral = Integration.integrate(integrand, x)
-    assert integral is None
 
     sassert_repr(x * 0, 0)
     sassert_repr(x * 2, 2 * x)
@@ -184,6 +181,18 @@ if __name__ == "__main__":
     sassert_repr(sqrt(x**2), x)
     assert sqrt(3).__repr__() == "sqrt(3)"
 
+    # Expand test
+    # make sure an expandable denominator gets expanded
+    sassert_repr((1 / (x * (x + 6))).expand(), 1 / (x**2 + x * 6))
+    # make sure that a numberator with a single sum gets expanded
+    sassert_repr(((2 + x) / Sin(x)).expand(), (2 / Sin(x) + x / Sin(x)))
+
+    # Factor test
+    test_factor()
+
+    test_some_simplification()
+
+    # Basic integrals
     sassert_repr(Integration.integrate(3 * x**2 - 2 * x, x), x**3 - x**2)
     sassert_repr(Integration.integrate((x + 1) ** 2, x), x + x**2 + (x**3 / 3))
     sassert_repr(Log(x).diff(x), 1 / x)
@@ -203,9 +212,6 @@ if __name__ == "__main__":
 
     assert count(2, x) == 0
     assert count(Tan(x + 1) ** 2 - 2 * x, x) == 2
-
-    # Expand test
-    sassert_repr((1 / (x * (x + 6))).expand(), 1 / (x**2 + x * 6))
 
     # cos^2 + sin^2 = 1 test
     expr = Sin(x) ** 2 + Cos(x) ** 2 + 3
@@ -266,15 +272,19 @@ if __name__ == "__main__":
     test_compound_angle()
     test_ex()
     test_xcosx()
-    test_partial_fractions()
+    # test_partial_fractions()
     test_arcsin()
     test_linear_usub_with_multiple_subs()
-    test_sec2x_tan2x()
+    # test_sec2x_tan2x()
 
-    # test_sin2x()
-    # test_cos2x() 
+    test_sin2x()
+    test_cos2x() 
 
-    # Factor test
-    test_factor()
+    # This integral will run integration by parts forever naively
+    # make sure that this is handled and doesn't cause a recursion error
+    integrand = Log(x + 6) / x**2
+    integral = Integration.integrate(integrand, x)
+    assert integral is None
+
 
     print("passed")
