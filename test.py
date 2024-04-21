@@ -3,7 +3,7 @@ from fractions import Fraction
 from expr import pi, symbols
 from integration import *
 from khan_academy import (test_arcsin, test_ex, test_partial_fractions,
-                          test_xcosx)
+                          test_sec2x_tan2x, test_xcosx)
 from test_transforms import test_lecture_example, test_x2_sqrt_1_x3
 
 
@@ -269,6 +269,7 @@ if __name__ == "__main__":
     test_partial_fractions()
     test_arcsin()
     test_linear_usub_with_multiple_subs()
+    test_sec2x_tan2x()
 
     # test_sin2x()
     # test_cos2x() 

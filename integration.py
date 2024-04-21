@@ -778,9 +778,19 @@ class ByParts(Transform):
         # This is tricky bc you have 2 layers of children here.
         for u, du, v, dv in self._stuff:
             child1 = u * v
-            integrand2 = du * v * -1
+            integrand2 = (du * v * -1).simplify()
+
             tr = ByParts()
             tr._stuff = [(u, du, v, dv)]
+
+            ### special case where you can jump directly to the solution wheeee
+            factor = (integrand2 / node.expr).simplify()
+            if not factor.contains(node.var):
+                solution = child1 / (1 - factor)
+                node.children.append(Node(node.expr, node.var, tr, node, type="SOLUTION", solution=solution))
+                return
+            ### 
+            
             funky_node = Node(node.expr, node.var, tr, node, type="AND")
             funky_node.children = [
                 Node(
@@ -976,7 +986,8 @@ def _get_next_node_post_heuristic(node: Node) -> Node:
             # now parent is the lowest OR node with multiple children
             return _get_next_node_post_heuristic(parent)
         else:
-            raise NotImplementedError("TODO _get_next_node for success nodes")
+            # This happens when we use integration by parts and the heuristic finds a whole ass solution
+            return "SOLVED"
 
     if len(node.unfinished_leaves) == 1:
         return node.unfinished_leaves[0]

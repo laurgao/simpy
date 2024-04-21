@@ -44,3 +44,10 @@ def test_arcsin():
     ans = Integration.integrate(ArcTan(x), x)
     expected_ans = x * ArcTan(x) - Log(1 + x**2) / 2
     sassert_repr(ans, expected_ans)
+
+
+def test_sec2x_tan2x():
+    """Uses either integration by parts with direct solve or generic sin/cos usub"""
+    integrand = Sec(2*x) * Tan(2*x)
+    ans = Integration.integrate(integrand, (x, 0, pi/6), verbose=True)
+    assert ans == Fraction(1, 2)
