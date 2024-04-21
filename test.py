@@ -5,20 +5,11 @@ from integration import *
 from khan_academy import (more_test, test_arcsin, test_ex,
                           test_partial_fractions, test_sec2x_tan2x, test_xcosx)
 from test_transforms import test_lecture_example, test_x2_sqrt_1_x3
+from test_utils import sassert_repr
 
 
 def assert_eq(x, y):
     assert x == y, f"{x} == {y} is False. ({x-y}).simplify() = {(x+y).simplify()}"
-
-
-@cast
-def sassert_repr(a: Expr, b: Expr):
-    xs, ys = a.simplify(), b.simplify()
-    if xs.expandable():
-        xs = xs.expand()
-    if ys.expandable():
-        ys = ys.expand()
-    assert repr(xs) == repr(ys), f"{xs} != {ys} (original {a} != {b})"
 
 
 def test_to_polynomial():

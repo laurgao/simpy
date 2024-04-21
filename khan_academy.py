@@ -5,12 +5,7 @@ and make sure simpy can do them
 
 from expr import e, pi
 from integration import *
-
-
-@cast
-def sassert_repr(a, b):
-    xs, ys = a.simplify(), b.simplify()
-    assert repr(xs) == repr(ys), f"{xs} != {ys} (original {a} != {b})"
+from test_utils import sassert_repr
 
 x = symbols("x")
 
@@ -51,3 +46,40 @@ def test_sec2x_tan2x():
     integrand = Sec(2*x) * Tan(2*x)
     ans = Integration.integrate(integrand, (x, 0, pi/6), verbose=True)
     assert ans == Fraction(1, 2)
+
+def more_test():
+    integrand = 4 * Sec(x) ** 2
+    # ok, this one we actually can't solve.
+    # do we just??? let this be a standard integral? that's what integration_calculator says lmfao 
+    ans = Integration.integrate(integrand, x)
+    assert ans == 4 * Tan(x)
+
+    integrand = Sec(x) ** 2 * Tan(x) ** 2
+    ans = Integration.integrate(integrand, x)
+    assert ans == (Tan(x)**3/3).simplify()
+
+    integrand = 5 / x - 3 * e ** x
+    ans = Integration.integrate(integrand, x)
+    assert ans == (5 * Log(x) - 3 * e ** x).simplify()
+
+    integrand = Sec(x)
+    ans = Integration.integrate(integrand, x)
+    assert ans == Log(Sec(x) + Tan(x)).simplify()
+
+    integrand = 2 * Cos(2 * x - 5)
+    ans = Integration.integrate(integrand, x)
+    assert ans == Sin(2 * x - 5).simplify()
+
+    integrand = 3 * x ** 5 - x ** 3 + 6
+    ans = Integration.integrate(integrand, x)
+    assert ans == (6*x - x**4/4 + x**6/2).simplify()
+
+    integrand = x ** 3 * e ** (x ** 4)
+    ans = Integration.integrate(integrand, x)
+    assert ans == (e**(x**4)/4).simplify()
+
+    integrand = 3 * x ** 2 * (x ** 3 + 1) ** 6
+    ans = Integration.integrate(integrand, x, verbose=True)
+    expected_ans = (1 + x**3)**7/7
+    const = (ans-expected_ans).expand().simplify()
+    assert isinstance(const, Const)

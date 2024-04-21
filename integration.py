@@ -12,14 +12,14 @@ import numpy as np
 
 import linalg
 from expr import (ArcCos, ArcSin, ArcTan, Const, Cos, Cot, Csc, Expr, Log,
-                  Power, Prod, Sec, Sin, SingleFunc, Sum, Symbol, Tan,
+                  Number, Power, Prod, Sec, Sin, SingleFunc, Sum, Symbol, Tan,
                   TrigFunction, cast, contains_cls, count, deconstruct_power,
                   e, nesting, sqrt, symbols)
 from polynomial import (Polynomial, polynomial_to_expr, rid_ending_zeros,
                         to_const_polynomial)
 
 ExprFn = Callable[[Expr], Expr]
-Number = Union[Fraction, int]
+Number_ = Union[Fraction, int]
 
 
 @dataclass
@@ -190,6 +190,8 @@ class PolynomialDivision(SafeTransform):
 
         ## Make sure numerator and denominator are both polynomials
         numerator, denominator = expr.numerator_denominator
+        if denominator == 1:
+            return False
         try:
             numerator_list = to_const_polynomial(numerator, node.var)
             denominator_list = to_const_polynomial(denominator, node.var)
@@ -706,7 +708,7 @@ class ByParts(Transform):
 
     def check(self, node: Node) -> bool:
         if not isinstance(node.expr, Prod):
-            if isinstance(node.expr, SingleFunc) and node.expr.inner == node.var: # Special case for Log, ArcSin, etc.
+            if (isinstance(node.expr, Log) or isinstance(node.expr, TrigFunction) and node.expr.is_inverse) and node.expr.inner == node.var: # Special case for Log, ArcSin, etc.
                 # TODO universalize it more?? how to make it more universal without making inf loops?
                 dv = 1
                 v = node.var
@@ -1053,7 +1055,7 @@ class Integration:
 
         if verbose:
             _print_success_tree(root)
-        return root.solution
+        return root.solution.simplify()
 
 
 def _integrate_safely(node: Node):
@@ -1101,6 +1103,20 @@ def _print_success_tree(root: Node) -> None:
         _print_success_tree(child)
 
 
+def _print_solution_tree(root: Node) -> None:
+    if not root.is_solved:
+        return
+    
+    varchange = None if not hasattr(root.transform, "_variable_change") else root.transform._variable_change
+        
+    print(f"[{root.distance_from_root}] {root.solution} ({root.transform.__class__.__name__}, {varchange})")
+    if not root.children:
+        print("")
+        return
+    for child in root.children:
+        _print_solution_tree(child)
+
+
 def random_id(length):
     # Define the pool of characters you can choose from
     characters = string.ascii_letters + string.digits
@@ -1130,7 +1146,7 @@ def replace(expr: Expr, old: Expr, new: Expr) -> Expr:
     if isinstance(expr, SingleFunc):
         return expr.__class__(replace(expr.inner, old, new))
 
-    if isinstance(expr, Const):
+    if isinstance(expr, Number):
         return expr
     if isinstance(expr, Symbol):
         return expr

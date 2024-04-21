@@ -132,7 +132,9 @@ class Expr(ABC):
 
     # should be overloaded if necessary
     def expandable(self) -> bool:
-        return False
+        if not self.children():
+            return False
+        return any([c.expandable() for c in self.children()])
 
     # overload if necessary
     def expand(self) -> "Expr":
@@ -846,6 +848,9 @@ class Power(Expr):
 
     def diff(self, var) -> Expr:
         if self.exponent.contains(var):
+            if self.base == e:
+                return self * self.exponent.diff(var)
+            # if not self.base.contains(var)
             # return self * (self.exponent * Log(self.base)).diff(var) idk if this is right and im lazy rn
             raise NotImplementedError(
                 "Power.diff not implemented for exponential functions."
