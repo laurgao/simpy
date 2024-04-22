@@ -893,10 +893,11 @@ def _check_if_solveable(integrand: Expr, var: Symbol) -> Optional[Expr]:
             return (var / integrand.exponent) * integrand
     if isinstance(integrand, Symbol) and integrand == var:
         return Fraction(1 / 2) * Power(var, 2)
-    if repr(integrand) in STANDARD_TRIG_INTEGRALS:
-        # jank but i give up on life
-        return STANDARD_TRIG_INTEGRALS[repr(replace(integrand, var, Symbol("x")))](var)
-    
+
+    silly_key = repr(replace(integrand, var, Symbol("x"))) # jank but does the job
+    if silly_key in STANDARD_TRIG_INTEGRALS:
+        return STANDARD_TRIG_INTEGRALS[silly_key](var)
+
     return None
 
 def _check_if_node_solvable(node: Node):
