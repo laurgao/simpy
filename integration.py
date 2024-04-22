@@ -858,7 +858,6 @@ def _replace_factory(condition: Callable[[Expr], bool], perform: ExprFn) -> Expr
 # and more fucky
 HEURISTICS = [
     PolynomialUSub,
-    LinearUSub,
     CompoundAngle,
     SinUSub,
     ProductToSum,
@@ -868,8 +867,10 @@ HEURISTICS = [
     InverseTrigUSub,
 ]
 SAFE_TRANSFORMS = [Additivity, PullConstant, PartialFractions, 
+                   PolynomialDivision,
+                   LinearUSub,
                    Expand, # expand is not safe bc it destroys partialfractions :o
-                   PolynomialDivision]
+]
 
 STANDARD_TRIG_INTEGRALS = {
     "sin(x)": lambda x: -Cos(x),

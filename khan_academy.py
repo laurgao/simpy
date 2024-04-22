@@ -83,3 +83,9 @@ def more_test():
     expected_ans = (1 + x**3)**7/7
     const = (ans-expected_ans).expand().simplify()
     assert isinstance(const, Const)
+
+    integrand = (2 * x - 5) ** 10
+    ans = Integration.integrate(integrand, x, verbose=True)
+    expected_ans = (2*x-5)**11/22
+    sassert_repr(ans, expected_ans)
+
