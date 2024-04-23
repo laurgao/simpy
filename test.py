@@ -271,7 +271,7 @@ if __name__ == "__main__":
     test_ex()
     test_xcosx()
     test_partial_fractions()
-    # test_arcsin()
+    test_arcsin()
     # test_linear_usub_with_multiple_subs()
     test_sec2x_tan2x()
     test_sin2x()

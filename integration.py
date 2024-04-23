@@ -725,6 +725,13 @@ class ByParts(Transform):
             v = _check_if_solveable(dv, node.var)
             if v is None:
                 return False
+            
+            # if -u'v = node.expr, it means means you get 0 * integral(node.expr) = uv
+            # which is invalid
+            integrand2 = (du * v * -1)
+            factor = (integrand2 / node.expr).simplify()
+            if factor == 1:
+                return False
 
             self._stuff.append((u, du, v, dv))
             return True
