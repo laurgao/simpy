@@ -1,4 +1,4 @@
-from expr import Expr, Number, cast
+from expr import Expr, cast
 
 
 @cast
@@ -11,7 +11,7 @@ def assert_eq_plusc(a: Expr, b: Expr):
     if ys.expandable():
         ys = ys.expand()
     diff = (xs + ys).expand().simplify()
-    assert isinstance(diff, Number), f"diff = {diff}"
+    assert len(diff.symbols()) == 0, f"diff = {diff}"
 
 @cast
 def assert_eq_repr(a: Expr, b: Expr):
