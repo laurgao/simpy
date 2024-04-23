@@ -49,8 +49,6 @@ def test_sec2x_tan2x():
 
 def more_test():
     integrand = 4 * Sec(x) ** 2
-    # ok, this one we actually can't solve.
-    # do we just??? let this be a standard integral? that's what integration_calculator says lmfao 
     ans = Integration.integrate(integrand, x)
     assert ans == 4 * Tan(x)
 
@@ -88,4 +86,9 @@ def more_test():
     ans = Integration.integrate(integrand, x, verbose=True)
     expected_ans = (2*x-5)**11/22
     sassert_repr(ans, expected_ans)
+
+    # Uses generic u-sub
+    integrand = e ** x / (1 + e ** x)
+    ans = Integration.integrate(integrand, (x, Log(2), Log(8)))
+    sassert_repr(ans, Log(9) - Log(3))
 

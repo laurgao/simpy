@@ -825,6 +825,14 @@ class Power(Expr):
             # because what if the term raised to this exponent can be simplified?
             # ex: if you have (ab)^n where a = c^m
             return Prod([Power(term, x).simplify() for term in b.terms])
+        if isinstance(x, Log) and b == x.base:
+            return x.inner.simplify()
+        if isinstance(x, Prod):
+            for i, t in enumerate(x.terms):
+                if isinstance(t, Log) and t.base == b:
+                    rest = Prod(x.terms[:i] + x.terms[i+1:])
+                    return ((b ** t).simplify() ** rest).simplify()
+                
         return Power(self.base.simplify(), x)
 
     def expandable(self) -> bool:
@@ -907,6 +915,8 @@ class Log(SingleFunc):
         inner = self.inner.simplify()
         if inner == 1:
             return Const(0)
+        if inner == self.base:
+            return Const(1)
         
         # IDK if this should be in simplify or if it should be like expand, in a diff function
         # like you can move stuff together or move stuff apart

@@ -829,6 +829,45 @@ class PartialFractions(Transform):
         super().backward(node)
         node.parent.solution = node.solution
 
+class GenericUSub(Transform):
+    _u: Expr = None
+    _variable_change: Expr = None
+    def check(self, node: Node) -> bool:
+        if not isinstance(node.expr, Prod):
+            return False
+        for i, term in enumerate(node.expr.terms):
+            integral = _check_if_solveable(term, node.var)
+            if integral is None:
+                continue
+            integral = _remove_const_factor(integral)
+            # assume term appears only once in integrand
+            # because node.expr is simplified
+            rest = Prod(node.expr.terms[:i] + node.expr.terms[i+1:])
+            if count(rest, integral) == count(rest, node.var) / count(integral, node.var):
+                self._u = integral
+                return True
+            
+        return False
+    
+    def forward(self, node: Node) -> None:
+        intermediate = generate_intermediate_var()
+        du_dx = self._u.diff(node.var)
+        new_integrand = replace((node.expr/du_dx).simplify(), self._u, intermediate)
+        node.children.append(Node(new_integrand, intermediate, self, node))
+        self._variable_change = self._u
+
+    def backward(self, node: Node) -> None:
+        super().backward(node)
+        node.parent.solution = replace(
+            node.solution, node.var, self._variable_change
+        ).simplify()
+
+
+def _remove_const_factor(expr: Expr) -> Expr:
+    if isinstance(expr, Prod):
+        return Prod([t for t in expr.terms if not isinstance(t, Number)])
+    return expr
+
 
 def _replace_factory(condition: Callable[[Expr], bool], perform: ExprFn) -> ExprFn:
     def _replace(expr: Expr) -> Expr:
@@ -865,6 +904,7 @@ HEURISTICS = [
     ByParts,
     RewriteTrig,
     InverseTrigUSub,
+    GenericUSub
 ]
 SAFE_TRANSFORMS = [Additivity, PullConstant, PartialFractions, 
                    PolynomialDivision,
@@ -872,32 +912,29 @@ SAFE_TRANSFORMS = [Additivity, PullConstant, PartialFractions,
                    Expand, # expand is not safe bc it destroys partialfractions :o
 ]
 
-STANDARD_TRIG_INTEGRALS = {
+STANDARD_TRIG_INTEGRALS: Dict[str, ExprFn] = {
     "sin(x)": lambda x: -Cos(x),
     "cos(x)": Sin,
-    "sec(x)^2": Tan, # Integration calculator says this is a standard integral. + it doesn't get solved on simpy if i dont add this.
+    "sec(x)^2": Tan, # Integration calculator says this is a standard integral. + i haven't encountered any transform that can solve this.
     "sec(x)": lambda x: Log(Tan(x) + Sec(x)) # not a standard integral but it's fucked so im leaving it (unless?)
 }
 
 def _check_if_solveable(integrand: Expr, var: Symbol) -> Optional[Expr]:
+    """outputs a SIMPLIFIED expr"""
     if not integrand.contains(var):
-        return integrand * var
+        return (integrand * var).simplify()
     if isinstance(integrand, Power):
-        if integrand.base == var and isinstance(integrand.exponent, Const):
+        if integrand.base == var and not integrand.exponent.contains(var):
             n = integrand.exponent
-            return (1 / (n + 1)) * Power(var, n + 1) if n != -1 else Log(integrand.base)
-        if (
-            integrand.base == e
-            and not (integrand.exponent / var).simplify().contains(var)
-            and not integrand.base.contains(var)
-        ):
-            return (var / integrand.exponent) * integrand
+            return ((1 / (n + 1)) * Power(var, n + 1)).simplify() if n != -1 else Log(integrand.base).simplify()
+        if integrand.exponent == var and not integrand.base.contains(var):
+            return (1 / Log(integrand.base) * integrand).simplify()
     if isinstance(integrand, Symbol) and integrand == var:
-        return Fraction(1 / 2) * Power(var, 2)
+        return( Fraction(1 / 2) * Power(var, 2)).simplify()
 
     silly_key = repr(replace(integrand, var, Symbol("x"))) # jank but does the job
     if silly_key in STANDARD_TRIG_INTEGRALS:
-        return STANDARD_TRIG_INTEGRALS[silly_key](var)
+        return STANDARD_TRIG_INTEGRALS[silly_key](var).simplify()
 
     return None
 
@@ -907,7 +944,7 @@ def _check_if_node_solvable(node: Node):
         return
 
     node.type = "SOLUTION"
-    node.solution = answer.simplify()
+    node.solution = answer
 
 
 def _cycle(node: Node) -> Optional[Union[Node, Literal["SOLVED"]]]:
