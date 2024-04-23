@@ -181,14 +181,17 @@ if __name__ == "__main__":
     test_factor()
 
     test_some_simplification()
+    
+    # Basic differentiation 
+    assert_eq_repr((2 ** x).diff(x), Log(2) * 2 ** x)
+    assert_eq_repr((x ** 7).diff(x), 7 * x ** 6)
+    assert_eq_plusc(Log(x).diff(x), 1 / x)
 
     # Basic integrals
     assert_eq_plusc(Integration.integrate(2, (x, 5, 3)), -4)
     assert_eq_plusc(Integration.integrate(x ** Fraction(7, 3), x), Fraction(3, 10) * x ** Fraction(10,3))
     assert_eq_plusc(Integration.integrate(3 * x**2 - 2 * x, x), x**3 - x**2)
     assert_eq_plusc(Integration.integrate((x + 1) ** 2, x), x + x**2 + (x**3 / 3))
-    assert_eq_plusc(Log(x).diff(x), 1 / x)
-    assert_eq_plusc(Log(x).diff(x), 1 / x)
 
     assert_eq_plusc(Integration.integrate(x ** 12, x), x ** 13 / 13)
     assert_eq_plusc(Integration.integrate(1 / x, x), Log(x))

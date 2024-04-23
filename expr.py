@@ -893,15 +893,13 @@ class Power(Expr):
         return [self.base, self.exponent]
 
     def diff(self, var) -> Expr:
-        if self.exponent.contains(var):
-            if self.base == e:
-                return self * self.exponent.diff(var)
-            # if not self.base.contains(var)
-            # return self * (self.exponent * Log(self.base)).diff(var) idk if this is right and im lazy rn
-            raise NotImplementedError(
-                "Power.diff not implemented for exponential functions."
-            )
-        return self.exponent * self.base ** (self.exponent - 1) * self.base.diff(var)
+        if not self.exponent.contains(var):
+            return self.exponent * self.base ** (self.exponent - 1) * self.base.diff(var)
+        if not self.base.contains(var):
+            return Log(self.base) * self * self.exponent.diff(var)
+        raise NotImplementedError(
+            "Power.diff not implemented for functions with var in both base and exponent."
+        )
 
 
 @dataclass
