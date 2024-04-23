@@ -11,5 +11,14 @@ def assert_eq_plusc(a: Expr, b: Expr):
     if ys.expandable():
         ys = ys.expand()
     diff = (xs + ys).expand().simplify()
-    assert isinstance(diff, Number)
+    assert isinstance(diff, Number), f"diff = {diff}"
 
+@cast
+def assert_eq_repr(a: Expr, b: Expr):
+    a = a.simplify()
+    b = b.simplify()
+    if a.expandable():
+        a = a.expand()
+    if b.expandable():
+        b = b.expand()
+    assert repr(a) == repr(b), f"a != b, {a} != {b}"

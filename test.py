@@ -7,11 +7,7 @@ from khan_academy import (more_test, test_arcsin, test_ex,
                           test_sec2x_tan2x, test_xcosx)
 from test_expand import test_expand_power
 from test_transforms import test_lecture_example, test_x2_sqrt_1_x3
-from test_utils import assert_eq_plusc
-
-
-def assert_eq(x, y):
-    assert x == y, f"{x} == {y} is False. ({x-y}).simplify() = {(x+y).simplify()}"
+from test_utils import assert_eq_plusc, assert_eq_repr
 
 
 def test_to_polynomial():
@@ -123,7 +119,7 @@ def test_some_simplification():
     i_0 = i_0.simplify()
     pload = Fraction(1, 2) * r_l * i_0**2
     pload = pload.simplify()
-    assert_eq_plusc(
+    assert_eq_repr(
         pload, v**2 / (8 * r1)
     )  # the power dissipated through the load when z_l = conjugate(z_s)
 
@@ -137,11 +133,11 @@ def test_product_combine_like_terms():
 if __name__ == "__main__":
     x, y = symbols("x y")
 
-    assert_eq_plusc(x * 0, 0)
-    assert_eq_plusc(x * 2, 2 * x)
-    assert_eq_plusc(x**2, x * x)
-    assert_eq_plusc(x * 2 - 2 * x, 0)
-    assert_eq_plusc(((x + 1) ** 2 - (x + 1) * (x + 1)), 0)
+    assert_eq_repr(x * 0, 0)
+    assert_eq_repr(x * 2, 2 * x)
+    assert_eq_repr(x**2, x * x)
+    assert_eq_repr(x * 2 - 2 * x, 0)
+    assert_eq_repr(((x + 1) ** 2 - (x + 1) * (x + 1)), 0)
 
     test_product_combine_like_terms()
 
@@ -165,20 +161,20 @@ if __name__ == "__main__":
     assert Cos(x * 2) == Cos(x * 2)
 
     # const exponent simplification
-    assert_eq_plusc(x**0, 1)
-    assert_eq_plusc(x**1, x)
-    assert_eq_plusc(x**2, x * x)
-    assert_eq_plusc(x**3, x * x * x)
-    assert_eq_plusc(Const(2) ** 2, 4)
-    assert_eq_plusc(sqrt(4), 2)
-    assert_eq_plusc(sqrt(x**2), x)
+    assert_eq_repr(x**0, 1)
+    assert_eq_repr(x**1, x)
+    assert_eq_repr(x**2, x * x)
+    assert_eq_repr(x**3, x * x * x)
+    assert_eq_repr(Const(2) ** 2, 4)
+    assert_eq_repr(sqrt(4), 2)
+    assert_eq_repr(sqrt(x**2), x)
     assert sqrt(3).__repr__() == "sqrt(3)"
 
     # Expand test
     # make sure an expandable denominator gets expanded
-    assert_eq_plusc((1 / (x * (x + 6))).expand(), 1 / (x**2 + x * 6))
+    assert_eq_repr((1 / (x * (x + 6))).expand(), 1 / (x**2 + x * 6))
     # make sure that a numberator with a single sum gets expanded
-    assert_eq_plusc(((2 + x) / Sin(x)).expand(), (2 / Sin(x) + x / Sin(x)))
+    assert_eq_repr(((2 + x) / Sin(x)).expand(), (2 / Sin(x) + x / Sin(x)))
     test_expand_power()
 
     # Factor test
@@ -188,7 +184,6 @@ if __name__ == "__main__":
 
     # Basic integrals
     assert_eq_plusc(Integration.integrate(2, (x, 5, 3)), -4)
-    print(Integration.integrate(x ** -7, x))
     assert_eq_plusc(Integration.integrate(x ** Fraction(7, 3), x), Fraction(3, 10) * x ** Fraction(10,3))
     assert_eq_plusc(Integration.integrate(3 * x**2 - 2 * x, x), x**3 - x**2)
     assert_eq_plusc(Integration.integrate((x + 1) ** 2, x), x + x**2 + (x**3 / 3))
@@ -205,7 +200,7 @@ if __name__ == "__main__":
     assert nesting(x * y**2, x) == 2
     assert nesting(x * (1 / y**2 * 3), x) == 2
 
-    assert_eq_plusc(x + (2 + y), x + 2 + y)
+    assert_eq_repr(x + (2 + y), x + 2 + y)
 
     assert count(2, x) == 0
     assert count(Tan(x + 1) ** 2 - 2 * x, x) == 2
@@ -213,11 +208,11 @@ if __name__ == "__main__":
     # cos^2 + sin^2 = 1 test
     expr = Sin(x) ** 2 + Cos(x) ** 2 + 3
     simplified = expr.simplify()
-    assert_eq(simplified, 4)
+    assert_eq_repr(simplified, 4)
 
     expr = Sin(x - 2 * y) ** 2 + 3 + Cos(x - 2 * y) ** 2 + y**2
     simplified = expr.simplify()
-    assert_eq(simplified, 4 + y**2)
+    assert_eq_repr(simplified, 4 + y**2)
 
     # PullConstant test
     expr = 2 * x**3
@@ -225,7 +220,7 @@ if __name__ == "__main__":
     transform = PullConstant()
     assert transform.check(test_node)
     transform.forward(test_node)
-    assert_eq(test_node.child.expr, x**3)
+    assert_eq_repr(test_node.child.expr, x**3)
 
     # new repr standards test
     expr = 1 - x**2
