@@ -818,6 +818,22 @@ class Power(Expr):
                 return Const(b.value**x.value)
             except:
                 pass
+            if b.value.denominator == 1:
+                return Power(b, x)
+            num = None
+            denom = None
+            try:
+                num = Const(b.value.numerator ** x.value)
+            except:
+                pass
+            try:
+                denom = Const(b.value.denominator ** x.value)
+            except:
+                pass
+            if num is None and denom is None:
+                return Power(b, x)
+            return (num if num else Power(b.value.numerator, x.value)) / (denom if denom else Power(b.value.denominator, x.value))
+
         if isinstance(b, Power):
             return Power(b.base, x * b.exponent).simplify()
         if isinstance(b, Prod):
@@ -833,7 +849,7 @@ class Power(Expr):
                     rest = Prod(x.terms[:i] + x.terms[i+1:])
                     return ((b ** t).simplify() ** rest).simplify()
                 
-        return Power(self.base.simplify(), x)
+        return Power(b, x)
 
     def expandable(self) -> bool:
         return (

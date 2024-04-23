@@ -92,3 +92,7 @@ def more_test():
     ans = Integration.integrate(integrand, (x, Log(2), Log(8)))
     sassert_repr(ans, Log(9) - Log(3))
 
+    integrand = 8 * x / sqrt(1 - 4 * x ** 2)
+    ans = Integration.integrate(integrand, (x, 0, Fraction(1,4)))
+    sassert_repr(ans, 2 - sqrt(3))
+
