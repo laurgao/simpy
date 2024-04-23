@@ -522,20 +522,25 @@ class Sum(Associative, Expr):
         # TODO: doesn't factor ex. quadratics into 2 binomials. implement some form of multi-term polynomial factoring at some point
         # (needed for partial fractions)
 
-        def _df(term: Expr) -> List[Tuple[Expr, int, bool]]:
+        def _df(term: Expr) -> Tuple[Const, Optional[List[Tuple[Expr, int, bool]]]]:
             """Deconstruct a term into its factors.
 
-            Returns: List[(factor, abs(exponent), sign(exponent))]
+            Returns: Number, List[(factor, abs(exponent), sign(exponent))]
             """
             if isinstance(term, Prod):
-                return [_df(f)[0] for f in term.terms]
+                num, terms = _deconstruct_prod(term)
+                return num, [_df(f)[1][0] for f in terms]
             if isinstance(term, Power) and isinstance(
                 term.exponent, Const
             ):  # can't be prod bc it's simplified
-                return [[term.base, term.exponent.abs(), term.exponent.value > 0]]
-            return [[term, Const(1), True]]
+                return Const(1), [[term.base, term.exponent.abs(), term.exponent.value > 0]]
+            if isinstance(term, Const):
+                return term, [[term, Const(1), True]]
+            return Const(1), [[term, Const(1), True]]
 
-        factors_per_term = [_df(term) for term in self.terms]
+        dfs = [_df(term) for term in self.terms]
+        factors_per_term = [d[1] for d in dfs]
+        coeffs = [d[0] for d in dfs]
         common_factors = factors_per_term[0]
 
         for this_terms_factors in factors_per_term[1:]:
@@ -554,6 +559,20 @@ class Sum(Associative, Expr):
                 if not is_in_at_least_1:
                     common_factors[i] = None
 
+        # Factor coeffs
+        common_coeff = coeffs[0].abs()
+        for c in coeffs[1:]:
+            x: Const = (c / common_coeff).simplify()
+            y: Const = (common_coeff / c).simplify()
+            if x.value.denominator == 1 or y.value.denominator == 1:
+                common_coeff = min(c.abs(), common_coeff.abs())
+            else:
+                common_coeff = None
+                break
+        is_negative = all(c < 0 for c in coeffs)
+        if is_negative and common_coeff:
+            common_coeff *= -1
+
         common_factors = [f for f in common_factors if f is not None]
 
         def _makeprod(terms: List[Tuple[Expr, int, bool]]):
@@ -563,9 +582,9 @@ class Sum(Associative, Expr):
                 else Prod([Power(t[0], t[1] * (1 if t[2] else -1)) for t in terms])
             )
 
-        if len(common_factors) == 0:
-            return self
         common_expr = _makeprod(common_factors)
+        if common_coeff:
+            common_expr *= common_coeff
 
         # factor out the common factors
         new_terms = []
@@ -580,11 +599,9 @@ def _deconstruct_prod(expr: Expr) -> Tuple[Const, List[Expr]]:
     # turns smtn into a constant and a list of other terms
     # assume expr is simplified
     if isinstance(expr, Prod):
-        # simplifying the product puts the constants at the front
-        non_const_factors = (
-            expr.terms[1:] if isinstance(expr.terms[0], Const) else expr.terms
-        )
-        coeff = expr.terms[0] if isinstance(expr.terms[0], Const) else Const(1)
+        non_const_factors = [term for term in expr.terms if not isinstance(term, Const)]
+        const_factors = [term for term in expr.terms if isinstance(term, Const)]
+        coeff = Prod(const_factors).simplify() if const_factors else Const(1)
     else:
         non_const_factors = [expr]
         coeff = Const(1)
@@ -960,6 +977,8 @@ class Log(SingleFunc):
             return (Log(inner.base) * inner.exponent).simplify()
         if isinstance(inner, Prod):
             return Sum([Log(t) for t in inner.terms]).simplify()
+        if isinstance(inner, Sum) and isinstance(inner.factor(), Prod):
+            return Sum([Log(t) for t in inner.factor().terms]).simplify()
         
         # let's agree on some standards
         # i dont love this, can change

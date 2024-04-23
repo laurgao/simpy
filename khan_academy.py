@@ -100,3 +100,23 @@ def test_expanding_big_power():
     expected_ans = (1 + x**3)**7/7
     const = (ans-expected_ans).expand().simplify()
     assert isinstance(const, Const)
+
+def test_polynomial_div_integrals():
+    integrand = (x-5) / (-2 * x + 2)
+    ans = Integration.integrate(integrand, x)
+    expected = - x / 2 + 2 * Log(1 - x)
+    assert_eq_plusc(ans, expected)
+
+    integrand = (x ** 3 - 1)/ ( x+2)
+    ans = Integration.integrate(integrand, x)
+    expected = x**3/3 - x**2 + 4*x- 9*Log(2 + x)
+    assert_eq_plusc(ans, expected)
+
+    integrand = (x - 1)/ (2 * x + 4)
+    ans = Integration.integrate(integrand, x)
+    expected = x / 2 - Fraction(3, 2) * Log(x + 2)
+    assert_eq_plusc(ans, expected)
+    
+    integrand = (2 * x ** 3 + 4 * x ** 2 - 5)/ (x + 3)
+    ans = Integration.integrate(integrand, x)
+    breakpoint()

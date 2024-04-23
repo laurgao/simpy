@@ -4,7 +4,8 @@ from expr import pi, symbols
 from integration import *
 from khan_academy import (more_test, test_arcsin, test_ex,
                           test_expanding_big_power, test_partial_fractions,
-                          test_sec2x_tan2x, test_xcosx)
+                          test_polynomial_div_integrals, test_sec2x_tan2x,
+                          test_xcosx)
 from test_expand import test_expand_power
 from test_transforms import test_lecture_example, test_x2_sqrt_1_x3
 from test_utils import assert_eq_plusc, assert_eq_repr
@@ -123,6 +124,12 @@ def test_some_simplification():
         pload, v**2 / (8 * r1)
     )  # the power dissipated through the load when z_l = conjugate(z_s)
 
+def test_factor_const():
+    expr = 2 - 2 * x
+    factored = expr.factor()
+    expected = 2 * (1 - x)
+    assert_eq_repr(expected, factored)
+
 
 def test_product_combine_like_terms():
     # this wasnt working bc the denominator "power" wasn't flattening in simplification.
@@ -178,6 +185,7 @@ if __name__ == "__main__":
     test_expand_power()
 
     # Factor test
+    test_factor_const()
     test_factor()
 
     test_some_simplification()
@@ -253,9 +261,7 @@ if __name__ == "__main__":
 
     # PolynomialDivision test
     test_polynomial_division()
-
     test_to_polynomial()
-    test_factor()
 
     # ln integral
     assert (x * Log(x) - x).diff(x).simplify() == Log(x)
@@ -275,6 +281,7 @@ if __name__ == "__main__":
     test_sin2x()
     test_cos2x()
     test_expanding_big_power()
+    test_polynomial_div_integrals()
     more_test()
 
     integrand = Log(x + 6) / x**2
