@@ -178,6 +178,10 @@ class Expr(ABC):
     def latex(self) -> str:
         raise NotImplementedError(f"Cannot convert {self.__class__.__name__} to latex")
 
+    @cast    
+    def __mod__(self, other) -> "Const":
+        return NotImplemented 
+
 
 @dataclass
 class Associative:
@@ -301,6 +305,14 @@ class Const(Number, Expr):
 
     def abs(self) -> "Const":
         return Const(abs(self.value))
+
+    @cast    
+    def __mod__(self, other) -> "Const":
+        if isinstance(other, Const):  
+            return Const(self.value % other.value)
+        else:
+            return NotImplemented
+
 
 
 @dataclass
@@ -1077,11 +1089,10 @@ class Sin(TrigFunction):
             return Const(0)
 
         pi_coeff = (new.inner / pi).simplify()
-        if isinstance(pi_coeff, Const) and str(pi_coeff.value) in self._SPECIAL_KEYS:
-            return self._special_values[str(pi_coeff.value)]
-        # temp fix bc we dont have modulus:
-        if isinstance(pi_coeff, Const) and pi_coeff.value.denominator == 1:
-            return Const(0)
+        if isinstance(pi_coeff, Const):
+            pi_coeff = pi_coeff % 2
+            if str(pi_coeff.value) in self._SPECIAL_KEYS:
+                return self._special_values[str(pi_coeff.value)]
 
         return new
 
@@ -1121,10 +1132,11 @@ class Cos(TrigFunction):
             return Const(1)
 
         if "pi" in new.inner.__repr__():
-            pi_coeff = (new.inner / pi).simplify()  # % 2
-            # implement modulus at some point
-            if isinstance(pi_coeff, Const) and str(pi_coeff.value) in self._SPECIAL_KEYS:
-                return self._special_values[str(pi_coeff.value)]
+            pi_coeff = (new.inner / pi).simplify()
+            if isinstance(pi_coeff, Const):
+                pi_coeff = pi_coeff % 2
+                if str(pi_coeff.value) in self._SPECIAL_KEYS:
+                    return self._special_values[str(pi_coeff.value)]
 
         return new
 
@@ -1148,10 +1160,9 @@ class Tan(TrigFunction):
         # tan(n*pi) = 0 for all n in Z
         if "pi" in new.inner.__repr__():
             pi_coeff = (new.inner / pi).simplify()
+            pi_coeff = pi_coeff % 2 if isinstance(pi_coeff, Const) else pi_coeff
             if isinstance(pi_coeff, Const) and str(pi_coeff.value) in self._SPECIAL_KEYS:
                 return (Sin(new.inner) / Cos(new.inner)).simplify()
-            
-            # tan(pi/2) is undefined. inf or undefined data structure? generic divbyzero handling.
 
         return new
 
@@ -1182,6 +1193,7 @@ class Sec(TrigFunction):
             return new
         
         pi_coeff = (new.inner / pi).simplify()
+        pi_coeff = pi_coeff % 2 if isinstance(pi_coeff, Const) else pi_coeff
         if isinstance(pi_coeff, Const) and str(pi_coeff.value) in self._SPECIAL_KEYS:
             return (1 / Cos(new.inner)).simplify()
 

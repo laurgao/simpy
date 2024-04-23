@@ -267,7 +267,7 @@ if __name__ == "__main__":
     # run entire integrals
     test_lecture_example() 
     test_x2_sqrt_1_x3()
-    # test_compound_angle()
+    test_compound_angle()
     test_ex()
     test_xcosx()
     test_partial_fractions()
