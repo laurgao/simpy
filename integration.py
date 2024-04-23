@@ -908,8 +908,8 @@ HEURISTICS = [
 ]
 SAFE_TRANSFORMS = [Additivity, PullConstant, PartialFractions, 
                    PolynomialDivision,
-                   LinearUSub,
                    Expand, # expand is not safe bc it destroys partialfractions :o
+                   LinearUSub,
 ]
 
 STANDARD_TRIG_INTEGRALS: Dict[str, ExprFn] = {

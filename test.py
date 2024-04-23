@@ -3,9 +3,11 @@ from fractions import Fraction
 from expr import pi, symbols
 from integration import *
 from khan_academy import (more_test, test_arcsin, test_ex,
-                          test_partial_fractions, test_sec2x_tan2x, test_xcosx)
+                          test_expanding_big_power, test_partial_fractions,
+                          test_sec2x_tan2x, test_xcosx)
+from test_expand import test_expand_power
 from test_transforms import test_lecture_example, test_x2_sqrt_1_x3
-from test_utils import sassert_repr
+from test_utils import assert_eq_plusc
 
 
 def assert_eq(x, y):
@@ -33,7 +35,7 @@ def test_polynomial_division():
     assert tr.check(test_node)
 
     tr.forward(test_node)
-    sassert_repr(test_node.children[0].expr, x**2 - 1 + 1 / (1 + x**2))
+    assert_eq_plusc(test_node.children[0].expr, x**2 - 1 + 1 / (1 + x**2))
 
     # 2nd test
     expr = x**3 / (1 - x**2)
@@ -61,7 +63,7 @@ def test_factor():
         / (sqrt(a) * sqrt(b))
         * (c3 * r3 - c3**2 * r3**2 / (c4 * r4 * a) - c4 * r4 / b)
     )
-    sassert_repr(factored, expected_factored)
+    assert_eq_plusc(factored, expected_factored)
 
 
 def test_compound_angle():
@@ -74,7 +76,7 @@ def test_compound_angle():
     ac_power = ac_power.simplify()
 
     expected = Cos(phi) / 2
-    sassert_repr(ac_power, expected)
+    assert_eq_plusc(ac_power, expected)
 
 
 def test_sin2x():
@@ -83,7 +85,7 @@ def test_sin2x():
     expr = Sin(x) ** 2
     integral = Integration.integrate(expr, x)
     expected = x / 2 - Sin(2 * x) / 4
-    sassert_repr(integral, expected)
+    assert_eq_plusc(integral, expected)
 
 
 def test_cos2x():
@@ -92,14 +94,14 @@ def test_cos2x():
     expr = Cos(x) ** 2
     integral = Integration.integrate(expr, x)
     expected = Sin(2 * x) / 4 + x / 2
-    sassert_repr(integral, expected)
+    assert_eq_plusc(integral, expected)
 
 def test_linear_usub_with_multiple_subs():
     # Last I checked, this fails without LinearUSub
     integrand = Sin(2*x) / Cos(2*x)
     integral = Integration.integrate(integrand, x)
     expected = -Log(Cos(2*x))/2
-    sassert_repr(integral, expected)
+    assert_eq_plusc(integral, expected)
 
 
 def test_some_simplification():
@@ -121,7 +123,7 @@ def test_some_simplification():
     i_0 = i_0.simplify()
     pload = Fraction(1, 2) * r_l * i_0**2
     pload = pload.simplify()
-    sassert_repr(
+    assert_eq_plusc(
         pload, v**2 / (8 * r1)
     )  # the power dissipated through the load when z_l = conjugate(z_s)
 
@@ -135,11 +137,11 @@ def test_product_combine_like_terms():
 if __name__ == "__main__":
     x, y = symbols("x y")
 
-    sassert_repr(x * 0, 0)
-    sassert_repr(x * 2, 2 * x)
-    sassert_repr(x**2, x * x)
-    sassert_repr(x * 2 - 2 * x, 0)
-    sassert_repr(((x + 1) ** 2 - (x + 1) * (x + 1)), 0)
+    assert_eq_plusc(x * 0, 0)
+    assert_eq_plusc(x * 2, 2 * x)
+    assert_eq_plusc(x**2, x * x)
+    assert_eq_plusc(x * 2 - 2 * x, 0)
+    assert_eq_plusc(((x + 1) ** 2 - (x + 1) * (x + 1)), 0)
 
     test_product_combine_like_terms()
 
@@ -163,20 +165,21 @@ if __name__ == "__main__":
     assert Cos(x * 2) == Cos(x * 2)
 
     # const exponent simplification
-    sassert_repr(x**0, 1)
-    sassert_repr(x**1, x)
-    sassert_repr(x**2, x * x)
-    sassert_repr(x**3, x * x * x)
-    sassert_repr(Const(2) ** 2, 4)
-    sassert_repr(sqrt(4), 2)
-    sassert_repr(sqrt(x**2), x)
+    assert_eq_plusc(x**0, 1)
+    assert_eq_plusc(x**1, x)
+    assert_eq_plusc(x**2, x * x)
+    assert_eq_plusc(x**3, x * x * x)
+    assert_eq_plusc(Const(2) ** 2, 4)
+    assert_eq_plusc(sqrt(4), 2)
+    assert_eq_plusc(sqrt(x**2), x)
     assert sqrt(3).__repr__() == "sqrt(3)"
 
     # Expand test
     # make sure an expandable denominator gets expanded
-    sassert_repr((1 / (x * (x + 6))).expand(), 1 / (x**2 + x * 6))
+    assert_eq_plusc((1 / (x * (x + 6))).expand(), 1 / (x**2 + x * 6))
     # make sure that a numberator with a single sum gets expanded
-    sassert_repr(((2 + x) / Sin(x)).expand(), (2 / Sin(x) + x / Sin(x)))
+    assert_eq_plusc(((2 + x) / Sin(x)).expand(), (2 / Sin(x) + x / Sin(x)))
+    test_expand_power()
 
     # Factor test
     test_factor()
@@ -184,25 +187,25 @@ if __name__ == "__main__":
     test_some_simplification()
 
     # Basic integrals
-    sassert_repr(Integration.integrate(2, (x, 5, 3)), -4)
+    assert_eq_plusc(Integration.integrate(2, (x, 5, 3)), -4)
     print(Integration.integrate(x ** -7, x))
-    sassert_repr(Integration.integrate(x ** Fraction(7, 3), x), Fraction(3, 10) * x ** Fraction(10,3))
-    sassert_repr(Integration.integrate(3 * x**2 - 2 * x, x), x**3 - x**2)
-    sassert_repr(Integration.integrate((x + 1) ** 2, x), x + x**2 + (x**3 / 3))
-    sassert_repr(Log(x).diff(x), 1 / x)
-    sassert_repr(Log(x).diff(x), 1 / x)
+    assert_eq_plusc(Integration.integrate(x ** Fraction(7, 3), x), Fraction(3, 10) * x ** Fraction(10,3))
+    assert_eq_plusc(Integration.integrate(3 * x**2 - 2 * x, x), x**3 - x**2)
+    assert_eq_plusc(Integration.integrate((x + 1) ** 2, x), x + x**2 + (x**3 / 3))
+    assert_eq_plusc(Log(x).diff(x), 1 / x)
+    assert_eq_plusc(Log(x).diff(x), 1 / x)
 
-    sassert_repr(Integration.integrate(x ** 12, x), x ** 13 / 13)
-    sassert_repr(Integration.integrate(1 / x, x), Log(x))
-    sassert_repr(Integration.integrate(1 / x, (x, 1, 2)), Log(2))
-    sassert_repr(Integration.integrate(y, x), x * y)
-    sassert_repr(Integration.integrate(Tan(y), x), x * Tan(y))
+    assert_eq_plusc(Integration.integrate(x ** 12, x), x ** 13 / 13)
+    assert_eq_plusc(Integration.integrate(1 / x, x), Log(x))
+    assert_eq_plusc(Integration.integrate(1 / x, (x, 1, 2)), Log(2))
+    assert_eq_plusc(Integration.integrate(y, x), x * y)
+    assert_eq_plusc(Integration.integrate(Tan(y), x), x * Tan(y))
 
     assert nesting(x**2, x) == 2
     assert nesting(x * y**2, x) == 2
     assert nesting(x * (1 / y**2 * 3), x) == 2
 
-    sassert_repr(x + (2 + y), x + 2 + y)
+    assert_eq_plusc(x + (2 + y), x + 2 + y)
 
     assert count(2, x) == 0
     assert count(Tan(x + 1) ** 2 - 2 * x, x) == 2
@@ -247,7 +250,7 @@ if __name__ == "__main__":
     expr = Sin(w * t) * Cos(w * t)
     integral = Integration.integrate(expr, t)
     expected = Sin(w * t) ** 2 / (2 * w)
-    sassert_repr(integral, expected)
+    assert_eq_plusc(integral, expected)
 
     # PolynomialDivision test
     test_polynomial_division()
@@ -258,7 +261,7 @@ if __name__ == "__main__":
     # ln integral
     assert (x * Log(x) - x).diff(x).simplify() == Log(x)
     ans = Integration._integrate(Log(x), x)
-    sassert_repr(ans, x * Log(x) - x)
+    assert_eq_plusc(ans, x * Log(x) - x)
 
     # run entire integrals
     test_lecture_example() 
@@ -272,11 +275,12 @@ if __name__ == "__main__":
     test_sec2x_tan2x()
     test_sin2x()
     test_cos2x()
+    test_expanding_big_power()
     more_test()
 
     integrand = Log(x + 6) / x**2
     integral = Integration.integrate(integrand, x)
     expected = Log(x) / 6 - Log(x + 6) / x - Log(x+6) / 6
-    sassert_repr(integral, expected)
+    assert_eq_plusc(integral, expected)
     
     print("passed")

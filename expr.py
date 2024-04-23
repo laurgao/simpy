@@ -13,6 +13,8 @@ from fractions import Fraction
 from functools import cmp_to_key, reduce
 from typing import Callable, Dict, List, Literal, Optional, Tuple, Union
 
+from combinatorics import generate_permutations, multinomial_coefficient
+
 
 def nesting(expr: "Expr", var: Optional["Symbol"] = None) -> int:
     """
@@ -861,7 +863,15 @@ class Power(Expr):
 
     def expand(self) -> Expr:
         assert self.expandable(), f"Cannot expand {self}"
-        return Prod([self.base] * self.exponent.value.numerator).expand()
+        expanded = []
+        n = self.exponent.value.numerator
+        i = len(self.base.terms)
+        permutations = generate_permutations(i, n)
+        for permutation in permutations:
+            new_term = [Power(t, p) for t, p in zip(self.base.terms, permutation)]
+            coefficient = multinomial_coefficient(permutation, n)
+            expanded.append(Prod([Const(coefficient)] + new_term))
+        return Sum(expanded).simplify()
 
     @cast
     def evalf(self, subs: Dict[str, "Const"]):
