@@ -2,6 +2,7 @@
 
 import random
 import string
+import warnings
 from abc import ABC, abstractmethod
 from dataclasses import dataclass
 from fractions import Fraction
@@ -9,14 +10,16 @@ from typing import Callable, Dict, List, Literal, Optional, Tuple, Union
 
 import numpy as np
 
+import linalg
 from expr import (ArcCos, ArcSin, ArcTan, Const, Cos, Cot, Csc, Expr, Log,
-                  Power, Prod, Sec, Sin, SingleFunc, Sum, Symbol, Tan,
+                  Number, Power, Prod, Sec, Sin, SingleFunc, Sum, Symbol, Tan,
                   TrigFunction, cast, contains_cls, count, deconstruct_power,
-                  nesting, sqrt, symbols)
+                  e, nesting, sqrt, symbols)
+from polynomial import (Polynomial, polynomial_to_expr, rid_ending_zeros,
+                        to_const_polynomial)
 
 ExprFn = Callable[[Expr], Expr]
-Number = Union[Fraction, int]
-Polynomial = np.ndarray  # has to be 1-D array
+Number_ = Union[Fraction, int]
 
 
 @dataclass
@@ -140,7 +143,11 @@ class Transform(ABC):
         raise NotImplementedError("Not implemented")
 
 
-class PullConstant(Transform):
+class SafeTransform(Transform, ABC):
+    pass
+
+
+class PullConstant(SafeTransform):
     _constant: Expr = None
     _non_constant_part: Expr = None
 
@@ -168,7 +175,7 @@ class PullConstant(Transform):
         node.parent.solution = (self._constant * node.solution).simplify()
 
 
-class PolynomialDivision(Transform):
+class PolynomialDivision(SafeTransform):
     _numerator: Polynomial = None
     _denominator: Polynomial = None
 
@@ -181,62 +188,17 @@ class PolynomialDivision(Transform):
         if not isinstance(expr, Prod):
             return False
 
-        ## Don't contain any SingleFunc with inner containing var
-        def _contains_singlefunc_w_inner(expr: Expr) -> bool:
-            if isinstance(expr, SingleFunc) and expr.inner.contains(node.var):
-                return True
-
-            return any([_contains_singlefunc_w_inner(e) for e in expr.children()])
-
-        if _contains_singlefunc_w_inner(expr):
-            return False
-
-        ## Make sure each factor is a polynomial
-        for factor in expr.terms:
-
-            def _is_polynomial(expression: Expr):
-                if isinstance(expression, Power):
-                    if not (
-                        isinstance(expression.exponent, Const)
-                        and expression.exponent.value.denominator == 1
-                    ):
-                        return False
-                    return True
-                if isinstance(expression, Const) or isinstance(expression, Symbol):
-                    return True
-
-                if isinstance(expression, Sum):
-                    return all(
-                        [_is_polynomial(term, node.var) for term in expression.terms]
-                    )
-
-                raise NotImplementedError(f"Not implemented: {expression}")
-
-            if not _is_polynomial(factor):
-                return False
-
-        ## Make sure numerator and denominator are good
-        numerator = 1
-        denominator = 1
-        for factor in expr.terms:
-            b, x = deconstruct_power(factor)
-            if x.value > 0:
-                numerator *= factor
-            else:
-                denominator *= Power(b, -x).simplify()
-
-        numerator = numerator.simplify()
+        ## Make sure numerator and denominator are both polynomials
+        numerator, denominator = expr.numerator_denominator
         if denominator == 1:
-            # there is nothing to divide. this is not a division.
             return False
-        denominator = denominator.simplify()
-
         try:
-            numerator_list = to_polynomial(numerator, node.var)
-            denominator_list = to_polynomial(denominator, node.var)
+            numerator_list = to_const_polynomial(numerator, node.var)
+            denominator_list = to_const_polynomial(denominator, node.var)
         except AssertionError:
             return False
 
+        # You can divide if they're same order
         if len(numerator_list) < len(denominator_list):
             return False
 
@@ -246,14 +208,15 @@ class PolynomialDivision(Transform):
 
     def forward(self, node: Node):
         var = node.var
-        quotient = np.zeros(len(self._numerator) - len(self._denominator) + 1)
+        quotient = [Const(0)] * (len(self._numerator) - len(self._denominator) + 1)
+        quotient = np.array(quotient)
 
         while self._numerator.size >= self._denominator.size:
             quotient_degree = len(self._numerator) - len(self._denominator)
-            quotient_coeff = self._numerator[-1] / self._denominator[-1]
+            quotient_coeff = (self._numerator[-1] / self._denominator[-1]).simplify()
             quotient[quotient_degree] = quotient_coeff
             self._numerator -= np.concatenate(
-                ([0] * quotient_degree, self._denominator * quotient_coeff)
+                ([Const(0)] * quotient_degree, self._denominator * quotient_coeff)
             )
             self._numerator = rid_ending_zeros(self._numerator)
 
@@ -269,9 +232,9 @@ class PolynomialDivision(Transform):
         node.parent.solution = node.solution
 
 
-class Expand(Transform):
+class Expand(SafeTransform):
     def forward(self, node: Node):
-        node.children = [Node(node.expr.expand(), node.var, self, node)]
+        node.children.append(Node(node.expr.expand(), node.var, self, node))
 
     def check(self, node: Node) -> bool:
         return node.expr.expandable()
@@ -281,7 +244,7 @@ class Expand(Transform):
         node.parent.solution = node.solution
 
 
-class Additivity(Transform):
+class Additivity(SafeTransform):
     def forward(self, node: Node):
         node.type = "AND"
         node.children = [Node(e, node.var, self, node) for e in node.expr.terms]
@@ -301,6 +264,21 @@ class Additivity(Transform):
         ).simplify()
 
 
+def _get_last_heuristic_transform(node: Node):
+    if isinstance(node.transform, (PullConstant, Expand, Additivity)):
+        # We'll let polynomial division go because it changes things sufficiently that
+        # we actually sorta make progress towards the integral.
+        # PullConstant and Additivity are like fake, they dont make any substantial changes.
+        # Expand is also like, idk, if we do A and then expand we dont rlly wanna do A again.
+
+        # Alternatively, we could just make sure that the last transform didnt have the same
+        # key. (but no the lecture example has B tan then polydiv then C tan)
+
+        # Idk this thing rn is a lil messy and there might be a better way to do it.
+        return _get_last_heuristic_transform(node.parent)
+    return node.transform
+
+
 # Let's just add all the transforms we've used for now.
 # and we will make this shit good and generalized later.
 class TrigUSub2(Transform):
@@ -316,7 +294,7 @@ class TrigUSub2(Transform):
     _key: str = None
     # {label: trigfn class, derivative of inverse trigfunction}
     _table: Dict[str, Tuple[ExprFn, ExprFn]] = {
-        "sin": (Sin, lambda var: 1 / sqrt(1 - var**2)),
+        "sin": (Sin, lambda var: 1 / sqrt(1 - var**2)),  # Asin(x).diff(x)
         "cos": (Cos, lambda var: -1 / sqrt(1 - var**2)),
         "tan": (Tan, lambda var: 1 / (1 + var**2)),
     }
@@ -333,6 +311,13 @@ class TrigUSub2(Transform):
         self._variable_change = cls(node.var)
 
     def check(self, node: Node) -> bool:
+        # Since B and C essentially undo each other, we want to make sure that the last
+        # heuristic transform wasn't C.
+
+        t = _get_last_heuristic_transform(node)
+        if isinstance(t, InverseTrigUSub):
+            return False
+
         for k, v in self._table.items():
             cls, dy_dx = v
             count_ = count(node.expr, cls(node.var))
@@ -351,6 +336,7 @@ class TrigUSub2(Transform):
 
 class RewriteTrig(Transform):
     """Rewrites trig functions in terms of (sin, cos), (tan, sec), and (cot, csc)"""
+
     def forward(self, node: Node):
         expr = node.expr
         r1 = replace_class(
@@ -393,7 +379,8 @@ class RewriteTrig(Transform):
 
     def check(self, node: Node) -> bool:
         # make sure that this node didn't get here by this transform
-        if isinstance(node.transform, RewriteTrig):
+        t = _get_last_heuristic_transform(node)
+        if isinstance(t, RewriteTrig):
             return False
 
         expr = node.expr
@@ -424,7 +411,8 @@ class InverseTrigUSub(Transform):
         self._variable_change = var_change(node.var)
 
     def check(self, node: Node) -> bool:
-        if isinstance(node.transform, TrigUSub2):
+        t = _get_last_heuristic_transform(node)
+        if isinstance(t, TrigUSub2):
             # If it just went through B, C is guaranteed to have a match.
             # going through C will just undo B.
             return False
@@ -449,8 +437,9 @@ class PolynomialUSub(Transform):
     you're gonna replace u=x^n
     ex: x/sqrt(1-x^2)
     """
+
     _variable_change = None  # x^n
-    
+
     def check(self, node: Node) -> bool:
         if not isinstance(node.expr, Prod):
             return False
@@ -466,7 +455,7 @@ class PolynomialUSub(Transform):
                 and term.base == node.var
                 and not term.exponent.contains(node.var)
             ):
-                n = term.exponent + 1
+                n = (term.exponent + 1).simplify()
                 rest = Prod(node.expr.terms[:i] + node.expr.terms[i + 1 :]).simplify()
                 break
 
@@ -476,6 +465,9 @@ class PolynomialUSub(Transform):
                 break
 
         if n is None:
+            return False
+        if n == 0:
+            # How are you gonna sub u = x^0 = 1, du = 0 dx
             return False
 
         self._variable_change = Power(node.var, n).simplify()  # x^n
@@ -506,25 +498,37 @@ class LinearUSub(Transform):
     _variable_change: Expr = None
 
     def check(self, node: Node) -> bool:
-        # most common use case is when ax+b appears a single time
-        # so we're just gonna check for that for now
-        if count(node.expr, node.var) != 1:
+        if count(node.expr, node.var) < 1: # just to cover our bases bc the later thing assume it appears >=1 
             return False
 
-        # we're gonna assume that the expression is a sum of terms with only those 2 terms bc otherwise no point of subbing.
+        def _is_a_linear_sum_or_prod(expr: Expr) -> bool:
+            if isinstance(expr, Sum):
+                return all(
+                    [
+                        not c.contains(node.var)
+                        or not (c / node.var).simplify().contains(node.var)
+                        for c in expr.terms
+                    ]
+                )
+            if isinstance(expr, Prod):
+                # Is a constant multiple of var
+                return not (expr / node.var).simplify().contains(node.var)
+            return False
+
         def _check(e: Expr) -> bool:
-            if isinstance(e, Sum) and all(
-                [
-                    node.var not in e.terms[0].symbols()
-                    or c == node.var
-                    or (isinstance(c, Prod) and node.var in c.terms)
-                    for c in e.terms
-                ]
-            ):
+            if not e.contains(node.var):
+                return True
+            if _is_a_linear_sum_or_prod(e):
+                if self._variable_change is not None:
+                    return e == self._variable_change
                 self._variable_change = e
                 return True
+            if not e.children():
+                # This must mean that we contain the var and it has no children, which means that we are the var.
+                # have to do this because all([]) = True. Covering my bases.
+                return False
             else:
-                return any([_check(child) for child in e.children()])
+                return all([_check(child) for child in e.children()])
 
         return _check(node.expr)
 
@@ -542,44 +546,412 @@ class LinearUSub(Transform):
         ).simplify()
 
 
+class CompoundAngle(Transform):
+    """Compound angle formulae"""
+
+    def check(self, node: Node) -> bool:
+        def _check(e: Expr) -> bool:
+            if (
+                isinstance(e, (Sin, Cos))
+                and isinstance(e.inner, Sum)
+                and len(e.inner.terms) == 2  # for now lets j do 2 terms
+            ):
+                return True
+            else:
+                return any([_check(child) for child in e.children()])
+
+        return _check(node.expr)
+
+    def forward(self, node: Node) -> None:
+        condition = (
+            lambda expr: isinstance(expr, (Sin, Cos))
+            and isinstance(expr.inner, Sum)
+            and len(expr.inner.terms) == 2
+        )
+
+        def _perform(expr: Union[Sin, Cos]) -> Expr:
+            a, b = expr.inner.terms
+            if isinstance(expr, Sin):
+                return Sin(a) * Cos(b) + Cos(a) * Sin(b)
+            elif isinstance(expr, Cos):
+                return Cos(a) * Cos(b) - Sin(a) * Sin(b)
+
+        new_integrand = _replace_factory(condition, _perform)(node.expr)
+
+        node.children.append(Node(new_integrand, node.var, self, node))
+
+    def backward(self, node: Node) -> None:
+        super().backward(node)
+        node.parent.solution = node.solution
+
+
+class SinUSub(Transform):
+    """u-substitution for if sinx cosx exists in the outer product"""
+
+    # TODO: generalize this in some form? to other trig fns maybe?
+    # - generalize to if the sin is in a power but the cos is under no power.
+    # like transform D but for trigfns
+    _sin: Sin = None
+    _cos: Cos = None
+    _variable_change: Expr = None
+
+    def check(self, node: Node) -> bool:
+        if not isinstance(node.expr, Prod):
+            return False
+
+        def is_constant_product_of_var(expr, var):
+            if expr == var:
+                return True
+            if not (expr / var).simplify().contains(var):
+                return True
+            return False
+
+        # sins = [term.inner for term in node.expr.terms if isinstance(term, Sin)]
+        # coses = [term.inner for term in node.expr.terms if isinstance(term, Cos)]
+        sins: List[Sin] = []
+        coses: List[Cos] = []
+        for term in node.expr.terms:
+            if isinstance(term, Sin):
+                if not is_constant_product_of_var(term.inner, node.var):
+                    continue
+
+                sins.append(term)
+
+                for cos in coses:
+                    if term.inner == cos.inner:
+                        self._sin = term
+                        self._cos = cos
+                        return True
+
+            if isinstance(term, Cos):
+                if not is_constant_product_of_var(term.inner, node.var):
+                    continue
+
+                coses.append(term)
+
+                for sin in sins:
+                    if term.inner == sin.inner:
+                        self._sin = sin
+                        self._cos = term
+                        return True
+
+        return False
+
+    def forward(self, node: Node) -> None:
+        intermediate = generate_intermediate_var()
+        dy_dx = self._sin.diff(node.var)
+        new_integrand = (
+            replace(
+                node.expr,
+                self._sin,
+                intermediate,
+            )
+            / dy_dx
+        )
+        node.children.append(Node(new_integrand, intermediate, self, node))
+        self._variable_change = self._sin
+
+    def backward(self, node: Node) -> None:
+        super().backward(node)
+        node.parent.solution = replace(
+            node.solution, node.var, self._variable_change
+        ).simplify()
+
+
+class ProductToSum(Transform):
+    """product to sum identities for sin & cos"""
+
+    _a: Expr = None
+    _b: Expr = None
+
+    def check(self, node: Node) -> bool:
+        if isinstance(node.expr, Prod):
+            if len(node.expr.terms) == 2 and all(
+                isinstance(term, (Sin, Cos)) for term in node.expr.terms
+            ):
+                self._a, self._b = node.expr.terms
+                return True
+
+        if isinstance(node.expr, Power):
+            if isinstance(node.expr.base, (Sin, Cos)) and node.expr.exponent == 2:
+                self._a = self._b = node.expr.base
+                return True
+
+        return False
+
+    def forward(self, node: Node) -> None:
+        a, b = self._a, self._b
+        if isinstance(a, Sin) and isinstance(b, Cos):
+            temp = Sin(a.inner + b.inner) + Sin(a.inner - b.inner)
+        elif isinstance(a, Cos) and isinstance(b, Sin):
+            temp = Sin(a.inner + b.inner) - Sin(a.inner - b.inner)
+        elif isinstance(a, Cos) and isinstance(b, Cos):
+            temp = Cos(a.inner + b.inner) + Cos(a.inner - b.inner)
+        elif isinstance(a, Sin) and isinstance(b, Sin):
+            temp = Cos(a.inner - b.inner) - Cos(a.inner + b.inner)
+
+        new_integrand = temp / 2
+        node.children.append(Node(new_integrand, node.var, self, node))
+
+    def backward(self, node: Node) -> None:
+        super().backward(node)
+        node.parent.solution = node.solution
+
+
+class ByParts(Transform):
+    _stuff: List[Tuple[Expr, Expr, Expr, Expr]] = None
+
+    """Integration by parts"""
+
+    def __init__(self):
+        self._stuff = []
+
+    def check(self, node: Node) -> bool:
+        if not isinstance(node.expr, Prod):
+            if (isinstance(node.expr, Log) or isinstance(node.expr, TrigFunction) and node.expr.is_inverse) and node.expr.inner == node.var: # Special case for Log, ArcSin, etc.
+                # TODO universalize it more?? how to make it more universal without making inf loops?
+                dv = 1
+                v = node.var
+                u = node.expr
+                du = u.diff(node.var)
+                self._stuff.append((u, du, v, dv))
+                return True
+            return False
+        if not len(node.expr.terms) == 2:
+            return False
+
+        def _check(u: Expr, dv: Expr) -> bool:
+            du = u.diff(node.var)
+            v = _check_if_solveable(dv, node.var)
+            if v is None:
+                return False
+            
+            # if -u'v = node.expr, it means means you get 0 * integral(node.expr) = uv
+            # which is invalid
+            integrand2 = (du * v * -1)
+            factor = (integrand2 / node.expr).simplify()
+            if factor == 1:
+                return False
+
+            self._stuff.append((u, du, v, dv))
+            return True
+
+        a, b = node.expr.terms
+        return _check(a, b) or _check(b, a)
+
+    def forward(self, node: Node) -> None:
+        # This is tricky bc you have 2 layers of children here.
+        for u, du, v, dv in self._stuff:
+            child1 = (u * v).simplify()
+            integrand2 = (du * v * -1).simplify()
+
+            tr = ByParts()
+            tr._stuff = [(u, du, v, dv)]
+
+            ### special case where you can jump directly to the solution wheeee
+            factor = (integrand2 / node.expr).simplify()
+            if not factor.contains(node.var):
+                solution = child1 / (1 - factor)
+                node.children.append(Node(node.expr, node.var, tr, node, type="SOLUTION", solution=solution))
+                return
+            ### 
+            
+            funky_node = Node(node.expr, node.var, tr, node, type="AND")
+            funky_node.children = [
+                Node(
+                    node.expr,
+                    node.var,
+                    Additivity(),
+                    funky_node,
+                    type="SOLUTION",
+                    solution=child1,
+                ),
+                Node(integrand2, node.var, Additivity(), funky_node),
+            ]
+            node.children.append(funky_node)
+
+    def backward(self, node: Node) -> None:
+        super().backward(node)
+        node.parent.solution = node.solution
+
+
+class PartialFractions(Transform):
+    _new_integrand: Expr = None
+    def check(self, node: Node) -> bool:
+        # First, make sure that this is a fraction
+        if not isinstance(node.expr, Prod):
+            return False
+        num, denom = node.expr.numerator_denominator
+        if denom == Const(1):
+            return False
+        
+        # and that both numerator and denominator are polynomials
+        try:
+            numerator_list = to_const_polynomial(num, node.var)
+            denominator_list = to_const_polynomial(denom, node.var)
+        except AssertionError:
+            return False
+        
+        # numerator has to be a smaller order than the denom
+        if len(numerator_list) > len(denominator_list):
+            return False
+        
+        # The denominator has to be a product
+        if not isinstance(denom, (Prod, Sum)):
+            return False
+        if isinstance(denom, Sum):
+            new = denom.factor()
+            if not isinstance(new, Prod):
+                return False
+            denom = new
+
+        # ok im stupid so im gonna only do the case for 2 factors for now
+        # shouldnt be hard to generalize
+        if len(denom.terms) != 2:
+            return False
+        
+        d1, d2 = denom.terms
+
+        # Make sure that it's not the case that one of the denominator factors is just a constant.
+        if not (d1.contains(node.var) and d2.contains(node.var)):
+            return False
+
+        d1_list = to_const_polynomial(d1, node.var)
+        d2_list = to_const_polynomial(d2, node.var)
+
+        matrix = np.array([d2_list, d1_list]).T
+        inv = linalg.invert(matrix)
+        if inv is None:
+            return False
+        if numerator_list.size == 1:
+            numerator_list = np.array([numerator_list[0], 0])
+        ans = inv @ numerator_list
+        self._new_integrand = ans[0] / d1 + ans[1] / d2
+        return True
+    
+    def forward(self, node: Node) -> None:
+        node.children.append(Node(self._new_integrand, node.var, self, node))
+    
+    def backward(self, node: Node) -> None:
+        super().backward(node)
+        node.parent.solution = node.solution
+
+class GenericUSub(Transform):
+    _u: Expr = None
+    _variable_change: Expr = None
+    def check(self, node: Node) -> bool:
+        if not isinstance(node.expr, Prod):
+            return False
+        for i, term in enumerate(node.expr.terms):
+            integral = _check_if_solveable(term, node.var)
+            if integral is None:
+                continue
+            integral = _remove_const_factor(integral)
+            # assume term appears only once in integrand
+            # because node.expr is simplified
+            rest = Prod(node.expr.terms[:i] + node.expr.terms[i+1:])
+            if count(rest, integral) == count(rest, node.var) / count(integral, node.var):
+                self._u = integral
+                return True
+            
+        return False
+    
+    def forward(self, node: Node) -> None:
+        intermediate = generate_intermediate_var()
+        du_dx = self._u.diff(node.var)
+        new_integrand = replace((node.expr/du_dx).simplify(), self._u, intermediate)
+        node.children.append(Node(new_integrand, intermediate, self, node))
+        self._variable_change = self._u
+
+    def backward(self, node: Node) -> None:
+        super().backward(node)
+        node.parent.solution = replace(
+            node.solution, node.var, self._variable_change
+        ).simplify()
+
+
+def _remove_const_factor(expr: Expr) -> Expr:
+    if isinstance(expr, Prod):
+        return Prod([t for t in expr.terms if not isinstance(t, Number)])
+    return expr
+
+
+def _replace_factory(condition: Callable[[Expr], bool], perform: ExprFn) -> ExprFn:
+    def _replace(expr: Expr) -> Expr:
+        if condition(expr):
+            return perform(expr)
+
+        # find all instances of old in expr and replace with new
+        if isinstance(expr, Sum):
+            return Sum([_replace(e) for e in expr.terms])
+        if isinstance(expr, Prod):
+            return Prod([_replace(e) for e in expr.terms])
+        if isinstance(expr, Power):
+            return Power(base=_replace(expr.base), exponent=_replace(expr.exponent))
+        # i love recursion
+        if isinstance(expr, SingleFunc):
+            return expr.__class__(_replace(expr.inner))
+
+        if isinstance(expr, Const):
+            return expr
+        if isinstance(expr, Symbol):
+            return expr
+
+    return _replace
+
+
 # Leave RewriteTrig, InverseTrigUSub near the end bc they are deprioritized
 # and more fucky
-HEURISTICS = [PolynomialUSub, LinearUSub, TrigUSub2, RewriteTrig, InverseTrigUSub]
-SAFE_TRANSFORMS = [Additivity, PullConstant, Expand, PolynomialDivision]
+HEURISTICS = [
+    PolynomialUSub,
+    CompoundAngle,
+    SinUSub,
+    ProductToSum,
+    TrigUSub2,
+    ByParts,
+    RewriteTrig,
+    InverseTrigUSub,
+    GenericUSub
+]
+SAFE_TRANSFORMS = [Additivity, PullConstant, PartialFractions, 
+                   PolynomialDivision,
+                   Expand, # expand is not safe bc it destroys partialfractions :o
+                   LinearUSub,
+]
 
-TRIGFUNCTION_INTEGRALS = {
-    "sin": lambda x: -Cos(x),
-    "cos": Sin,
-    "tan": lambda x: -Log(Cos(x)),
-    "csc": lambda x: -Log(Csc(x) - Cot(x)),
-    "sec": lambda x: Log(Sec(x) + Tan(x)),
-    "cot": lambda x: Log(Sin(x)),
+STANDARD_TRIG_INTEGRALS: Dict[str, ExprFn] = {
+    "sin(x)": lambda x: -Cos(x),
+    "cos(x)": Sin,
+    "sec(x)^2": Tan, # Integration calculator says this is a standard integral. + i haven't encountered any transform that can solve this.
+    "sec(x)": lambda x: Log(Tan(x) + Sec(x)) # not a standard integral but it's fucked so im leaving it (unless?)
 }
 
+def _check_if_solveable(integrand: Expr, var: Symbol) -> Optional[Expr]:
+    """outputs a SIMPLIFIED expr"""
+    if not integrand.contains(var):
+        return (integrand * var).simplify()
+    if isinstance(integrand, Power):
+        if integrand.base == var and not integrand.exponent.contains(var):
+            n = integrand.exponent
+            return ((1 / (n + 1)) * Power(var, n + 1)).simplify() if n != -1 else Log(integrand.base).simplify()
+        if integrand.exponent == var and not integrand.base.contains(var):
+            return (1 / Log(integrand.base) * integrand).simplify()
+    if isinstance(integrand, Symbol) and integrand == var:
+        return( Fraction(1 / 2) * Power(var, 2)).simplify()
 
-def _check_if_solvable(node: Node):
-    expr = node.expr
-    var = node.var
-    answer = None
-    if isinstance(expr, Power):
-        if expr.base == var and isinstance(expr.exponent, Const):
-            n = expr.exponent
-            answer = (1 / (n + 1)) * Power(var, n + 1) if n != -1 else Log(expr.base)
-        elif isinstance(expr.base, Symbol) and expr.base != var:
-            answer = expr * var
+    silly_key = repr(replace(integrand, var, Symbol("x"))) # jank but does the job
+    if silly_key in STANDARD_TRIG_INTEGRALS:
+        return STANDARD_TRIG_INTEGRALS[silly_key](var).simplify()
 
-    elif isinstance(expr, Symbol):
-        answer = Fraction(1 / 2) * Power(var, 2) if expr == var else expr * var
-    elif isinstance(expr, Const):
-        answer = expr * var
-    elif isinstance(expr, TrigFunction) and not expr.is_inverse:
-        answer = TRIGFUNCTION_INTEGRALS[expr.function](expr.inner)
+    return None
 
+def _check_if_node_solvable(node: Node):
+    answer = _check_if_solveable(node.expr, node.var)
     if answer is None:
         return
 
     node.type = "SOLUTION"
-    node.solution = answer.simplify()
+    node.solution = answer
 
 
 def _cycle(node: Node) -> Optional[Union[Node, Literal["SOLVED"]]]:
@@ -589,7 +961,7 @@ def _cycle(node: Node) -> Optional[Union[Node, Literal["SOLVED"]]]:
     # now we have a tree with all the safe transforms applied
     # 2. LOOK IN TABLE
     for leaf in node.unfinished_leaves:
-        _check_if_solvable(leaf)
+        _check_if_node_solvable(leaf)
 
     if len(node.unfinished_leaves) == 0:
         return "SOLVED"
@@ -622,7 +994,8 @@ def _get_next_node_post_heuristic(node: Node) -> Node:
             # now parent is the lowest OR node with multiple children
             return _get_next_node_post_heuristic(parent)
         else:
-            raise NotImplementedError("TODO _get_next_node for success nodes")
+            # This happens when we use integration by parts and the heuristic finds a whole ass solution
+            return "SOLVED"
 
     if len(node.unfinished_leaves) == 1:
         return node.unfinished_leaves[0]
@@ -665,24 +1038,30 @@ class Integration:
     Keeps track of integration work as we go
     """
 
-    def _integrate_bounds(expr: Expr, bounds: Tuple[Symbol, Const, Const]) -> Const:
+    def _integrate_bounds(
+        expr: Expr, bounds: Tuple[Symbol, Const, Const], verbose: bool
+    ) -> Expr:
         x, a, b = bounds
-        integral = Integration._integrate(expr, bounds[0])
+        integral = Integration._integrate(expr, bounds[0], verbose)
         return (integral.evalf({x.name: b}) - integral.evalf({x.name: a})).simplify()
 
     @cast
     @staticmethod
     def integrate(
-        expr: Expr, bounds: Union[Symbol, Tuple[Symbol, Const, Const]]
+        expr: Expr,
+        bounds: Union[Symbol, Tuple[Symbol, Const, Const]],
+        verbose: bool = False,
     ) -> Expr:
+        """Returns None if the integral cannot be solved."""
         if type(bounds) == tuple:
-            return Integration._integrate_bounds(expr, bounds)
+            return Integration._integrate_bounds(expr, bounds, verbose)
         else:
-            return Integration._integrate(expr, bounds)
+            return Integration._integrate(expr, bounds, verbose)
 
     @staticmethod
-    def _integrate(integrand: Expr, var: Symbol):
-
+    def _integrate(
+        integrand: Expr, var: Symbol, verbose: bool = False 
+    ) -> Expr:
         root = Node(integrand, var)
         curr_node = root
         while True:
@@ -699,7 +1078,8 @@ class Integration:
 
         if root.is_failed:
             breakpoint()
-            raise NotImplementedError(f"Failed to integrate {integrand} wrt {var}")
+            warnings.warn(f"Failed to integrate {integrand} wrt {var}")
+            return None
 
         # now we have a solved tree or a failed tree
         # we can go back and get the answer
@@ -719,8 +1099,9 @@ class Integration:
         if root.solution is None:
             raise ValueError("something went wrong while going backwards...")
 
-        _print_success_tree(root)
-        return root.solution
+        if verbose:
+            _print_success_tree(root)
+        return root.solution.simplify()
 
 
 def _integrate_safely(node: Node):
@@ -728,8 +1109,9 @@ def _integrate_safely(node: Node):
         tr = transform()
         if tr.check(node):
             tr.forward(node)
-            for child in node.children:
-                _integrate_safely(child)
+            break
+    for child in node.children:
+        _integrate_safely(child)
 
 
 def _integrate_heuristically(node: Node):
@@ -746,73 +1128,39 @@ def _integrate_heuristically(node: Node):
         node.type = "OR"
 
 
+def _print_tree(root: Node) -> None:
+    print(f"[{root.distance_from_root}] {root.expr} ({root.transform.__class__.__name__})")
+    if not root.children:
+        print(root.type)
+        print("")
+        return
+    for child in root.children:
+        _print_tree(child)
+
+
 def _print_success_tree(root: Node) -> None:
     if not root.is_solved:
         return
-    print(f"[{root.distance_from_root}] {root.expr}")
+    print(f"[{root.distance_from_root}] {root.expr} ({root.transform.__class__.__name__})")
     if not root.children:
+        print("")
         return
     for child in root.children:
         _print_success_tree(child)
+
+
+def _print_solution_tree(root: Node) -> None:
+    if not root.is_solved:
+        return
+    
+    varchange = None if not hasattr(root.transform, "_variable_change") else root.transform._variable_change
+        
+    print(f"[{root.distance_from_root}] {root.solution} ({root.transform.__class__.__name__}, {varchange})")
+    if not root.children:
         print("")
-
-
-def to_polynomial(expr: Expr, var: Symbol) -> Polynomial:
-    if isinstance(expr, Sum):
-        xyz = np.zeros(10)
-        for term in expr.terms:
-            if isinstance(term, Prod):
-                const, power = term.terms
-                assert isinstance(const, Const)
-                if isinstance(power, Symbol):
-                    xyz[1] = int(const.value)
-                assert isinstance(power, Power)
-                assert power.base == var
-                xyz[int(power.exponent.value)] = int(const.value)
-            elif isinstance(term, Power):
-                assert term.base == var
-                xyz[int(term.exponent.value)] = 1
-            elif isinstance(term, Symbol):
-                assert term == var
-                xyz[1] = 1
-            elif isinstance(term, Const):
-                xyz[0] = int(term.value)
-            else:
-                raise NotImplementedError(f"weird term: {term}")
-        return rid_ending_zeros(xyz)
-
-    if isinstance(expr, Prod):
-        # has to be product of 2 terms: a constant and a power.
-        const, power = expr.terms
-        assert isinstance(const, Const)
-        if isinstance(power, Symbol):
-            return np.array([0, int(const.value)])
-        assert isinstance(power, Power)
-        assert power.base == var
-        xyz = np.zeros(int(power.exponent.value) + 1)
-        xyz[-1] = const.value
-        return xyz
-    if isinstance(expr, Power):
-        assert expr.base == var
-        xyz = np.zeros(int(expr.exponent.value) + 1)
-        xyz[-1] = 1
-        return xyz
-    if isinstance(expr, Symbol):
-        assert expr == var
-        return np.array([0, 1])
-
-    raise NotImplementedError(f"weird expr: {expr}")
-
-
-def polynomial_to_expr(poly: Polynomial, var: Symbol) -> Expr:
-    final = Const(0)
-    for i, element in enumerate(poly):
-        final += element * var**i
-    return final.simplify()
-
-
-def rid_ending_zeros(arr: Polynomial) -> Polynomial:
-    return np.trim_zeros(arr, "b")
+        return
+    for child in root.children:
+        _print_solution_tree(child)
 
 
 def random_id(length):
@@ -824,7 +1172,7 @@ def random_id(length):
 
 
 def generate_intermediate_var() -> Symbol:
-    return symbols(f"intermediate_{random_id(10)}")
+    return symbols(f"u_{random_id(10)}")
 
 
 def replace(expr: Expr, old: Expr, new: Expr) -> Expr:
@@ -844,7 +1192,7 @@ def replace(expr: Expr, old: Expr, new: Expr) -> Expr:
     if isinstance(expr, SingleFunc):
         return expr.__class__(replace(expr.inner, old, new))
 
-    if isinstance(expr, Const):
+    if isinstance(expr, Number):
         return expr
     if isinstance(expr, Symbol):
         return expr
