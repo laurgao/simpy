@@ -1,5 +1,5 @@
-from combinatorics import generate_permutations
-from expr import Const, Prod, Sum, symbols
+from src.simpy.combinatorics import generate_permutations
+from src.simpy.expr import Const, Prod, Sum, symbols
 
 
 def test_expand_power():

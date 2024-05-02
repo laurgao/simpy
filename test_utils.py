@@ -1,4 +1,4 @@
-from expr import Expr, cast
+from src.simpy.expr import Expr, cast
 
 
 @cast

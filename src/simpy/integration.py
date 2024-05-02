@@ -1,8 +1,8 @@
 import warnings
 from typing import Callable, List, Literal, Tuple, Union
 
-from expr import Const, Expr, Optional, Symbol, cast, nesting
-from transforms import HEURISTICS, SAFE_TRANSFORMS, Node, _check_if_solveable
+from .expr import Const, Expr, Optional, Symbol, cast, nesting
+from .transforms import HEURISTICS, SAFE_TRANSFORMS, Node, _check_if_solveable
 
 
 def _check_if_node_solvable(node: Node):
@@ -92,6 +92,7 @@ def _get_node_with_best_nesting(
     return nodes[results.index(best_value)]
 
 
+@cast
 def integrate(
     expr: Expr,
     bounds: Union[Symbol, Tuple[Symbol, Const, Const]],

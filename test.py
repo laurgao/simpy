@@ -1,11 +1,15 @@
 from fractions import Fraction
 
-from expr import pi, symbols
-from integration import *
+import numpy as np
+
 from khan_academy import (more_test, test_arcsin, test_ex,
                           test_expanding_big_power, test_partial_fractions,
                           test_polynomial_div_integrals, test_sec2x_tan2x,
                           test_xcosx)
+from src.simpy.expr import *
+from src.simpy.integration import *
+from src.simpy.polynomial import to_const_polynomial
+from src.simpy.transforms import PolynomialDivision, PullConstant
 from test_expand import test_expand_power
 from test_transforms import test_lecture_example, test_x2_sqrt_1_x3
 from test_utils import assert_eq_plusc, assert_eq_repr
@@ -69,7 +73,7 @@ def test_compound_angle():
     ac_power_integrand = Cos(w * t - phi) * Cos(w * t)
     ac_power_integrand = ac_power_integrand.simplify()
     period = 2 * pi / w
-    ac_power = 1 / period * Integration.integrate(ac_power_integrand, (t, 0, period))
+    ac_power = 1 / period * integrate(ac_power_integrand, (t, 0, period))
     ac_power = ac_power.simplify()
 
     expected = Cos(phi) / 2
@@ -80,7 +84,7 @@ def test_sin2x():
     # tests the product-to-sum formula
     # Test integral (sin x)^2 = x / 2 - Sin(2x) / 4
     expr = Sin(x) ** 2
-    integral = Integration.integrate(expr, x)
+    integral = integrate(expr, x)
     expected = x / 2 - Sin(2 * x) / 4
     assert_eq_plusc(integral, expected)
 
@@ -89,14 +93,14 @@ def test_cos2x():
     # tests the product-to-sum formula
     # Test integral (cos x)^2 = Sin(2x) / 4 + x / 2
     expr = Cos(x) ** 2
-    integral = Integration.integrate(expr, x)
+    integral = integrate(expr, x)
     expected = Sin(2 * x) / 4 + x / 2
     assert_eq_plusc(integral, expected)
 
 def test_linear_usub_with_multiple_subs():
     # Last I checked, this fails without LinearUSub
     integrand = Sin(2*x) / Cos(2*x)
-    integral = Integration.integrate(integrand, x)
+    integral = integrate(integrand, x)
     expected = -Log(Cos(2*x))/2
     assert_eq_plusc(integral, expected)
 
@@ -196,16 +200,16 @@ if __name__ == "__main__":
     assert_eq_plusc(Log(x).diff(x), 1 / x)
 
     # Basic integrals
-    assert_eq_plusc(Integration.integrate(2, (x, 5, 3)), -4)
-    assert_eq_plusc(Integration.integrate(x ** Fraction(7, 3), x), Fraction(3, 10) * x ** Fraction(10,3))
-    assert_eq_plusc(Integration.integrate(3 * x**2 - 2 * x, x), x**3 - x**2)
-    assert_eq_plusc(Integration.integrate((x + 1) ** 2, x), x + x**2 + (x**3 / 3))
+    assert_eq_plusc(integrate(2, (x, 5, 3)), -4)
+    assert_eq_plusc(integrate(x ** Fraction(7, 3), x), Fraction(3, 10) * x ** Fraction(10,3))
+    assert_eq_plusc(integrate(3 * x**2 - 2 * x, x), x**3 - x**2)
+    assert_eq_plusc(integrate((x + 1) ** 2, x), x + x**2 + (x**3 / 3))
 
-    assert_eq_plusc(Integration.integrate(x ** 12, x), x ** 13 / 13)
-    assert_eq_plusc(Integration.integrate(1 / x, x), Log(x))
-    assert_eq_plusc(Integration.integrate(1 / x, (x, 1, 2)), Log(2))
-    assert_eq_plusc(Integration.integrate(y, x), x * y)
-    assert_eq_plusc(Integration.integrate(Tan(y), x), x * Tan(y))
+    assert_eq_plusc(integrate(x ** 12, x), x ** 13 / 13)
+    assert_eq_plusc(integrate(1 / x, x), Log(x))
+    assert_eq_plusc(integrate(1 / x, (x, 1, 2)), Log(2))
+    assert_eq_plusc(integrate(y, x), x * y)
+    assert_eq_plusc(integrate(Tan(y), x), x * Tan(y))
 
     assert nesting(x**2, x) == 2
     assert nesting(x * y**2, x) == 2
@@ -254,7 +258,7 @@ if __name__ == "__main__":
     # This integral can either be sin^2(wt) / 2w or -cos^2(wt) / 2w depending on the method used to solve it
     w, t = symbols("w t")
     expr = Sin(w * t) * Cos(w * t)
-    integral = Integration.integrate(expr, t)
+    integral = integrate(expr, t)
     expected = (Sin(w * t) ** 2 / (2 * w)).simplify()
     expected2 = (-Cos(w * t) ** 2/ (2 * w)).simplify()
     assert repr(integral) == repr(expected) or repr(integral) == repr(expected2) # temp patch
@@ -285,7 +289,7 @@ if __name__ == "__main__":
     more_test()
 
     integrand = Log(x + 6) / x**2
-    integral = Integration.integrate(integrand, x)
+    integral = integrate(integrand, x)
     expected = Log(x) / 6 - Log(x + 6) / x - Log(x+6) / 6
     assert_eq_plusc(integral, expected)
     

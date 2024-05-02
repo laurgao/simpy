@@ -13,7 +13,7 @@ from fractions import Fraction
 from functools import cmp_to_key, reduce
 from typing import Callable, Dict, List, Literal, Optional, Tuple, Union
 
-from combinatorics import generate_permutations, multinomial_coefficient
+from .combinatorics import generate_permutations, multinomial_coefficient
 
 
 def nesting(expr: "Expr", var: Optional["Symbol"] = None) -> int:

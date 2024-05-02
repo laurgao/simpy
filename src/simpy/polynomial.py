@@ -1,6 +1,6 @@
 import numpy as np
 
-from expr import *
+from .expr import *
 
 Polynomial = np.ndarray  # has to be 1-D array
 

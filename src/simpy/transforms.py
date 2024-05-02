@@ -2,20 +2,20 @@
 
 import random
 import string
-import warnings
 from abc import ABC, abstractmethod
 from dataclasses import dataclass
 from fractions import Fraction
 from typing import Callable, Dict, List, Literal, Optional, Tuple, Union
 
-import linalg
 import numpy as np
-from expr import (ArcCos, ArcSin, ArcTan, Const, Cos, Cot, Csc, Expr, Log,
-                  Number, Power, Prod, Sec, Sin, SingleFunc, Sum, Symbol, Tan,
-                  TrigFunction, cast, contains_cls, count, deconstruct_power,
-                  e, nesting, sqrt, symbols)
-from polynomial import (Polynomial, polynomial_to_expr, rid_ending_zeros,
-                        to_const_polynomial)
+
+from .expr import (ArcCos, ArcSin, ArcTan, Const, Cos, Cot, Csc, Expr, Log,
+                   Number, Power, Prod, Sec, Sin, SingleFunc, Sum, Symbol, Tan,
+                   TrigFunction, cast, contains_cls, count, deconstruct_power,
+                   e, nesting, sqrt, symbols)
+from .linalg import invert
+from .polynomial import (Polynomial, polynomial_to_expr, rid_ending_zeros,
+                         to_const_polynomial)
 
 ExprFn = Callable[[Expr], Expr]
 Number_ = Union[Fraction, int]
@@ -819,7 +819,7 @@ class PartialFractions(Transform):
         d2_list = to_const_polynomial(d2, node.var)
 
         matrix = np.array([d2_list, d1_list]).T
-        inv = linalg.invert(matrix)
+        inv = invert(matrix)
         if inv is None:
             return False
         if numerator_list.size == 1:
