@@ -22,3 +22,15 @@ def assert_eq_repr(a: Expr, b: Expr):
     if b.expandable():
         b = b.expand()
     assert repr(a) == repr(b), f"a != b, {a} != {b}"
+
+
+def unhashable_set_eq(a: list, b: list) -> bool:
+    """Does equivalent of set(a) == set(b) but for lists containing unhashable types
+    """
+    for el in a:
+        if el not in b:
+            return False
+    for el in b:
+        if el not in a:
+            return False
+    return True

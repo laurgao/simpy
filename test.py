@@ -12,7 +12,7 @@ from src.simpy.polynomial import to_const_polynomial
 from src.simpy.transforms import PolynomialDivision, PullConstant
 from test_expand import test_expand_power
 from test_transforms import test_lecture_example, test_x2_sqrt_1_x3
-from test_utils import assert_eq_plusc, assert_eq_repr
+from test_utils import assert_eq_plusc, assert_eq_repr, unhashable_set_eq
 
 
 def test_to_polynomial():
@@ -180,6 +180,11 @@ if __name__ == "__main__":
     assert_eq_repr(sqrt(4), 2)
     assert_eq_repr(sqrt(x**2), x)
     assert sqrt(3).__repr__() == "sqrt(3)"
+
+    # Test nested flatten
+    expr = x ** 5 + ((3 + x) + 2 * y)
+    expected_terms = [x **5, 3, x, 2 * y]
+    assert unhashable_set_eq(expr.terms, expected_terms)
 
     # Expand test
     # make sure an expandable denominator gets expanded

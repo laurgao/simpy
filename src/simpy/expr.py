@@ -188,28 +188,24 @@ class Associative:
     terms: List[Expr]
 
     def __post_init__(self):
-        self._flatten_inplace()
-        self._sort_inplace()
+        self._flatten()
+        self._sort()
 
-    def _flatten(self) -> "Associative":
+    def _flatten(self) -> None:
+        # no need to flatten in simplify because we can then always assume ALL Prod and Sum class objects are flattened
         new_terms = []
         for t in self.terms:
-            new_terms += t._flatten().terms if isinstance(t, self.__class__) else [t]
-        return self.__class__(new_terms)
-
-    def _flatten_inplace(self) -> None:
-        # TODO: eventually convert all flattens to inplace?
-        # and get rid of the _flatten method
-        # no need to do it in simplify because we can then always assume ALL Prod and Sum class objects are flattened
-        new_terms = []
-        for t in self.terms:
-            new_terms += t._flatten().terms if isinstance(t, self.__class__) else [t]
+            if isinstance(t, self.__class__):
+                t._flatten()
+                new_terms += t.terms
+            else:
+                new_terms += [t]
         self.terms = new_terms
 
     def children(self) -> List["Expr"]:
         return self.terms
 
-    def _sort_inplace(self) -> "Associative":
+    def _sort(self) -> None:
         def _compare(a: Expr, b: Expr) -> int:
             """Returns -1 if a < b, 0 if a == b, 1 if a > b.
             The idea is you sort first by nesting, then by power, then by the term alphabetical
