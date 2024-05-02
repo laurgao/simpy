@@ -16,8 +16,9 @@ from .expr import (ArcCos, ArcSin, ArcTan, Const, Cos, Cot, Csc, Expr, Log,
 from .linalg import invert
 from .polynomial import (Polynomial, polynomial_to_expr, rid_ending_zeros,
                          to_const_polynomial)
+from .regex import count, replace, replace_class, replace_factory
+from .utils import ExprFn
 
-ExprFn = Callable[[Expr], Expr]
 Number_ = Union[Fraction, int]
 
 
@@ -575,7 +576,7 @@ class CompoundAngle(Transform):
             elif isinstance(expr, Cos):
                 return Cos(a) * Cos(b) - Sin(a) * Sin(b)
 
-        new_integrand = _replace_factory(condition, _perform)(node.expr)
+        new_integrand = replace_factory(condition, _perform)(node.expr)
 
         node.children.append(Node(new_integrand, node.var, self, node))
 
@@ -868,35 +869,20 @@ class GenericUSub(Transform):
             node.solution, node.var, self._variable_change
         ).simplify()
 
+class CompleteTheSquare:
+    def check(self, Node) -> bool:
+        # Completing the square is only useful if you can do InverseTrigUSub after it. 
+        pass
+
+    def forward(self, node: Node) -> bool:
+        pass
+
 
 def _remove_const_factor(expr: Expr) -> Expr:
     if isinstance(expr, Prod):
         return Prod([t for t in expr.terms if not isinstance(t, Number)])
     return expr
 
-
-def _replace_factory(condition: Callable[[Expr], bool], perform: ExprFn) -> ExprFn:
-    def _replace(expr: Expr) -> Expr:
-        if condition(expr):
-            return perform(expr)
-
-        # find all instances of old in expr and replace with new
-        if isinstance(expr, Sum):
-            return Sum([_replace(e) for e in expr.terms])
-        if isinstance(expr, Prod):
-            return Prod([_replace(e) for e in expr.terms])
-        if isinstance(expr, Power):
-            return Power(base=_replace(expr.base), exponent=_replace(expr.exponent))
-        # i love recursion
-        if isinstance(expr, SingleFunc):
-            return expr.__class__(_replace(expr.inner))
-
-        if isinstance(expr, Const):
-            return expr
-        if isinstance(expr, Symbol):
-            return expr
-
-    return _replace
 
 
 # Leave RewriteTrig, InverseTrigUSub near the end bc they are deprioritized
@@ -931,58 +917,6 @@ def generate_intermediate_var() -> Symbol:
     return symbols(f"u_{random_id(10)}")
 
 
-def replace(expr: Expr, old: Expr, new: Expr) -> Expr:
-    if isinstance(expr, old.__class__) and expr == old:
-        return new
-
-    # find all instances of old in expr and replace with new
-    if isinstance(expr, Sum):
-        return Sum([replace(e, old, new) for e in expr.terms])
-    if isinstance(expr, Prod):
-        return Prod([replace(e, old, new) for e in expr.terms])
-    if isinstance(expr, Power):
-        return Power(
-            base=replace(expr.base, old, new), exponent=replace(expr.exponent, old, new)
-        )
-    # i love recursion
-    if isinstance(expr, SingleFunc):
-        return expr.__class__(replace(expr.inner, old, new))
-
-    if isinstance(expr, Number):
-        return expr
-    if isinstance(expr, Symbol):
-        return expr
-
-    raise NotImplementedError(f"replace not implemented for {expr.__class__.__name__}")
-
-
-# cls here has to be a subclass of singlefunc
-def replace_class(expr: Expr, cls: list, newfunc: List[Callable[[Expr], Expr]]) -> Expr:
-    assert all(issubclass(cl, SingleFunc) for cl in cls), "cls must subclass SingleFunc"
-    if isinstance(expr, Sum):
-        return Sum([replace_class(e, cls, newfunc) for e in expr.terms])
-    if isinstance(expr, Prod):
-        return Prod([replace_class(e, cls, newfunc) for e in expr.terms])
-    if isinstance(expr, Power):
-        return Power(
-            base=replace_class(expr.base, cls, newfunc),
-            exponent=replace_class(expr.exponent, cls, newfunc),
-        )
-    if isinstance(expr, SingleFunc):
-        new_inner = replace_class(expr.inner, cls, newfunc)
-        for i, cl in enumerate(cls):
-            if isinstance(expr, cl):
-                return newfunc[i](new_inner)
-        return expr.__class__(new_inner)
-
-    if isinstance(expr, Const):
-        return expr
-    if isinstance(expr, Symbol):
-        return expr
-
-    raise NotImplementedError(
-        f"replace_class not implemented for {expr.__class__.__name__}"
-    )
 
 STANDARD_TRIG_INTEGRALS: Dict[str, ExprFn] = {
     "sin(x)": lambda x: -Cos(x),

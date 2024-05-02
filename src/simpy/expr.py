@@ -1269,10 +1269,3 @@ def contains_cls(expr: Expr, cls) -> bool:
         return True
 
     return any([contains_cls(e, cls) for e in expr.children()])
-
-
-@cast
-def count(expr: Expr, query: Expr) -> int:
-    if isinstance(expr, query.__class__) and expr == query:
-        return 1
-    return sum(count(e, query) for e in expr.children())
