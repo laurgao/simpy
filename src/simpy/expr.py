@@ -206,17 +206,44 @@ class Associative:
         return self.terms
 
     def _sort(self) -> None:
+        def _remove_const_factor(expr: Expr) -> Expr:
+            # put this in utils eventually if it's commonly used
+            if isinstance(expr, Prod):
+                new_terms = [t for t in expr.terms if len(t.symbols()) > 0]
+                # simplifying manually because don't wanna invoke the recursive stuff by calling
+                # simplify
+                if len(new_terms) == 0:
+                    return Const(1)
+                if len(new_terms) == 1:
+                    return new_terms[0]
+                return Prod(new_terms)
+            return expr
+
+        def _nesting(expr: "Expr") -> int:
+            """Like the public nesting except constant multipliers don't count
+            to prevent fucky reprs for things like 
+            1 + x^3 + 3*x^2
+            """
+            expr = _remove_const_factor(expr)
+            if isinstance(expr, Symbol):
+                return 1
+            if len(expr.symbols()) == 0:
+                return 0
+            return 1 + max(nesting(sub_expr) for sub_expr in expr.children())
+
+
         def _compare(a: Expr, b: Expr) -> int:
             """Returns -1 if a < b, 0 if a == b, 1 if a > b.
             The idea is you sort first by nesting, then by power, then by the term alphabetical
             """
 
             def _deconstruct_const_power(expr: Expr) -> Const:
+                expr = _remove_const_factor(expr)
                 if isinstance(expr, Power) and isinstance(expr.exponent, Const):
                     return expr.exponent
                 return Const(1)
 
-            n = nesting(a) - nesting(b)
+            n = _nesting(a) - _nesting(b)
             if n != 0:
                 return n
             power = (
@@ -227,7 +254,6 @@ class Associative:
             return 1 if a.__repr__() > b.__repr__() else -1
 
         key = cmp_to_key(_compare)
-
         self.terms = sorted(self.terms, key=key)
 
     @abstractmethod
@@ -1071,23 +1097,22 @@ class TrigFunction(SingleFunc):
 
 
 class Sin(TrigFunction):
-    _special_values = {
-        "0": Const(0),
-        "1/4": 1/sqrt(2),
-        "1/3": sqrt(3)/2,
-        "1/2": Const(1),
-        "2/3": 1/sqrt(2),
-        "3/4": sqrt(3)/2,
-        "1": Const(0),
-        "5/4": -1/sqrt(2),
-        "4/3": -sqrt(3)/2,
-        "3/2": -Const(1),
-        "5/3": -1/sqrt(2),
-        "7/4": -sqrt(3)/2,
-    }
-
     def __init__(self, inner):
         super().__init__(inner, function="sin")
+        self._special_values = {
+            "0": Const(0),
+            "1/4": 1/sqrt(2),
+            "1/3": sqrt(3)/2,
+            "1/2": Const(1),
+            "2/3": 1/sqrt(2),
+            "3/4": sqrt(3)/2,
+            "1": Const(0),
+            "5/4": -1/sqrt(2),
+            "4/3": -sqrt(3)/2,
+            "3/2": -Const(1),
+            "5/3": -1/sqrt(2),
+            "7/4": -sqrt(3)/2,
+        }
 
     def diff(self, var) -> Expr:
         return Cos(self.inner) * self.inner.diff(var)
@@ -1111,22 +1136,22 @@ class Sin(TrigFunction):
 
 
 class Cos(TrigFunction):
-    _special_values = {
-        "0": Const(1),
-        "1/4": 1/sqrt(2),
-        "1/3": Fraction(1,2),
-        "1/2": Const(0),
-        "2/3": -Fraction(1, 2),
-        "3/4": -1/sqrt(2),
-        "1": Const(-1),
-        "5/4": -1/sqrt(2),
-        "4/3": -Fraction(1,2),
-        "3/2": -Const(0),
-        "5/3": Fraction(1,2),
-        "7/4": 1/sqrt(2),
-    }
     def __init__(self, inner):
         super().__init__(inner, function="cos")
+        self._special_values = {
+            "0": Const(1),
+            "1/4": 1/sqrt(2),
+            "1/3": Fraction(1,2),
+            "1/2": Const(0),
+            "2/3": -Fraction(1, 2),
+            "3/4": -1/sqrt(2),
+            "1": Const(-1),
+            "5/4": -1/sqrt(2),
+            "4/3": -Fraction(1,2),
+            "3/2": -Const(0),
+            "5/3": Fraction(1,2),
+            "7/4": 1/sqrt(2),
+        }
 
     def diff(self, var) -> Expr:
         return -Sin(self.inner) * self.inner.diff(var)

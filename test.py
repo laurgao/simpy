@@ -259,6 +259,9 @@ if __name__ == "__main__":
     # make sure consts show up before pi
     assert repr((pi * 2).simplify()) == "2*pi"
     assert repr((pi * -2).simplify()) == "-2*pi"
+    # make sure polynomials show up in the correct order
+    poly = x ** 5 + 3 * x ** 4 / 2 + x ** 2 + 2 * x + 3
+    assert repr(poly) == "3 + 2*x + x^2 + (3*x^4)/2 + x^5"
 
     # This integral can either be sin^2(wt) / 2w or -cos^2(wt) / 2w depending on the method used to solve it
     w, t = symbols("w t")
