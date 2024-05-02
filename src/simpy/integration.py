@@ -95,14 +95,47 @@ def _get_node_with_best_nesting(
 @cast
 def integrate(
     expr: Expr,
-    bounds: Union[Symbol, Tuple[Symbol, Const, Const]],
+    bounds: Optional[Union[Symbol, Tuple[Expr, Expr], Tuple[Symbol, Expr, Expr]]] = None,
     verbose: bool = False,
-) -> Expr:
-    """Returns None if the integral cannot be solved."""
-    if type(bounds) == tuple:
+) -> Optional[Expr]:
+    """
+    Args:
+        expr: the integrand
+        bounds: (var, a, b) where var is the variable of integration and a, b are the integration bounds.
+            can omit var if integrand contains exactly one symbol. omit a, b for an indefinite integral.
+        verbose: prints the integration tree + enables the python debugger right before returning.
+            you can use the python debugger to trace back the integration tree & find out what went wrong.
+            if you don't know what this means, don't worry about it -- this is mostly for developers and
+            particularly nerdy adventurers.
+
+        Examples of valid uses:
+            integrate(x**2)
+            integrate(x*y, x)
+            integrate(3*x + Tan(x), (2, pi))
+            integrate(x*y+3*x, (x, 3, 4))
+    
+    Returns:
+        The solution to the integral.
+        None if the integral cannot be solved.
+    """
+    # If variable of integration isn't specified, set it.
+    if bounds is None:
+        vars = expr.symbols()
+        if len(vars) != 1:
+            raise ValueError(f"Please specify the variable of integration for {expr}")
+        bounds = vars[0]
+    elif isinstance(bounds, tuple) and len(bounds) == 2:
+        vars = expr.symbols()
+        if len(vars) != 1:
+            raise ValueError(f"Please specify the variable of integration for {expr}")
+        bounds = (vars[0], bounds[0], bounds[1])
+
+    if isinstance(bounds, Symbol):
+        return Integration._integrate(expr, bounds, verbose)
+    if isinstance(bounds, tuple):
         return Integration._integrate_bounds(expr, bounds, verbose)
     else:
-        return Integration._integrate(expr, bounds, verbose)
+        raise ValueError(f"Invalid bounds: {bounds}")
 
 
 class Integration:
@@ -111,7 +144,7 @@ class Integration:
     """
 
     def _integrate_bounds(
-        expr: Expr, bounds: Tuple[Symbol, Const, Const], verbose: bool
+        expr: Expr, bounds: Tuple[Symbol, Expr, Expr], verbose: bool
     ) -> Expr:
         x, a, b = bounds
         integral = Integration._integrate(expr, bounds[0], verbose)
@@ -136,8 +169,10 @@ class Integration:
                 curr_node = answer
 
         if root.is_failed:
-            breakpoint()
             warnings.warn(f"Failed to integrate {integrand} wrt {var}")
+            if verbose:
+                _print_tree(root)
+                breakpoint()
             return None
 
         # now we have a solved tree or a failed tree
@@ -160,6 +195,7 @@ class Integration:
 
         if verbose:
             _print_success_tree(root)
+            breakpoint()
         return root.solution.simplify()
 
 
