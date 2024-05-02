@@ -396,8 +396,8 @@ class InverseTrigUSub(Transform):
 
     # {label: class, search query, dy_dx, variable_change}
     _table: Dict[str, Tuple[ExprFn, Callable[[str], str], ExprFn, ExprFn]] = {
-        "sin": (Sin, lambda name: f"1 - {name}^2", lambda var: Cos(var), ArcSin),
-        "tan": (Tan, lambda name: f"1 + {name}^2", lambda var: Sec(var) ** 2, ArcTan),
+        "sin": (Sin, lambda symbol: 1 - symbol ** 2, lambda var: Cos(var), ArcSin),
+        "tan": (Tan, lambda symbol: 1 + symbol ** 2, lambda var: Sec(var) ** 2, ArcTan),
     }
 
     def forward(self, node: Node):
@@ -417,8 +417,8 @@ class InverseTrigUSub(Transform):
             return False
 
         for k, v in self._table.items():
-            query = v[1]
-            if query(node.var.name) in node.expr.__repr__():
+            query = v[1](node.var)
+            if count(node.expr, query) > 0 or count(node.expr, (query * -1).simplify()) > 0:
                 self._key = k
                 return True
 
