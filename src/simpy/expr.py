@@ -871,6 +871,17 @@ class Power(Expr):
                 return Const(b.value**x.value)
             except:
                 pass
+            
+            # if x < 0, flip num and denom and simplify the power.
+            # ex 36 ** (-1/2) cannot be a const
+            # but 1/36 ** (1/2) can be a const.
+            if x < 0:
+                n = b.value.denominator
+                d = b.value.numerator
+                new_base = Const(Fraction(n, d))
+                return Power(new_base, x.abs()).simplify()
+
+            # Raise num/denom to the power seperately
             if b.value.denominator == 1:
                 return Power(b, x)
             num = None
