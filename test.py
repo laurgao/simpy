@@ -292,5 +292,10 @@ if __name__ == "__main__":
     integral = integrate(integrand, x)
     expected = Log(x) / 6 - Log(x + 6) / x - Log(x+6) / 6
     assert_eq_plusc(integral, expected)
+
+    # without the string search fix on InverseTrigUSub, this returns a wrong answer.
+    integrand = sqrt(x ** 2 + 11)
+    ans = integrate(integrand, x)
+    assert ans is None
     
     print("passed")
