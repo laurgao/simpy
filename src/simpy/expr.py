@@ -1155,14 +1155,14 @@ class Sin(TrigFunction):
             "1/4": 1/sqrt(2),
             "1/3": sqrt(3)/2,
             "1/2": Const(1),
-            "2/3": 1/sqrt(2),
-            "3/4": sqrt(3)/2,
+            "2/3": sqrt(3)/2,
+            "3/4": 1/sqrt(2),
             "1": Const(0),
             "5/4": -1/sqrt(2),
             "4/3": -sqrt(3)/2,
             "3/2": -Const(1),
-            "5/3": -1/sqrt(2),
-            "7/4": -sqrt(3)/2,
+            "5/3": -sqrt(3)/2,
+            "7/4": -1/sqrt(2),
         }
 
     def diff(self, var) -> Expr:
