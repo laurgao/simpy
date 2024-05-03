@@ -1104,7 +1104,7 @@ class TrigFunction(SingleFunc):
     is_inverse: bool = False
     reciprocal_class = None
 
-    _SPECIAL_KEYS = ["0", "1/4", "1/3", "1/2", "2/3", "3/4", "1", "5/4", "4/3", "3/2", "5/3", "7/4"]
+    _SPECIAL_KEYS = ["0", "1/6", "1/4", "1/3", "1/2", "2/3", "3/4", "5/6", "1", "7/6", "5/4", "4/3", "3/2", "5/3", "7/4", "11/6"]
 
     # have to have __init__ here bc if i use @dataclass on TrigFunction
     # repr no longer inherits from SingleFunc
@@ -1153,17 +1153,21 @@ class Sin(TrigFunction):
         super().__init__(inner, function="sin")
         self._special_values = {
             "0": Const(0),
+            "1/6": Const(Fraction(1,2)),
             "1/4": 1/sqrt(2),
             "1/3": sqrt(3)/2,
             "1/2": Const(1),
             "2/3": sqrt(3)/2,
             "3/4": 1/sqrt(2),
+            "5/6": Const(Fraction(1,2)),
             "1": Const(0),
+            "7/6": -Const(Fraction(1,2)),
             "5/4": -1/sqrt(2),
             "4/3": -sqrt(3)/2,
             "3/2": -Const(1),
             "5/3": -sqrt(3)/2,
             "7/4": -1/sqrt(2),
+            "11/6": -Const(Fraction(1,2)),
         }
 
     def diff(self, var) -> Expr:
@@ -1192,17 +1196,21 @@ class Cos(TrigFunction):
         super().__init__(inner, function="cos")
         self._special_values = {
             "0": Const(1),
+            "1/6": sqrt(3)/2,
             "1/4": 1/sqrt(2),
-            "1/3": Fraction(1,2),
+            "1/3": Const(Fraction(1,2)),
             "1/2": Const(0),
-            "2/3": -Fraction(1, 2),
+            "2/3": -Const(Fraction(1,2)),
             "3/4": -1/sqrt(2),
+            "5/6": -sqrt(3)/2,
             "1": Const(-1),
+            "7/6": -sqrt(3)/2,
             "5/4": -1/sqrt(2),
-            "4/3": -Fraction(1,2),
+            "4/3": -Const(Fraction(1,2)),
             "3/2": -Const(0),
-            "5/3": Fraction(1,2),
+            "5/3": Const(Fraction(1,2)),
             "7/4": 1/sqrt(2),
+            "11/6": sqrt(3)/2,
         }
 
     def diff(self, var) -> Expr:
