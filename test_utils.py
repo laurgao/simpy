@@ -1,4 +1,4 @@
-from src.simpy.expr import Expr, cast
+from src.simpy.expr import Expr, cast, debug_repr
 
 
 @cast
@@ -22,6 +22,11 @@ def assert_eq_repr(a: Expr, b: Expr):
     if b.expandable():
         b = b.expand()
     assert repr(a) == repr(b), f"a != b, {a} != {b}"
+
+
+@cast
+def assert_eq_repr_strict(a: Expr, b: Expr):
+    assert debug_repr(a) == debug_repr(b), f"STRICT a != b, {a} != {b}"
 
 
 def unhashable_set_eq(a: list, b: list) -> bool:

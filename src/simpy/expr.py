@@ -353,6 +353,19 @@ class E(Number, Expr):
 
     def __eq__(self, other) -> bool:
         return isinstance(other, E)
+    
+
+@dataclass
+class NaN(Number, Expr):
+    @cast
+    def evalf(self, subs: Dict[str, "Const"]):
+        return self
+
+    def __repr__(self) -> str:
+        return "NaN"
+
+    def latex(self) -> str:
+        raise ValueError("Cannot convert NaN to latex")
 
 
 pi = Pi()
@@ -757,7 +770,6 @@ class Prod(Associative, Expr):
 
         # otherwise, bring the constant to the front (if != 1)
         terms = ([] if const == 1 else [Const(const)]) + non_constant_terms
-
         return terms[0] if len(terms) == 1 else Prod(terms)
 
     @cast
@@ -809,6 +821,22 @@ class Prod(Associative, Expr):
         )
 
 
+
+def debug_repr(expr: Expr) -> str:
+    """Not designed to look pretty; designed to show the structure of the expr."""
+    if isinstance(expr, Power):
+        return f'Power({debug_repr(expr.base)}, {debug_repr(expr.exponent)})'
+        # return f'({debug_repr(expr.base)})^{debug_repr(expr.exponent)}'
+    if isinstance(expr, Prod):
+        return "Prod(" + ", ".join([debug_repr(t) for t in expr.terms]) + ")"
+        # return " * ".join([debug_repr(t) for t in expr.terms])
+    if isinstance(expr, Sum):
+        return "Sum(" + ", ".join([debug_repr(t) for t in expr.terms]) + ")"
+        # return " + ".join([debug_repr(t) for t in expr.terms])
+    else:
+        return repr(expr)
+
+
 @dataclass
 class Power(Expr):
     base: Expr
@@ -851,6 +879,8 @@ class Power(Expr):
         b = self.base.simplify()
         if x == 0 and b != 0:
             return Const(1)
+        if x == 0 and b == 0:
+            return NaN()
         if x == 1:
             return b
         if isinstance(b, Const) and isinstance(x, Const):
@@ -858,32 +888,36 @@ class Power(Expr):
                 return Const(b.value**x.value)
             except:
                 pass
-            
-            # if x < 0, flip num and denom and simplify the power.
-            # ex 36 ** (-1/2) cannot be a const
-            # but 1/36 ** (1/2) can be a const.
-            if x < 0:
-                n = b.value.denominator
-                d = b.value.numerator
-                new_base = Const(Fraction(n, d))
-                return Power(new_base, x.abs()).simplify()
 
-            # Raise num/denom to the power seperately
-            if b.value.denominator == 1:
+            if x.value.denominator % 2 == 0 and b.value.numerator < 0:
+                # Cannot be simplified further.
                 return Power(b, x)
-            num = None
-            denom = None
-            try:
-                num = Const(b.value.numerator ** x.value)
-            except:
-                pass
-            try:
-                denom = Const(b.value.denominator ** x.value)
-            except:
-                pass
-            if num is None and denom is None:
+            
+            # check if one of num^exponent or denom^exponent is integer
+            n, d = abs(b.value.numerator), b.value.denominator
+            xv = x.abs().value
+            if x < 0:
+                n, d = d, n
+            isint = lambda a: int(a) == a and a != 1
+            xn = n**xv  # exponentiated numerator
+            xd = d**xv
+            if not isint(xn) and not isint(xd): # Cannot be simplified further
                 return Power(b, x)
-            return (num if num else Power(b.value.numerator, x.value)) / (denom if denom else Power(b.value.denominator, x.value))
+
+            # the answer will be a product
+            terms = []
+            if isint(xn):
+                terms.append(Const(xn))
+                terms.append(Power(d, -xv))
+            else:
+                # isint(xd)
+                terms.append(Const(Fraction(1, int(xd))))
+                terms.append(Power(n, xv))
+            if b.value.numerator < 0:
+                terms.append(Const(-1))
+            
+            return Prod(terms).simplify()
+             
 
         if isinstance(b, Power):
             return Power(b.base, x * b.exponent).simplify()

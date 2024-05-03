@@ -14,7 +14,8 @@ from src.simpy.transforms import (CompleteTheSquare, PolynomialDivision,
                                   PullConstant)
 from test_expand import test_expand_power
 from test_transforms import test_lecture_example, test_x2_sqrt_1_x3
-from test_utils import assert_eq_plusc, assert_eq_repr, unhashable_set_eq
+from test_utils import (assert_eq_plusc, assert_eq_repr, assert_eq_repr_strict,
+                        unhashable_set_eq)
 
 
 def test_to_polynomial():
@@ -159,6 +160,72 @@ def test_integrate_with_completing_the_square():
     expected = ArcSin((x - 5) / 6)
     assert_eq_plusc(ans, expected)
 
+from src.simpy.expr import debug_repr
+
+
+def test_strict_const_power_simplification():
+    """TBH I feel like I made this overly complicated LOL but whatever we live with this."""
+    half = Const(Fraction(1, 2))
+    neg_half = Const(Fraction(-1, 2))
+
+    # All permutations of (3/4)^(1/2)
+    expr = Power(Const(Fraction(3, 4)), half).simplify()
+    expected = Prod([Power(3, half), half])
+    assert_eq_repr_strict(expr, expected)
+
+    expr = Power(Const(Fraction(4, 3)), half).simplify()
+    expected = Prod([Const(2), Power(3, neg_half)])
+    assert_eq_repr_strict(expr, expected)
+
+    expr = Power(Const(Fraction(3, 4)), neg_half).simplify()
+    expected = Prod([Power(3, neg_half), Const(2)])
+    assert_eq_repr_strict(expr, expected)
+
+    expr = Power(Const(Fraction(4, 3)), neg_half).simplify()
+    expected = Prod([half, Power(3, half)])
+    assert_eq_repr_strict(expr, expected)
+
+    # If the base is negative, it cannot square root.
+    expr = Power(Const(Fraction(-4, 3)), neg_half).simplify()
+    expected = Power(Const(Fraction(-4, 3)), neg_half)
+    assert_eq_repr_strict(expr, expected)
+
+    # but it can cube root
+    expr = Power(Const(Fraction(-8, 3)), Fraction(1,3)).simplify()
+    expected = Prod([Const(-2), Power(3, Fraction(-1,3))])
+    assert_eq_repr_strict(expr, expected)
+
+    # All permutations of (36)^(1/2)
+    expr = Power(Const(Fraction(1, 36)), neg_half).simplify()
+    expected = Const(6)
+    assert_eq_repr_strict(expr, expected)
+
+    expr = Power(Const(36), neg_half).simplify()
+    expected = Const(Fraction(1, 6))
+    assert_eq_repr_strict(expr, expected)
+
+    expr = Power(Const(36), half).simplify()
+    expected = Const(6)
+    assert_eq_repr_strict(expr, expected)
+
+    expr = Power(Const(Fraction(1, 36)), half).simplify()
+    expected = Const(Fraction(1, 6))
+    assert_eq_repr_strict(expr, expected)
+
+    # Nothing should happen when it's unsimplifiable
+    # (this might change in the future bc maybe i want standards for frac^(neg x) vs reciprocal_frac^abs(neg x))
+    expr = Power(Const(2), neg_half).simplify()
+    expected = Power(Const(2), neg_half)
+    assert_eq_repr_strict(expr, expected)
+
+    # This is the expression that caused me problems!!
+    # When I was doing it wrong (raising numerator/denominator of Fraction to exponent seperately even when it was 1),
+    # Power(Power(2, 1/2), -1) gets simplified to Prod(Power(Power(2, 1/2), -1), 1)
+    # Which is the most bullshit ever.
+    expr = Power(Power(Const(2), half), -1)
+    simp = expr.simplify()
+    expected = Power(Const(2), neg_half)
+    assert_eq_repr_strict(simp, expected)
 
 if __name__ == "__main__":
     x, y = symbols("x y")
@@ -199,6 +266,7 @@ if __name__ == "__main__":
     assert_eq_repr(sqrt(4), 2)
     assert_eq_repr(sqrt(x**2), x)
     assert sqrt(3).__repr__() == "sqrt(3)"
+    test_strict_const_power_simplification()
 
     # Test nested flatten
     expr = x ** 5 + ((3 + x) + 2 * y)
