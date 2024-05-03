@@ -25,13 +25,6 @@ def test_to_polynomial():
     assert np.array_equal(to_const_polynomial(expr, x), np.array([Const(0), Const(6), Const(1)]))
 
 
-def test_factor():
-    x = symbols("x")
-    expr = 6 * x + x **2 
-    expected = x * (x + 6)
-    assert expr.factor() == expected
-
-
 def test_polynomial_division():
     expr = x**4 * (1 + x**2) ** -1
 
@@ -54,6 +47,13 @@ def test_polynomial_division():
 
 
 def test_factor():
+    # Simple example
+    x = symbols("x")
+    expr = 6 * x + x **2 
+    expected = x * (x + 6)
+    assert expr.factor() == expected
+
+    # More complex example
     c3, r3, c4, r4, a, b = symbols("c_3 r_3 c_4 r_4 a b")
 
     em_hw_expr = (
@@ -142,8 +142,8 @@ def test_factor_const():
 def test_product_combine_like_terms():
     # this wasnt working bc the denominator "power" wasn't flattening in simplification.
     expr = (2*Sin(x)*Cos(x)**2)/(Sin(x)*Cos(x)**2)
-    expr = expr.simplify()
-    assert expr == 2
+    simp = expr.simplify()
+    assert simp == 2, f"expected 2, got {simp} // debug repr: {debug_repr(simp)}"
 
 
 def test_complete_the_square():

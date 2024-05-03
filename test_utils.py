@@ -10,7 +10,8 @@ def assert_eq_plusc(a: Expr, b: Expr):
         xs = xs.expand()
     if ys.expandable():
         ys = ys.expand()
-    diff = (xs + ys).expand().simplify()
+    diff = xs + ys
+    diff = diff.expand().simplify() if diff.expandable() else diff.simplify()
     assert len(diff.symbols()) == 0, f"diff = {diff}"
 
 @cast

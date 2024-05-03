@@ -76,9 +76,8 @@ def cast(func):
 class Expr(ABC):
     def __post_init__(self):
         # if any field is an Expr, cast it
-        # note: does not cast List[Expr]
         for field in fields(self):
-            if field.type is Expr:
+            if field.type is Expr or field.type is List[Expr]:
                 setattr(self, field.name, _cast(getattr(self, field.name)))
 
     # should be overwritten in subclasses
@@ -144,7 +143,11 @@ class Expr(ABC):
 
     # overload if necessary
     def expand(self) -> "Expr":
-        raise NotImplementedError(f"Cannot expand {self}")
+        """Subclasses: this function should rase AssertionError if self.expandable() is false.
+        """
+        if self.expandable():
+            raise NotImplementedError(f"Expansion of {self} not implemented")
+        raise AssertionError(f"Cannot expand {self}")
 
     @cast
     @abstractmethod
@@ -192,6 +195,10 @@ class Associative:
     terms: List[Expr]
 
     def __post_init__(self):
+        # Calls super because: If we have Sum(Associative, Expr) and Sum.__post_init__()
+        # will call Associative.__post_init__(). the super in Associative will call Expr.__post_init__()
+        # (This is according to chatgpt and I haven't confirmed it yet.)
+        super().__post_init__()
         self._flatten()
         self._sort()
 
@@ -279,6 +286,33 @@ class Const(Number, Expr):
     def __repr__(self) -> str:
         return str(self.value)
 
+    ### ADDING THIS for now because in Prod.__post_init__ we're adding coeffs together
+    # w/o simplifying them. so that would just create a bunch of Sum([Const])'s otherwise.
+    @cast
+    def __add__(self, other) -> "Expr":
+        if isinstance(other, Const):
+            return Const(self.value + other.value)
+        return super().__add__(other)
+    
+    @cast
+    def __radd__(self, other) -> "Expr":
+        if isinstance(other, Const):
+            return Const(other.value + self.value)
+        return super().__radd__(other)
+
+    @cast
+    def __sub__(self, other) -> "Expr":
+        if isinstance(other, Const):
+            return Const(self.value - other.value)
+        return super().__sub__(other)
+    
+    @cast
+    def __rsub__(self, other) -> "Expr":
+        if isinstance(other, Const):
+            return Const(other.value - self.value)
+        return super().__rsub__(other)
+    ###
+
     @cast
     def __eq__(self, other):
         return isinstance(other, Const) and self.value == other.value
@@ -319,6 +353,9 @@ class Const(Number, Expr):
 
     def abs(self) -> "Const":
         return Const(abs(self.value))
+
+    def reciprocal(self) -> "Const":
+        return Const(Fraction(self.value.denominator, self.value.numerator))
 
     @cast    
     def __mod__(self, other) -> "Const":
@@ -406,13 +443,15 @@ class Symbol(Expr):
 
 @dataclass
 class Sum(Associative, Expr):
-    def expand(self) -> Expr:
-        return Sum([t.expand() if t.expandable() else t for t in self.terms])
-
-    def simplify(self) -> "Expr":
-        # simplify subexprs and flatten sub-sums
-        terms = [t.simplify() for t in self.terms]
-
+    def __post_init__(self):
+        """When a sum is initiated:
+        - terms are converted to expr 
+        - flatten
+        - accumulate like terms & constants
+        - sort
+        """
+        super().__post_init__()
+        terms = self.terms
         # accumulate all like terms
         new_terms = []
         for i, term in enumerate(terms):
@@ -436,20 +475,30 @@ class Sum(Associative, Expr):
                     new_coeff += coeff2
                     terms[j] = None
 
+            # (sus, maybe don't use simplify here. but it's fine for now since Prod.simplify()
+            # doesn't do much, just returns if it has one term.)
             new_terms.append(Prod([new_coeff] + non_const_factors1).simplify())
 
         # accumulate all constants
         const = sum(t.value for t in new_terms if isinstance(t, Const))
         non_constant_terms = [t for t in new_terms if not isinstance(t, Const)]
-        if const == 0 and len(non_constant_terms) == 0:
-            return Const(0)
+
         final_terms = ([Const(const)] if const != 0 else []) + non_constant_terms
+        if len(final_terms) == 0:
+            final_terms = [Const(0)]
+        
+        self.terms = final_terms
+        self._sort()
 
-        # get rid of 1-term sums
-        if len(final_terms) == 1:
-            return final_terms[0]
+    def expand(self) -> Expr:
+        assert self.expandable(), f"Cannot expand {self}"
+        return Sum([t.expand() if t.expandable() else t for t in self.terms])
 
-        new_sum = Sum(final_terms)
+    def simplify(self) -> "Expr":
+        terms = [t.simplify() for t in self.terms]
+        if len(terms) == 1:
+            return terms[0]
+        new_sum = Sum(terms)
 
         if contains_cls(new_sum, TrigFunction):
             # I WANT TO DO IT so that it's more robust.
@@ -645,6 +694,57 @@ def deconstruct_power(expr: Expr) -> Tuple[Expr, Const]:
 
 @dataclass
 class Prod(Associative, Expr):
+    def __post_init__(self):
+        super().__post_init__()
+        # accumulate all like terms
+        terms = []
+        for i, term in enumerate(self.terms):
+            # Accumulate constants seperately.
+            if isinstance(term, Const):
+                terms.append(term)
+                continue
+
+            if term is None:
+                continue
+
+            base, expo = deconstruct_power(term)
+
+            # other terms with same base
+            for j in range(i + 1, len(self.terms)):
+                if self.terms[j] is None:
+                    continue
+                other = self.terms[j]
+                base2, expo2 = deconstruct_power(other)
+                if base2 == base:  # TODO: real expr equality
+                    expo += expo2
+                    self.terms[j] = None
+            
+            # Decision: if exponent here is 0, we don't include it.
+            # We don't wait for simplify to remove it.
+            if expo == 0:
+                continue
+            terms.append(Power(base, expo) if expo != 1 else base)
+        
+        # accumulate constants to the front
+        const = reduce(
+            lambda x, y: x * y, [t.value for t in terms if isinstance(t, Const)], 1
+        )
+        non_constant_terms = [t for t in terms if not isinstance(t, Const)]
+        terms = ([] if const == 1 else [Const(const)]) + non_constant_terms
+        
+        if len(terms) == 0:
+            terms = [Const(1)]
+        self.terms = terms
+
+
+    def simplify(self) -> "Expr":
+        # simplify subexprs and flatten sub-products
+        new = Prod([t.simplify() for t in self.terms])
+        if any(t == 0 for t in new.terms):
+            return Const(0)
+        return new.terms[0] if len(new.terms) == 1 else new
+
+
     def __repr__(self) -> str:
         def _term_repr(term):
             if isinstance(term, Sum):
@@ -734,49 +834,6 @@ class Prod(Associative, Expr):
     def is_subtraction(self):
         return isinstance(self.terms[0], Const) and self.terms[0].value < 0
 
-    def simplify(self) -> "Expr":
-        # simplify subexprs and flatten sub-products
-        simplified_and_flattened = Prod([t.simplify() for t in self.terms])
-        simplified_terms = simplified_and_flattened.terms
-
-        # accumulate all like terms
-        terms = []
-        for i, term in enumerate(simplified_terms):
-            if term is None:
-                continue
-
-            base, expo = deconstruct_power(term)
-
-            # other terms with same base
-            for j in range(i + 1, len(simplified_terms)):
-                if simplified_terms[j] is None:
-                    continue
-                other = simplified_terms[j]
-                base2, expo2 = deconstruct_power(other)
-                if base2 == base:  # TODO: real expr equality
-                    expo += expo2
-                    simplified_terms[j] = None
-
-            terms.append(Power(base, expo).simplify())
-
-        # Check for zero
-        if any(t == 0 for t in terms):
-            return Const(0)
-
-        # accumulate constants to the front
-        const = reduce(
-            lambda x, y: x * y, [t.value for t in terms if isinstance(t, Const)], 1
-        )
-
-        # return immediately if there are no non constant items
-        non_constant_terms = [t for t in terms if not isinstance(t, Const)]
-        if len(non_constant_terms) == 0:
-            return Const(const)
-
-        # otherwise, bring the constant to the front (if != 1)
-        terms = ([] if const == 1 else [Const(const)]) + non_constant_terms
-        return terms[0] if len(terms) == 1 else Prod(terms)
-
     @cast
     def expandable(self) -> bool:
         # a product is expandable if it contains any sums in the numerator
@@ -790,6 +847,7 @@ class Prod(Associative, Expr):
 
 
     def expand(self):
+        assert self.expandable(), f"Cannot expand {self}"
         # expand sub-expressions
         num, denom = self.numerator_denominator
         if denom.expandable():
@@ -848,6 +906,20 @@ class Power(Expr):
     base: Expr
     exponent: Expr
 
+    def __post_init__(self):
+        super().__post_init__()
+
+        b, x = self.base, self.exponent
+        if isinstance(b, Const) and isinstance(x, Const):
+            # Rewriting for consistency between same values.
+            if b.value.numerator == 1:
+                self.base = b.reciprocal()
+                self.exponent = -x
+            elif b.value.denominator != 1 and x < 0:
+                self.base = b.reciprocal()
+                self.exponent = -x
+
+
     def __repr__(self) -> str:
         isfraction = lambda x: isinstance(x, Const) and x.value.denominator != 1
         def _term_repr(term):
@@ -899,12 +971,6 @@ class Power(Expr):
             except:
                 pass
 
-            # Rewriting for beauty
-            if b.value.numerator == 1:
-                return Power(Const(b.value.denominator), -x).simplify()
-            if b.value.denominator != 1 and x < 0:
-                return Power(Const(Fraction(b.value.denominator, b.value.numerator)), x.abs()).simplify()
-            
             if x.value.denominator % 2 == 0 and b.value.numerator < 0:
                 # Cannot be simplified further.
                 return Power(b, x)
