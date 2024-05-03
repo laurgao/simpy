@@ -375,6 +375,8 @@ if __name__ == "__main__":
     assert (2 / (2 + x)).__repr__() == "2/(2 + x)"
     assert repr(2 * (2 + x) ** (-2)) == repr(2 / (2 + x) ** 2) == "2/(2 + x)^2"
     assert repr(1 / sqrt(1 - x**2)) == "1/sqrt(1 - x^2)"
+    assert repr(sqrt(1/x).simplify()) == "1/sqrt(x)"
+    assert repr(x ** -Fraction(1,2)) == "1/sqrt(x)"
     # make sure denominator is bracketed
     assert repr(Sin(x) / (2 * x)) == "sin(x)/(2*x)"
     # make sure products with negative consts and dividing by consts are treated better

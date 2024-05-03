@@ -859,7 +859,8 @@ class Power(Expr):
         if self.exponent == Const(-1):
             return "1/" + _term_repr(self.base)
         if isinstance(self.exponent, Const) and self.exponent < 0:
-            return "1/" + _term_repr(self.base) + "^" + _term_repr(self.exponent.abs())
+            new_power = Power(self.base, -self.exponent)
+            return "1/" + repr(new_power)
 
         # special case for sqrt
         if self.exponent == Const(Fraction(1, 2)):
