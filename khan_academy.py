@@ -120,3 +120,11 @@ def test_polynomial_div_integrals():
     integrand = (2 * x ** 3 + 4 * x ** 2 - 5)/ (x + 3)
     ans = integrate(integrand, x)
     # TODO: expected = ...
+
+def _assert_integral(integrand, expected):
+    return assert_eq_plusc(integrate(integrand), expected)
+
+def test_complete_the_square_integrals():
+    _assert_integral(1/(3*x**2+6*x+78), ArcTan((1 + x)/5)/15)
+    _assert_integral(1/(x**2-8*x+65), ArcTan((-4 + x)/7)/7)
+    _assert_integral(1/sqrt(-x**2-6*x+40), ArcSin((3 + x)/7))

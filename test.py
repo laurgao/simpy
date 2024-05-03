@@ -2,7 +2,8 @@ from fractions import Fraction
 
 import numpy as np
 
-from khan_academy import (more_test, test_arcsin, test_ex,
+from khan_academy import (more_test, test_arcsin,
+                          test_complete_the_square_integrals, test_ex,
                           test_expanding_big_power, test_partial_fractions,
                           test_polynomial_div_integrals, test_sec2x_tan2x,
                           test_xcosx)
@@ -425,6 +426,7 @@ if __name__ == "__main__":
     test_polynomial_div_integrals()
     more_test()
     test_integrate_with_completing_the_square()
+    test_complete_the_square_integrals()
 
     integrand = Log(x + 6) / x**2
     integral = integrate(integrand, x)

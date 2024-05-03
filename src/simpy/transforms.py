@@ -908,46 +908,19 @@ class GenericUSub(Transform):
 
 
 class CompleteTheSquare(Transform):
-    _has_sin: bool = False
-    _has_tan: bool = False
-
     def check(self, node: Node) -> bool:
         # Completing the square is only useful if you can do InverseTrigUSub after it.
         # So we only look for these two cases:
         # 1 / quadratic
         # 1 / sqrt(quadratic)
-        def condition_tan(expr: Expr) -> bool:
-            if not isinstance(expr, Prod):
+        def condition(expr: Expr) -> bool:
+            # 1 / xyz should be epxressed as a power so i omit prod check
+            if not isinstance(expr, Power):
                 return False
-            n, d = expr.numerator_denominator
-            if n.contains(node.var):
-                return False
-            try:
-                poly = to_const_polynomial(d, node.var)
-            except AssertionError:
-                return False
-            
-            # hmm completing the square could work on non-quadratics in some cases no?
-            # but I'll just limit it to quadratics for now
-            return poly.size == 3 and poly[1] != 0
-            
-        def condition_sin(expr: Expr) -> bool:
-            # 1 / xyz should be epxressed as a power prob so i omit prod check for now
-            # if not isinstance(expr, Prod):
-            #     return False
-            # n, d = expr.numerator_denominator
-            # if n.contains(node.var):
-            #     return False
-            # if not (isinstance(d, Power) and d.exponent == Fraction(1, 2)):
-            #     return False
-            if isinstance(expr, Power):
-                if expr.exponent != Fraction(-1,2):
-                    return False
-                d = expr.base
-            else:
+            if expr.exponent != Fraction(-1,2) and expr.exponent != -1:
                 return False
             try:
-                poly = to_const_polynomial(d, node.var)
+                poly = to_const_polynomial(expr.base, node.var)
             except AssertionError:
                 return False
             
@@ -955,16 +928,14 @@ class CompleteTheSquare(Transform):
             # but I'll just limit it to quadratics for now
             return poly.size == 3 and poly[1] != 0
             # poly[1] = 0 implies that there's no bx term
-            # which means that idk there's no square to complete.
+            # which means that there's no square to complete.
             # the result will just be the same as the original.
     
-        self._has_tan = general_count(node.expr, condition_tan) > 0
-        self._has_sin = general_count(node.expr, condition_sin) > 0
-        return self._has_sin or self._has_tan
+        return general_count(node.expr, condition) > 0
 
 
     def forward(self, node: Node) -> None:
-        # replace all quadratics with their completed the square form
+        # replace all quadratics with their completed-the-square form
         def condition(expr: Expr) -> bool:
             try:
                 poly = to_const_polynomial(expr, node.var)
