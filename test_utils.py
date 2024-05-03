@@ -26,7 +26,8 @@ def assert_eq_repr(a: Expr, b: Expr):
 
 @cast
 def assert_eq_repr_strict(a: Expr, b: Expr):
-    assert debug_repr(a) == debug_repr(b), f"STRICT a != b, {a} != {b}"
+    """Tests that the structure of a and b exprs are the same, not just their reprs"""
+    assert debug_repr(a) == debug_repr(b), f"STRICT a != b, {debug_repr(a)} != {debug_repr(b)}"
 
 
 def unhashable_set_eq(a: list, b: list) -> bool:

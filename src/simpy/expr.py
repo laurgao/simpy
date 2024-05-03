@@ -3,6 +3,10 @@
 1. Exprs shall NOT be mutated in place after __post_init__.
 For example, if I put a Const into a numpy array, I don't want to have to copy it. i can trust that its value stays the same forever.
 
+This currently operates on fractions only. I personally love keeping it rational and precise
+so I don't really mind the lack of float support, but I can see why you'd be annoyed.
+~~but i spent so much time making the fractional arithmetic perfect -- see Power.simplify() for instance
+
 """
 
 import itertools
@@ -273,8 +277,6 @@ class Const(Number, Expr):
             self.value = Fraction(self.value)
 
     def __repr__(self) -> str:
-        if isinstance(self.value, Fraction) and self.value.denominator != 1:
-            return "(" + str(self.value) + ")"
         return str(self.value)
 
     @cast
@@ -296,6 +298,9 @@ class Const(Number, Expr):
     @cast
     def __lt__(self, other):
         return isinstance(other, Const) and self.value < other.value
+    
+    def __neg__(self):
+        return Const(-self.value)
 
     @cast
     def evalf(self, subs: Dict[str, "Const"]):
@@ -823,7 +828,8 @@ class Prod(Associative, Expr):
 
 
 def debug_repr(expr: Expr) -> str:
-    """Not designed to look pretty; designed to show the structure of the expr."""
+    """Not designed to look pretty; designed to show the structure of the expr.
+    """
     if isinstance(expr, Power):
         return f'Power({debug_repr(expr.base)}, {debug_repr(expr.exponent)})'
         # return f'({debug_repr(expr.base)})^{debug_repr(expr.exponent)}'
@@ -843,20 +849,21 @@ class Power(Expr):
     exponent: Expr
 
     def __repr__(self) -> str:
+        isfraction = lambda x: isinstance(x, Const) and x.value.denominator != 1
         def _term_repr(term):
-            if isinstance(term, Sum) or isinstance(term, Prod):
+            if isinstance(term, Sum) or isinstance(term, Prod) or isfraction(term):
                 return "(" + repr(term) + ")"
             return repr(term)
 
-        # special case for reciprocals
+        # represent negative powers as reciprocals
         if self.exponent == Const(-1):
             return "1/" + _term_repr(self.base)
+        if isinstance(self.exponent, Const) and self.exponent < 0:
+            return "1/" + _term_repr(self.base) + "^" + _term_repr(self.exponent.abs())
 
         # special case for sqrt
         if self.exponent == Const(Fraction(1, 2)):
             return _repr(self.base, "sqrt")
-        if self.exponent == Const(Fraction(-1, 2)):
-            return f"1/{_repr(self.base, 'sqrt')}"
 
         return f"{_term_repr(self.base)}^{_term_repr(self.exponent)}"
 
@@ -883,12 +890,20 @@ class Power(Expr):
             return NaN()
         if x == 1:
             return b
+        if b == 1:
+            return Const(1)
         if isinstance(b, Const) and isinstance(x, Const):
             try:
                 return Const(b.value**x.value)
             except:
                 pass
 
+            # Rewriting for beauty
+            if b.value.numerator == 1:
+                return Power(Const(b.value.denominator), -x).simplify()
+            if b.value.denominator != 1 and x < 0:
+                return Power(Const(Fraction(b.value.denominator, b.value.numerator)), x.abs()).simplify()
+            
             if x.value.denominator % 2 == 0 and b.value.numerator < 0:
                 # Cannot be simplified further.
                 return Power(b, x)

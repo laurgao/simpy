@@ -186,14 +186,18 @@ def test_strict_const_power_simplification():
     assert_eq_repr_strict(expr, expected)
 
     # If the base is negative, it cannot square root.
-    expr = Power(Const(Fraction(-4, 3)), neg_half).simplify()
-    expected = Power(Const(Fraction(-4, 3)), neg_half)
+    expr = Power(Const(Fraction(-4, 3)), half).simplify()
+    expected = Power(Const(Fraction(-4, 3)), half)
     assert_eq_repr_strict(expr, expected)
 
     # but it can cube root
     expr = Power(Const(Fraction(-8, 3)), Fraction(1,3)).simplify()
     expected = Prod([Const(-2), Power(3, Fraction(-1,3))])
     assert_eq_repr_strict(expr, expected)
+    expr = Power(Const(Fraction(-8, 3)), Fraction(-1,3)).simplify()
+    expected = Prod([neg_half, Power(3, Fraction(1,3))])
+    assert_eq_repr_strict(expr, expected)
+
 
     # All permutations of (36)^(1/2)
     expr = Power(Const(Fraction(1, 36)), neg_half).simplify()
@@ -226,6 +230,39 @@ def test_strict_const_power_simplification():
     simp = expr.simplify()
     expected = Power(Const(2), neg_half)
     assert_eq_repr_strict(simp, expected)
+
+
+def test_fractional_power_beauty_standards():
+    """Make sure Power(1/a, neg x) simplifies to Power(a, x) --- condition [A]
+    Make sure Power(a/b), neg x simplifies to Power(b/a, x) [B]
+
+    More controversially:
+    Power(1/a, x) should simplify to Power(a, neg x) [C]
+
+    This keeps the repr standard consistent with Power(a, neg x) which is equal.
+    """
+    f53 = Const(Fraction(5, 3))
+    f35 = Const(Fraction(3, 5))
+    half = Const(Fraction(1, 2))
+    neg_half = Const(Fraction(-1, 2))
+
+    assert_eq_repr(f53 ** half, f35 ** neg_half) # [B]
+    assert_eq_repr(f35 ** half, f53 ** neg_half) # [B]
+
+    assert repr(Power(half, neg_half).simplify()) == "sqrt(2)" # [A]
+    assert_eq_repr_strict(Power(half, neg_half).simplify(), Power(Const(2), half)) # [A]
+    f17 = Const(Fraction(1, 7))
+    neg_f17 = Const(Fraction(-1, 7))
+    assert repr(Power(half, neg_f17).simplify()) == "2^(1/7)" # [A]
+    assert repr(Power(f17, neg_f17).simplify()) == "7^(1/7)" # [A]
+
+    # More controversially, [C]:
+    # Both of the following should be represented as 1/3^(1/7)
+    e1 = Power(Const(Fraction(1,3)), f17)
+    e2 = Power(Const(3), neg_f17)
+    assert repr(e1.simplify()) == repr(e2.simplify()) == "1/3^(1/7)"
+    assert_eq_repr_strict(e1.simplify(), e2.simplify())
+
 
 if __name__ == "__main__":
     x, y = symbols("x y")
@@ -267,6 +304,7 @@ if __name__ == "__main__":
     assert_eq_repr(sqrt(x**2), x)
     assert sqrt(3).__repr__() == "sqrt(3)"
     test_strict_const_power_simplification()
+    test_fractional_power_beauty_standards()
 
     # Test nested flatten
     expr = x ** 5 + ((3 + x) + 2 * y)
