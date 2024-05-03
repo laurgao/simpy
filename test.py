@@ -9,7 +9,9 @@ from khan_academy import (more_test, test_arcsin, test_ex,
 from src.simpy.expr import *
 from src.simpy.integration import *
 from src.simpy.polynomial import to_const_polynomial
-from src.simpy.transforms import PolynomialDivision, PullConstant
+from src.simpy.regex import count
+from src.simpy.transforms import (CompleteTheSquare, PolynomialDivision,
+                                  PullConstant)
 from test_expand import test_expand_power
 from test_transforms import test_lecture_example, test_x2_sqrt_1_x3
 from test_utils import assert_eq_plusc, assert_eq_repr, unhashable_set_eq
@@ -140,6 +142,23 @@ def test_product_combine_like_terms():
     expr = (2*Sin(x)*Cos(x)**2)/(Sin(x)*Cos(x)**2)
     expr = expr.simplify()
     assert expr == 2
+
+
+def test_complete_the_square():
+    quadratic = - x ** 2 + 10 * x + 11
+    test_node = Node(quadratic, x)
+    tr = CompleteTheSquare()
+    tr.forward(test_node)
+    ans = test_node.child.expr
+    expected = 36 * (-(x - 5) ** 2  / 36 + 1)
+    assert_eq_repr(ans, expected)
+
+def test_integrate_with_completing_the_square():
+    expr = 1 / sqrt(- x ** 2 + 10 * x + 11)
+    ans = integrate(expr)
+    expected = ArcSin((x - 5) / 6)
+    assert_eq_plusc(ans, expected)
+
 
 if __name__ == "__main__":
     x, y = symbols("x y")
@@ -275,6 +294,8 @@ if __name__ == "__main__":
     test_polynomial_division()
     test_to_polynomial()
 
+    test_complete_the_square()
+
     # ln integral
     assert (x * Log(x) - x).diff(x).simplify() == Log(x)
     ans = Integration._integrate(Log(x), x)
@@ -295,6 +316,7 @@ if __name__ == "__main__":
     test_expanding_big_power()
     test_polynomial_div_integrals()
     more_test()
+    test_integrate_with_completing_the_square()
 
     integrand = Log(x + 6) / x**2
     integral = integrate(integrand, x)

@@ -5,18 +5,18 @@ import string
 from abc import ABC, abstractmethod
 from dataclasses import dataclass
 from fractions import Fraction
-from typing import Callable, Dict, List, Literal, Optional, Tuple, Union
+from typing import Callable, Dict, List, Literal, Optional, Tuple, Type, Union
 
 import numpy as np
 
-from .expr import (ArcCos, ArcSin, ArcTan, Const, Cos, Cot, Csc, Expr, Log,
-                   Number, Power, Prod, Sec, Sin, SingleFunc, Sum, Symbol, Tan,
-                   TrigFunction, cast, contains_cls, count, deconstruct_power,
-                   e, nesting, sqrt, symbols)
+from .expr import (ArcSin, ArcTan, Const, Cos, Cot, Csc, Expr, Log, Power,
+                   Prod, Sec, Sin, Sum, Symbol, Tan, TrigFunction,
+                   contains_cls, remove_const_factor, sqrt, symbols)
 from .linalg import invert
 from .polynomial import (Polynomial, polynomial_to_expr, rid_ending_zeros,
                          to_const_polynomial)
-from .regex import count, replace, replace_class, replace_factory
+from .regex import (count, general_count, replace, replace_class,
+                    replace_factory)
 from .utils import ExprFn
 
 Number_ = Union[Fraction, int]
@@ -135,6 +135,7 @@ class Transform(ABC):
 
     @abstractmethod
     def backward(self, node: Node) -> None:
+        """Subclasses must call super().backward(...) before doing its own logic."""
         if not node.solution:
             raise ValueError("Node has no solution")
 
@@ -495,33 +496,61 @@ class LinearUSub(Transform):
     \int f(ax+b) dx = 1/a \int f(u) du
     """
 
-    _variable_change: Expr = None
+    _variable_change: Expr = None # writes u in terms of x
+    _inverse_var_change: ExprFn = None # this will write x in terms of u
 
     def check(self, node: Node) -> bool:
         if count(node.expr, node.var) < 1: # just to cover our bases bc the later thing assume it appears >=1 
             return False
 
-        def _is_a_linear_sum_or_prod(expr: Expr) -> bool:
+        def _is_a_linear_sum_or_prod(expr: Expr) -> Optional[Tuple[Expr, Optional[ExprFn]]]:
+            """Returns what u should be in terms of x. & None if it's not.
+            """
             if isinstance(expr, Sum):
-                return all(
+                if all(
                     [
                         not c.contains(node.var)
                         or not (c / node.var).simplify().contains(node.var)
                         for c in expr.terms
                     ]
-                )
+                ):
+                    return expr, None
             if isinstance(expr, Prod):
                 # Is a constant multiple of var
-                return not (expr / node.var).simplify().contains(node.var)
-            return False
+                if not (expr / node.var).simplify().contains(node.var):
+                    return expr, None
+                # or is constant multiple of var**const
+                # ex: if we have x**2/36, we want to rewrite it as (x/6)**2 and sub u=x/6
+                # if we have sth like (x+3)**2/36 we will just let the sum catch it and do 2 linearusubs in sequence :shrug:
+                if expr.is_subtraction:
+                    expr = (-expr).simplify()
+                xyz = remove_const_factor(expr)
+                is_const_multiple_of_power = isinstance(xyz, Power) and xyz.base == node.var and not xyz.exponent.contains(node.var)
+                if not is_const_multiple_of_power:
+                    return None
+                coeff = (expr / xyz).simplify()
+                if coeff == Const(1):
+                    return None
+                coeff_abs = coeff.abs() if isinstance(coeff, Const) else coeff
+                inner_coeff = Power(coeff_abs, 1 / xyz.exponent).simplify()
+                return inner_coeff * node.var, lambda u: u / inner_coeff
+            return None
 
         def _check(e: Expr) -> bool:
             if not e.contains(node.var):
                 return True
-            if _is_a_linear_sum_or_prod(e):
+            result = _is_a_linear_sum_or_prod(e)
+            if result is not None:
+                u, u_inverse = result
                 if self._variable_change is not None:
-                    return e == self._variable_change
-                self._variable_change = e
+                    return u == self._variable_change
+                self._variable_change = u
+
+                # If u_inverse exists, set it.
+                # it must be the same as any prev u_inverse because the same u implies the same
+                # u_inverse
+                if u_inverse is not None:
+                    self._inverse_var_change = u_inverse
                 return True
             if not e.children():
                 # This must mean that we contain the var and it has no children, which means that we are the var.
@@ -535,7 +564,15 @@ class LinearUSub(Transform):
     def forward(self, node: Node) -> None:
         intermediate = generate_intermediate_var()
         du_dx = self._variable_change.diff(node.var)
-        new_integrand = replace(node.expr, self._variable_change, intermediate) / du_dx
+
+        # We have to account for the case where self._variable_change doesn't appear directly
+        # in the integrand.
+        if self._inverse_var_change is not None:
+            new = self._inverse_var_change(intermediate)
+            new_integrand = replace(node.expr, node.var, new)
+        else:
+            new_integrand = replace(node.expr, self._variable_change, intermediate)
+        new_integrand /= du_dx
         new_integrand = new_integrand.simplify()
         node.children.append(Node(new_integrand, intermediate, self, node))
 
@@ -846,7 +883,7 @@ class GenericUSub(Transform):
             integral = _check_if_solveable(term, node.var)
             if integral is None:
                 continue
-            integral = _remove_const_factor(integral)
+            integral = remove_const_factor(integral)
             # assume term appears only once in integrand
             # because node.expr is simplified
             rest = Prod(node.expr.terms[:i] + node.expr.terms[i+1:])
@@ -869,25 +906,95 @@ class GenericUSub(Transform):
             node.solution, node.var, self._variable_change
         ).simplify()
 
-class CompleteTheSquare:
-    def check(self, Node) -> bool:
-        # Completing the square is only useful if you can do InverseTrigUSub after it. 
-        pass
 
-    def forward(self, node: Node) -> bool:
-        pass
+class CompleteTheSquare(Transform):
+    _has_sin: bool = False
+    _has_tan: bool = False
+
+    def check(self, node: Node) -> bool:
+        # Completing the square is only useful if you can do InverseTrigUSub after it.
+        # So we only look for these two cases:
+        # 1 / quadratic
+        # 1 / sqrt(quadratic)
+        def condition_tan(expr: Expr) -> bool:
+            if not isinstance(expr, Prod):
+                return False
+            n, d = expr.numerator_denominator
+            if n.contains(node.var):
+                return False
+            try:
+                poly = to_const_polynomial(d, node.var)
+            except AssertionError:
+                return False
+            
+            # hmm completing the square could work on non-quadratics in some cases no?
+            # but I'll just limit it to quadratics for now
+            return poly.size == 3 and poly[1] != 0
+            
+        def condition_sin(expr: Expr) -> bool:
+            # 1 / xyz should be epxressed as a power prob so i omit prod check for now
+            # if not isinstance(expr, Prod):
+            #     return False
+            # n, d = expr.numerator_denominator
+            # if n.contains(node.var):
+            #     return False
+            # if not (isinstance(d, Power) and d.exponent == Fraction(1, 2)):
+            #     return False
+            if isinstance(expr, Power):
+                if expr.exponent != Fraction(-1,2):
+                    return False
+                d = expr.base
+            else:
+                return False
+            try:
+                poly = to_const_polynomial(d, node.var)
+            except AssertionError:
+                return False
+            
+            # hmm completing the square could work on non-quadratics in some cases no?
+            # but I'll just limit it to quadratics for now
+            return poly.size == 3 and poly[1] != 0
+            # poly[1] = 0 implies that there's no bx term
+            # which means that idk there's no square to complete.
+            # the result will just be the same as the original.
+    
+        self._has_tan = general_count(node.expr, condition_tan) > 0
+        self._has_sin = general_count(node.expr, condition_sin) > 0
+        return self._has_sin or self._has_tan
 
 
-def _remove_const_factor(expr: Expr) -> Expr:
-    if isinstance(expr, Prod):
-        return Prod([t for t in expr.terms if not isinstance(t, Number)])
-    return expr
+    def forward(self, node: Node) -> None:
+        # replace all quadratics with their completed the square form
+        def condition(expr: Expr) -> bool:
+            try:
+                poly = to_const_polynomial(expr, node.var)
+            except AssertionError:
+                return False
+            return poly.size == 3
+        
+        def perform(expr: Expr) -> Expr:
+            poly = to_const_polynomial(expr, node.var)
+            norm_factor = poly[-1]
+            normalized = poly / norm_factor
+            const = normalized[1] / 2
+            diff = normalized[0] - const ** 2
+            new_expr = (((node.var + const) / sqrt(diff)) ** 2 + 1) * diff * norm_factor
+
+            return new_expr.simplify()
+        
+        new_expr = replace_factory(condition, perform)(node.expr)
+        node.children.append(Node(new_expr, node.var, self, node))
+
+
+    def backward(self, node: Node) -> None:
+        super().backward(node)
+        node.parent.solution = node.solution
 
 
 
 # Leave RewriteTrig, InverseTrigUSub near the end bc they are deprioritized
 # and more fucky
-HEURISTICS = [
+HEURISTICS: List[Type[Transform]] = [
     PolynomialUSub,
     CompoundAngle,
     SinUSub,
@@ -896,12 +1003,14 @@ HEURISTICS = [
     ByParts,
     RewriteTrig,
     InverseTrigUSub,
+    CompleteTheSquare,
     GenericUSub
 ]
-SAFE_TRANSFORMS = [Additivity, PullConstant, PartialFractions, 
-                   PolynomialDivision,
-                   Expand, # expand is not safe bc it destroys partialfractions :o
-                   LinearUSub,
+SAFE_TRANSFORMS: List[Type[Transform]] = [
+    Additivity, PullConstant, PartialFractions, 
+    PolynomialDivision,
+    Expand, # expanding a fraction is not safe bc it destroys partialfractions. but if you put it after polynomial division & partial fractions, it doesn't cause any issues. more robust solution is to refactor & put expanding a fraction seperately as a heuristic transform, but idt this is necessary right now.
+    LinearUSub,
 ]
 
 

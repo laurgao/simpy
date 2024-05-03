@@ -4,19 +4,33 @@ Still WIP. Ideally need to do stuff like "check if somefactor * cos(sth) + somef
 """
 from typing import Callable, List
 
-from .expr import (Const, Expr, Number, Power, Prod, SingleFunc, Sum, Symbol,
-                   cast)
+from .expr import Const, Expr, Power, Prod, SingleFunc, Sum, Symbol, cast
 from .utils import ExprFn
 
 
 @cast
 def count(expr: Expr, query: Expr) -> int:
+    """Counts how many times `query` appears in `expr`. Exact matches only.
+    """
     if isinstance(expr, query.__class__) and expr == query:
         return 1
     return sum(count(e, query) for e in expr.children())
 
 
+def general_count(expr: Expr, condition: Callable[[Expr], bool]) -> int:
+    """the `count` function above, except you can specify a condition rather than 
+    only allowing exact matches.
+    """
+    if condition(expr):
+        return 1
+    return sum(general_count(e, condition) for e in expr.children())
+
+
 def replace_factory(condition: Callable[[Expr], bool], perform: ExprFn) -> ExprFn:
+    """
+    every time the condition returns True, you replace that expr with the output of `perform`
+    hard to explain in English. read the code.
+    """
     # Ok honestly the factory might not be the best structure, might be better to have a single unested function that returns the replaced expr directly
     # or make a class bc they're cleaner than factories. haven't given this a ton of thought but we don't need the most perfect choice <3
     def _replace(expr: Expr) -> Expr:
@@ -33,10 +47,8 @@ def replace_factory(condition: Callable[[Expr], bool], perform: ExprFn) -> ExprF
         # i love recursion
         if isinstance(expr, SingleFunc):
             return expr.__class__(_replace(expr.inner))
-
-        if isinstance(expr, Const):
-            return expr
-        if isinstance(expr, Symbol):
+        
+        if len(expr.children()) == 0: # Number, Symbol
             return expr
         
         raise NotImplementedError(f"replace not implemented for {expr.__class__.__name__}")
@@ -45,32 +57,19 @@ def replace_factory(condition: Callable[[Expr], bool], perform: ExprFn) -> ExprF
 
 
 def replace(expr: Expr, old: Expr, new: Expr) -> Expr:
-    if isinstance(expr, old.__class__) and expr == old:
-        return new
-
-    # find all instances of old in expr and replace with new
-    if isinstance(expr, Sum):
-        return Sum([replace(e, old, new) for e in expr.terms])
-    if isinstance(expr, Prod):
-        return Prod([replace(e, old, new) for e in expr.terms])
-    if isinstance(expr, Power):
-        return Power(
-            base=replace(expr.base, old, new), exponent=replace(expr.exponent, old, new)
-        )
-    # i love recursion
-    if isinstance(expr, SingleFunc):
-        return expr.__class__(replace(expr.inner, old, new))
-
-    if isinstance(expr, Number):
-        return expr
-    if isinstance(expr, Symbol):
-        return expr
-
-    raise NotImplementedError(f"replace not implemented for {expr.__class__.__name__}")
+    """replaces every instance of `old` (that appears in `expr`) with `new`. 
+    """
+    # Special case of the general replace_factory that gets used often.
+    condition = lambda e: isinstance(e, old.__class__) and e == old
+    perform = lambda e: new
+    return replace_factory(condition, perform)(expr)
 
 
 # cls here has to be a subclass of singlefunc
 def replace_class(expr: Expr, cls: list, newfunc: List[Callable[[Expr], Expr]]) -> Expr:
+    # legacy // can be rewritten with replace_factory and put directly into transform RewriteTrig
+    # bc it's not used anywhere else.
+    # however it doesn't matter super much rn that everything is structured in :sparkles: prestine condition :sparkles:
     assert all(issubclass(cl, SingleFunc) for cl in cls), "cls must subclass SingleFunc"
     if isinstance(expr, Sum):
         return Sum([replace_class(e, cls, newfunc) for e in expr.terms])

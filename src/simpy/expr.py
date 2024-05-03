@@ -206,25 +206,12 @@ class Associative:
         return self.terms
 
     def _sort(self) -> None:
-        def _remove_const_factor(expr: Expr) -> Expr:
-            # put this in utils eventually if it's commonly used
-            if isinstance(expr, Prod):
-                new_terms = [t for t in expr.terms if len(t.symbols()) > 0]
-                # simplifying manually because don't wanna invoke the recursive stuff by calling
-                # simplify
-                if len(new_terms) == 0:
-                    return Const(1)
-                if len(new_terms) == 1:
-                    return new_terms[0]
-                return Prod(new_terms)
-            return expr
-
         def _nesting(expr: "Expr") -> int:
             """Like the public nesting except constant multipliers don't count
             to prevent fucky reprs for things like 
             1 + x^3 + 3*x^2
             """
-            expr = _remove_const_factor(expr)
+            expr = remove_const_factor(expr)
             if isinstance(expr, Symbol):
                 return 1
             if len(expr.symbols()) == 0:
@@ -238,7 +225,7 @@ class Associative:
             """
 
             def _deconstruct_const_power(expr: Expr) -> Const:
-                expr = _remove_const_factor(expr)
+                expr = remove_const_factor(expr)
                 if isinstance(expr, Power) and isinstance(expr.exponent, Const):
                     return expr.exponent
                 return Const(1)
@@ -980,6 +967,10 @@ class SingleFunc(Expr):
         # TODO: Support floats in .evalf
         # return Const(math.log(inner.value)) if isinstance(inner, Const) else Log(inner)
         return self.__class__(inner)
+    
+    def expand(self) -> Expr:
+        assert self.inner.expandable(), f"Cannot expand {self}"
+        return self.__class__(self.inner.expand())
 
 
 def _repr(inner: Expr, label: str) -> str:
@@ -1296,8 +1287,23 @@ def diff(expr: Expr, var: Symbol) -> Expr:
         raise NotImplementedError(f"Differentiation of {expr} not implemented")
 
 
+# Problem: can't move this to regex or use general_count because regex imports from this file
+# hmmmmm
 def contains_cls(expr: Expr, cls) -> bool:
     if isinstance(expr, cls) or issubclass(expr.__class__, cls):
         return True
 
     return any([contains_cls(e, cls) for e in expr.children()])
+
+
+def remove_const_factor(expr: Expr) -> Expr:
+    if isinstance(expr, Prod):
+        new_terms = [t for t in expr.terms if len(t.symbols()) > 0]
+        # simplifying manually because don't wanna invoke the recursive stuff by calling
+        # simplify
+        if len(new_terms) == 0:
+            return Const(1)
+        if len(new_terms) == 1:
+            return new_terms[0]
+        return Prod(new_terms)
+    return expr
