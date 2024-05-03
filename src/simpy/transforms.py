@@ -238,6 +238,12 @@ class Expand(SafeTransform):
         node.children.append(Node(node.expr.expand(), node.var, self, node))
 
     def check(self, node: Node) -> bool:
+        # If the last heuristic was completing the square,
+        # Please give it a break.
+        t = _get_last_heuristic_transform(node)
+        if isinstance(t, CompleteTheSquare):
+            return False
+
         return node.expr.expandable()
 
     def backward(self, node: Node) -> None:
@@ -266,7 +272,7 @@ class Additivity(SafeTransform):
 
 
 def _get_last_heuristic_transform(node: Node):
-    if isinstance(node.transform, (PullConstant, Expand, Additivity)):
+    if isinstance(node.transform, (PullConstant, Additivity)):
         # We'll let polynomial division go because it changes things sufficiently that
         # we actually sorta make progress towards the integral.
         # PullConstant and Additivity are like fake, they dont make any substantial changes.
@@ -276,6 +282,8 @@ def _get_last_heuristic_transform(node: Node):
         # key. (but no the lecture example has B tan then polydiv then C tan)
 
         # Idk this thing rn is a lil messy and there might be a better way to do it.
+
+        # 05/13/2024: no more expand bc it's not even a "safe transform" anymore lwk.
         return _get_last_heuristic_transform(node.parent)
     return node.transform
 

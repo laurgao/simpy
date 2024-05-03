@@ -697,11 +697,24 @@ def deconstruct_power(expr: Expr) -> Tuple[Expr, Const]:
 
 @dataclass
 class Prod(Associative, Expr):
-    def __post_init__(self):
-        super().__post_init__()
+    def __new__(cls, initial_terms: List[Expr]):
+        # We need to flatten BEFORE we accumulate like terms
+        # ex: Prod(x, Prod(Power(x, -1), y))
+        # Stupid repeition of logic but wtv it's fine
+        new_terms = []
+        for t in initial_terms:
+            if isinstance(t, cls):
+                t._flatten()
+                new_terms += t.terms
+            else:
+                new_terms += [t]
+        initial_terms = new_terms
+        ## TODO: improve this LOL. & if i flatten here then maybe dont do it in post init.
+        # maybe generalize & do this to Sum tool
+
         # accumulate all like terms
         terms = []
-        for i, term in enumerate(self.terms):
+        for i, term in enumerate(initial_terms):
             # Accumulate constants seperately.
             if isinstance(term, Const):
                 terms.append(term)
@@ -713,14 +726,14 @@ class Prod(Associative, Expr):
             base, expo = deconstruct_power(term)
 
             # other terms with same base
-            for j in range(i + 1, len(self.terms)):
-                if self.terms[j] is None:
+            for j in range(i + 1, len(initial_terms)):
+                if initial_terms[j] is None:
                     continue
-                other = self.terms[j]
+                other = initial_terms[j]
                 base2, expo2 = deconstruct_power(other)
                 if base2 == base:  # TODO: real expr equality
                     expo += expo2
-                    self.terms[j] = None
+                    initial_terms[j] = None
             
             # Decision: if exponent here is 0, we don't include it.
             # We don't wait for simplify to remove it.
@@ -732,21 +745,27 @@ class Prod(Associative, Expr):
         const = reduce(
             lambda x, y: x * y, [t.value for t in terms if isinstance(t, Const)], 1
         )
+        if const == 0:
+            return Const(0)
+
         non_constant_terms = [t for t in terms if not isinstance(t, Const)]
         terms = ([] if const == 1 else [Const(const)]) + non_constant_terms
         
         if len(terms) == 0:
-            terms = [Const(1)]
-        self.terms = terms
+            return Const(1)
+        if len(terms) == 1:
+            return terms[0]
 
+        instance = super().__new__(cls) 
+        instance.terms = terms
+        return instance
+
+    def __init__(self, terms: List[Expr]):
+        # terms are already set in __new__
+        self.__post_init__()
 
     def simplify(self) -> "Expr":
-        # simplify subexprs and flatten sub-products
-        new = Prod([t.simplify() for t in self.terms])
-        if any(t == 0 for t in new.terms):
-            return Const(0)
-        return new.terms[0] if len(new.terms) == 1 else new
-
+        return Prod([t.simplify() for t in self.terms])
 
     def __repr__(self) -> str:
         def _term_repr(term):
@@ -855,12 +874,12 @@ class Prod(Associative, Expr):
         num, denom = self.numerator_denominator
         if denom.expandable():
             denom = denom.expand()
-
-        if not isinstance(num, Prod):
-            num = Prod([num])
-
+            
         # now we assume denom is good and we move on with life as usual
-        expanded_terms = [t.expand() if t.expandable() else t for t in num.terms]
+        if not isinstance(num, Prod):
+            expanded_terms = [num.expand() if num.expandable() else num]
+        else:
+            expanded_terms = [t.expand() if t.expandable() else t for t in num.terms]
         sums = [t for t in expanded_terms if isinstance(t, Sum)]
         other = [t for t in expanded_terms if not isinstance(t, Sum)]
         if not sums:
@@ -1002,7 +1021,6 @@ class Power(Expr):
                 terms.append(Const(-1))
             
             return Prod(terms).simplify()
-             
 
         if isinstance(b, Power):
             return Power(b.base, x * b.exponent).simplify()
@@ -1020,23 +1038,32 @@ class Power(Expr):
                     return ((b ** t).simplify() ** rest).simplify()
                 
         return Power(b, x)
-
-    def expandable(self) -> bool:
+    
+    def _power_expandable(self) -> bool:
         return (
             isinstance(self.exponent, Const)
             and self.exponent.value.denominator == 1
-            and self.exponent.value >= 1
+            and self.exponent.value > 1
             and isinstance(self.base, Sum)
         )
 
+    def expandable(self) -> bool:
+        return self._power_expandable() or self.base.expandable() or self.exponent.expandable()
+
     def expand(self) -> Expr:
         assert self.expandable(), f"Cannot expand {self}"
+        b = self.base.expand() if self.base.expandable() else self.base
+        x = self.exponent.expand() if self.exponent.expandable() else self.exponent
+        new = Power(b, x)
+        if not isinstance(new, Power) or not new._power_expandable():
+            return new
+
         expanded = []
-        n = self.exponent.value.numerator
-        i = len(self.base.terms)
+        n = new.exponent.value.numerator
+        i = len(new.base.terms)
         permutations = generate_permutations(i, n)
         for permutation in permutations:
-            new_term = [Power(t, p) for t, p in zip(self.base.terms, permutation)]
+            new_term = [Power(t, p) for t, p in zip(new.base.terms, permutation)]
             coefficient = multinomial_coefficient(permutation, n)
             expanded.append(Prod([Const(coefficient)] + new_term))
         return Sum(expanded).simplify()

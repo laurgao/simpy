@@ -314,7 +314,8 @@ if __name__ == "__main__":
 
     # Expand test
     # make sure an expandable denominator gets expanded
-    assert_eq_repr((1 / (x * (x + 6))).expand(), 1 / (x**2 + x * 6))
+    assert_eq_repr((1 / (x * (x + 6))).expand(), 1 / (x**2 + x * 6)) # this can be converted to a power
+    assert_eq_repr((y / (x * (x + 6))).expand(), y / (x**2 + x * 6))
     # make sure that a numberator with a single sum gets expanded
     assert_eq_repr(((2 + x) / Sin(x)).expand(), (2 / Sin(x) + x / Sin(x)))
     test_expand_power()

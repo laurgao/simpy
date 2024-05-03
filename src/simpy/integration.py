@@ -158,10 +158,8 @@ class Integration:
         curr_node = root
         while True:
             answer = _cycle(curr_node)
-
             if root.is_finished:
                 break
-
             if answer == "SOLVED":
                 # just do any other thing in root
                 curr_node = _get_next_node_post_heuristic(root)
