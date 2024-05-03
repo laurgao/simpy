@@ -9,6 +9,12 @@ from test_utils import assert_eq_plusc
 
 x = symbols("x")
 
+def _assert_integral(integrand, expected):
+    return assert_eq_plusc(integrate(integrand), expected)
+
+def _assert_definite_integral(integrand, bounds, expected):
+    return assert_eq_plusc(integrate(integrand, bounds), expected)
+
 def test_ex():
     integrand = 6 * e**x
     ans = integrate(integrand, (x, 6, 12))
@@ -22,9 +28,8 @@ def test_xcosx():
 
 def test_partial_fractions():
     integrand = (x + 8) / (x * (x + 6))
-    ans = integrate(integrand, x)
     expected_ans = Fraction(4, 3) * Log(x) - Fraction(1, 3) * Log(x + 6)
-    assert_eq_plusc(ans, expected_ans)
+    _assert_integral(integrand, expected_ans)
 
 
 def test_arcsin():
@@ -48,81 +53,37 @@ def test_sec2x_tan2x():
     assert ans == Fraction(1, 2)
 
 def more_test():
-    integrand = 4 * Sec(x) ** 2
-    ans = integrate(integrand, x)
-    assert ans == 4 * Tan(x)
-
-    integrand = Sec(x) ** 2 * Tan(x) ** 2
-    ans = integrate(integrand, x)
-    assert ans == (Tan(x)**3/3).simplify()
-
-    integrand = 5 / x - 3 * e ** x
-    ans = integrate(integrand, x)
-    assert ans == (5 * Log(x) - 3 * e ** x).simplify()
-
-    integrand = Sec(x)
-    ans = integrate(integrand, x)
-    assert ans == Log(Sec(x) + Tan(x)).simplify()
-
-    integrand = 2 * Cos(2 * x - 5)
-    ans = integrate(integrand, x)
-    assert ans == Sin(2 * x - 5).simplify()
-
-    integrand = 3 * x ** 5 - x ** 3 + 6
-    ans = integrate(integrand, x)
-    assert ans == (6*x - x**4/4 + x**6/2).simplify()
-
-    integrand = x ** 3 * e ** (x ** 4)
-    ans = integrate(integrand, x)
-    assert ans == (e**(x**4)/4).simplify()
+    _assert_integral(4 * Sec(x) ** 2, 4 * Tan(x))
+    _assert_integral(Sec(x) ** 2 * Tan(x) ** 2, Tan(x) ** 3 / 3)
+    _assert_integral(5 / x - 3 * e ** x, 5 * Log(x) - 3 * e ** x)
+    _assert_integral(Sec(x), Log(Sec(x) + Tan(x)))
+    _assert_integral(2 * Cos(2 * x - 5), Sin(2 * x - 5)) 
+    _assert_integral(3 * x ** 5 - x ** 3 + 6, 6*x - x**4/4 + x**6/2)
+    _assert_integral(x ** 3 * e ** (x ** 4), (e**(x**4)/4))
 
     # Uses generic u-sub
-    integrand = e ** x / (1 + e ** x)
-    ans = integrate(integrand, (x, Log(2), Log(8)))
-    assert_eq_plusc(ans, Log(9) - Log(3))
+    _assert_definite_integral(e ** x / (1 + e ** x), (Log(2), Log(8)), Log(9) - Log(3))
 
-    integrand = 8 * x / sqrt(1 - 4 * x ** 2)
-    ans = integrate(integrand, (x, 0, Fraction(1,4)))
-    assert_eq_plusc(ans, 2 - sqrt(3))
-
-    integrand = Sin(4*x)
-    ans = integrate(integrand, (x, 0, pi/4))
-    assert_eq_plusc(ans, Fraction(1,2))
+    _assert_definite_integral(8 * x / sqrt(1 - 4 * x ** 2), (0, Fraction(1,4)), 2 - sqrt(3))
+    _assert_definite_integral(Sin(4*x), (0, pi/4), Fraction(1,2))
 
 def test_expanding_big_power():
     integrand = (2 * x - 5) ** 10
-    ans = integrate(integrand, x)
     expected_ans = (2*x-5)**11/22
-    assert_eq_plusc(ans, expected_ans)
+    _assert_integral(integrand, expected_ans)
 
     integrand = 3 * x ** 2 * (x ** 3 + 1) ** 6
-    ans = integrate(integrand, x)
     expected_ans = (1 + x**3)**7/7
-    const = (ans-expected_ans).expand().simplify()
-    assert isinstance(const, Const)
+    _assert_integral(integrand, expected_ans)
 
 def test_polynomial_div_integrals():
-    integrand = (x-5) / (-2 * x + 2)
-    ans = integrate(integrand, x)
-    expected = - x / 2 + 2 * Log(1 - x)
-    assert_eq_plusc(ans, expected)
-
-    integrand = (x ** 3 - 1)/ ( x+2)
-    ans = integrate(integrand, x)
-    expected = x**3/3 - x**2 + 4*x- 9*Log(2 + x)
-    assert_eq_plusc(ans, expected)
-
-    integrand = (x - 1)/ (2 * x + 4)
-    ans = integrate(integrand, x)
-    expected = x / 2 - Fraction(3, 2) * Log(x + 2)
-    assert_eq_plusc(ans, expected)
+    _assert_integral((x-5) / (-2 * x + 2), - x / 2 + 2 * Log(1 - x))
+    _assert_integral((x ** 3 - 1)/ (x+2), x**3/3 - x**2 + 4*x- 9*Log(2 + x))
+    _assert_integral((x - 1)/ (2 * x + 4), x / 2 - Fraction(3, 2) * Log(x + 2))
     
     integrand = (2 * x ** 3 + 4 * x ** 2 - 5)/ (x + 3)
     ans = integrate(integrand, x)
     # TODO: expected = ...
-
-def _assert_integral(integrand, expected):
-    return assert_eq_plusc(integrate(integrand), expected)
 
 def test_complete_the_square_integrals():
     _assert_integral(1/(3*x**2+6*x+78), ArcTan((1 + x)/5)/15)
