@@ -443,15 +443,13 @@ class Symbol(Expr):
 
 @dataclass
 class Sum(Associative, Expr):
-    def __post_init__(self):
+    def __new__(cls, terms: List[Expr]):
         """When a sum is initiated:
         - terms are converted to expr 
         - flatten
         - accumulate like terms & constants
         - sort
         """
-        super().__post_init__()
-        terms = self.terms
         # accumulate all like terms
         new_terms = []
         for i, term in enumerate(terms):
@@ -485,20 +483,25 @@ class Sum(Associative, Expr):
 
         final_terms = ([Const(const)] if const != 0 else []) + non_constant_terms
         if len(final_terms) == 0:
-            final_terms = [Const(0)]
-        
-        self.terms = final_terms
-        self._sort()
+            return Const(0)
+        if len(final_terms) == 1:
+            return final_terms[0]
+         
+        instance = super().__new__(cls)
+        instance.terms = final_terms
+        return instance
+    
+    def __init__(self, terms: List[Expr]):
+        # Overrides the shit that does self.terms = terms because i've already set terms
+        # in __new__.
+        self.__post_init__()
 
     def expand(self) -> Expr:
         assert self.expandable(), f"Cannot expand {self}"
         return Sum([t.expand() if t.expandable() else t for t in self.terms])
 
     def simplify(self) -> "Expr":
-        terms = [t.simplify() for t in self.terms]
-        if len(terms) == 1:
-            return terms[0]
-        new_sum = Sum(terms)
+        new_sum = Sum([t.simplify() for t in self.terms])
 
         if contains_cls(new_sum, TrigFunction):
             # I WANT TO DO IT so that it's more robust.
