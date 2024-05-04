@@ -15,7 +15,7 @@ from abc import ABC, abstractmethod
 from dataclasses import dataclass, fields
 from fractions import Fraction
 from functools import cmp_to_key, reduce
-from typing import Callable, Dict, List, Literal, Optional, Tuple, Union
+from typing import Callable, Dict, List, Literal, Optional, Tuple, Type, Union
 
 from .combinatorics import generate_permutations, multinomial_coefficient
 
@@ -202,16 +202,27 @@ class Associative:
         self._flatten()
         self._sort()
 
-    def _flatten(self) -> None:
-        # no need to flatten in simplify because we can then always assume ALL Prod and Sum class objects are flattened
+    @staticmethod
+    def _flatten_terms(terms: List[Expr], cls: Type["Associative"]):
+        """Utility function for flattening a list.
+        """
         new_terms = []
-        for t in self.terms:
-            if isinstance(t, self.__class__):
+        for t in terms:
+            if isinstance(t, cls):
                 t._flatten()
                 new_terms += t.terms
             else:
                 new_terms += [t]
-        self.terms = new_terms
+        return new_terms
+
+
+    def _flatten(self) -> None:
+        """Put any sub-products/sub-sums into the parent
+        ex: (x * 3) * y -> x * 3 * y
+        Can go down as many levels deep as necessary.
+        """
+        # no need to flatten in simplify because we can then always assume ALL Prod and Sum class objects are flattened
+        self.terms = self._flatten_terms(self.terms, self.__class__)
 
     def children(self) -> List["Expr"]:
         return self.terms
@@ -450,6 +461,7 @@ class Sum(Associative, Expr):
         - accumulate like terms & constants
         - sort
         """
+        terms = cls._flatten_terms(terms, cls)
         # accumulate all like terms
         new_terms = []
         for i, term in enumerate(terms):
@@ -697,27 +709,17 @@ def deconstruct_power(expr: Expr) -> Tuple[Expr, Const]:
 
 @dataclass
 class Prod(Associative, Expr):
-    def __new__(cls, initial_terms: List[Expr]) -> "Expr":
+    def __new__(cls, terms: List[Expr]) -> "Expr":
         # We need to flatten BEFORE we accumulate like terms
         # ex: Prod(x, Prod(Power(x, -1), y))
-        # Stupid repeition of logic but wtv it's fine
-        new_terms = []
-        for t in initial_terms:
-            if isinstance(t, cls):
-                t._flatten()
-                new_terms += t.terms
-            else:
-                new_terms += [t]
-        initial_terms = new_terms
-        ## TODO: improve this LOL. & if i flatten here then maybe dont do it in post init.
-        # maybe generalize & do this to Sum tool
+        initial_terms = cls._flatten_terms(terms, cls)
 
         # accumulate all like terms
-        terms = []
+        new_terms = []
         for i, term in enumerate(initial_terms):
             # Accumulate constants seperately.
             if isinstance(term, Const):
-                terms.append(term)
+                new_terms.append(term)
                 continue
 
             if term is None:
@@ -739,25 +741,25 @@ class Prod(Associative, Expr):
             # We don't wait for simplify to remove it.
             if expo == 0:
                 continue
-            terms.append(Power(base, expo) if expo != 1 else base)
+            new_terms.append(Power(base, expo) if expo != 1 else base)
         
         # accumulate constants to the front
         const = reduce(
-            lambda x, y: x * y, [t.value for t in terms if isinstance(t, Const)], 1
+            lambda x, y: x * y, [t.value for t in new_terms if isinstance(t, Const)], 1
         )
         if const == 0:
             return Const(0)
 
-        non_constant_terms = [t for t in terms if not isinstance(t, Const)]
-        terms = ([] if const == 1 else [Const(const)]) + non_constant_terms
+        non_constant_terms = [t for t in new_terms if not isinstance(t, Const)]
+        new_terms = ([] if const == 1 else [Const(const)]) + non_constant_terms
         
-        if len(terms) == 0:
+        if len(new_terms) == 0:
             return Const(1)
-        if len(terms) == 1:
-            return terms[0]
+        if len(new_terms) == 1:
+            return new_terms[0]
 
         instance = super().__new__(cls) 
-        instance.terms = terms
+        instance.terms = new_terms
         return instance
 
     def __init__(self, terms: List[Expr]):
