@@ -3,6 +3,9 @@
 1. Exprs shall NOT be mutated in place after __post_init__.
 For example, if I put a Const into a numpy array, I don't want to have to copy it. i can trust that its value stays the same forever.
 
+Note on equality: if you call (expr1 == expr2), it returns true/false based on **the structure of the expr is the same.** rather than based on their values
+being equal. if you wanna check equality of values, try simplifying, expanding, etc.
+
 This currently operates on fractions only. I personally love keeping it rational and precise
 so I don't really mind the lack of float support, but I can see why you'd be annoyed.
 ~~but i spent so much time making the fractional arithmetic perfect -- see Power.simplify() for instance

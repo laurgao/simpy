@@ -1,2 +1,2 @@
-from .expr import diff, e, pi, symbols
+from .expr import debug_repr, diff, e, pi, symbols
 from .integration import integrate
