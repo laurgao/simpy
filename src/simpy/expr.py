@@ -8,7 +8,7 @@ being equal. if you wanna check equality of values, try simplifying, expanding, 
 
 This currently operates on fractions only. I personally love keeping it rational and precise
 so I don't really mind the lack of float support, but I can see why you'd be annoyed.
-~~but i spent so much time making the fractional arithmetic perfect -- see Power.simplify() for instance
+~~but i spent so much time making the fractional arithmetic perfect -- see Power.__new__() for instance
 
 """
 
