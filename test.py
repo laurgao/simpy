@@ -73,36 +73,36 @@ def test_factor():
 def test_compound_angle():
     # Finds the average power of an AC circuit
     w, phi, t = symbols("w \\phi t")
-    ac_power_integrand = Cos(w * t - phi) * Cos(w * t)
+    ac_power_integrand = cos(w * t - phi) * cos(w * t)
     period = 2 * pi / w
     ac_power = 1 / period * integrate(ac_power_integrand, (t, 0, period))
 
-    expected = Cos(phi) / 2
+    expected = cos(phi) / 2
     assert_eq_plusc(ac_power, expected)
 
 
 def test_sin2x():
     # tests the product-to-sum formula
     # Test integral (sin x)^2 = x / 2 - Sin(2x) / 4
-    expr = Sin(x) ** 2
+    expr = sin(x) ** 2
     integral = integrate(expr, x)
-    expected = x / 2 - Sin(2 * x) / 4
+    expected = x / 2 - sin(2 * x) / 4
     assert_eq_plusc(integral, expected)
 
 
 def test_cos2x():
     # tests the product-to-sum formula
     # Test integral (cos x)^2 = Sin(2x) / 4 + x / 2
-    expr = Cos(x) ** 2
+    expr = cos(x) ** 2
     integral = integrate(expr, x)
-    expected = Sin(2 * x) / 4 + x / 2
+    expected = sin(2 * x) / 4 + x / 2
     assert_eq_plusc(integral, expected)
 
 def test_linear_usub_with_multiple_subs():
     # Last I checked, this fails without LinearUSub
-    integrand = Sin(2*x) / Cos(2*x)
+    integrand = sin(2*x) / cos(2*x)
     integral = integrate(integrand, x)
-    expected = -Log(Cos(2*x))/2
+    expected = -log(cos(2*x))/2
     assert_eq_plusc(integral, expected)
 
 
@@ -134,7 +134,7 @@ def test_factor_const():
 
 def test_product_combine_like_terms():
     # this wasnt working bc the denominator "power" wasn't flattening in simplification.
-    expr = (2*Sin(x)*Cos(x)**2)/(Sin(x)*Cos(x)**2)
+    expr = (2*sin(x)*cos(x)**2)/(sin(x)*cos(x)**2)
     assert expr == 2, f"expected 2, got {expr} // debug repr: {debug_repr(expr)}"
 
 
@@ -150,7 +150,7 @@ def test_complete_the_square():
 def test_integrate_with_completing_the_square():
     expr = 1 / sqrt(- x ** 2 + 10 * x + 11)
     ans = integrate(expr)
-    expected = ArcSin((x - 5) / 6)
+    expected = asin((x - 5) / 6)
     assert_eq_plusc(ans, expected)
 
 from src.simpy.expr import debug_repr
@@ -273,7 +273,7 @@ if __name__ == "__main__":
     assert 2 < Const(3)
     assert 2 <= Const(2)
     assert Const(2) == Const(2)
-    assert Cos(x * 2) == Cos(x * 2)
+    assert cos(x * 2) == cos(x * 2)
 
     # Basic simplification
     assert_eq_strict(x * 0, 0)
@@ -310,7 +310,7 @@ if __name__ == "__main__":
     assert_eq_strict((1 / (x * (x + 6))).expand(), 1 / (x**2 + x * 6)) # this can be converted to a power
     assert_eq_strict((y / (x * (x + 6))).expand(), y / (x**2 + x * 6))
     # make sure that a numberator with a single sum gets expanded
-    assert_eq_strict(((2 + x) / Sin(x)).expand(), (2 / Sin(x) + x / Sin(x)))
+    assert_eq_strict(((2 + x) / sin(x)).expand(), (2 / sin(x) + x / sin(x)))
     test_expand_power()
 
     # Factor test
@@ -320,9 +320,9 @@ if __name__ == "__main__":
     test_some_constructor_simplification()
     
     # Basic differentiation 
-    assert_eq_strict((2 ** x).diff(x), Log(2) * 2 ** x)
+    assert_eq_strict((2 ** x).diff(x), log(2) * 2 ** x)
     assert_eq_strict((x ** 7).diff(x), 7 * x ** 6)
-    assert_eq_plusc(Log(x).diff(x), 1 / x)
+    assert_eq_plusc(log(x).diff(x), 1 / x)
 
     # Basic integrals
     assert_definite_integral(2, (x, 5, 3), -4)
@@ -330,10 +330,10 @@ if __name__ == "__main__":
     assert_integral(3 * x**2 - 2 * x, x**3 - x**2)
     assert_integral((x + 1) ** 2, x + x**2 + (x**3 / 3))
     assert_integral(x ** 12, x ** 13 / 13)
-    assert_integral(1 / x, Log(x))
-    assert_definite_integral(1 / x, (x, 1, 2), Log(2))
+    assert_integral(1 / x, log(x))
+    assert_definite_integral(1 / x, (x, 1, 2), log(2))
     assert_integral(y, x * y, var=x)
-    assert_integral(Tan(y), x * Tan(y), var=x)
+    assert_integral(tan(y), x * tan(y), var=x)
 
     assert nesting(x**2, x) == 2
     assert nesting(x * y**2, x) == 2
@@ -342,14 +342,14 @@ if __name__ == "__main__":
     assert_eq_strict(x + (2 + y), x + 2 + y)
 
     assert count(2, x) == 0
-    assert count(Tan(x + 1) ** 2 - 2 * x, x) == 2
+    assert count(tan(x + 1) ** 2 - 2 * x, x) == 2
 
     # cos^2 + sin^2 = 1 test
-    expr = Sin(x) ** 2 + Cos(x) ** 2 + 3
+    expr = sin(x) ** 2 + cos(x) ** 2 + 3
     simplified = expr.simplify()
     assert_eq_strict(simplified, 4)
 
-    expr = Sin(x - 2 * y) ** 2 + 3 + Cos(x - 2 * y) ** 2 + y**2
+    expr = sin(x - 2 * y) ** 2 + 3 + cos(x - 2 * y) ** 2 + y**2
     simplified = expr.simplify()
     assert_eq_strict(simplified, 4 + y**2)
 
@@ -372,7 +372,7 @@ if __name__ == "__main__":
     assert repr(sqrt(1/x)) == "1/sqrt(x)"
     assert repr(x ** -Fraction(1,2)) == "1/sqrt(x)"
     # make sure denominator is bracketed
-    assert repr(Sin(x) / (2 * x)) == "sin(x)/(2*x)"
+    assert repr(sin(x) / (2 * x)) == "sin(x)/(2*x)"
     # make sure products with negative consts and dividing by consts are treated better
     assert repr(x / 2) == "x/2"
     assert repr(x * Fraction(1, 2)) == "x/2"
@@ -386,10 +386,10 @@ if __name__ == "__main__":
 
     # This integral can either be sin^2(wt) / 2w or -cos^2(wt) / 2w depending on the method used to solve it
     w, t = symbols("w t")
-    expr = Sin(w * t) * Cos(w * t)
+    expr = sin(w * t) * cos(w * t)
     integral = integrate(expr, t)
-    expected = Sin(w * t) ** 2 / (2 * w)
-    expected2 = -Cos(w * t) ** 2/ (2 * w)
+    expected = sin(w * t) ** 2 / (2 * w)
+    expected2 = -cos(w * t) ** 2/ (2 * w)
     assert repr(integral) == repr(expected) or repr(integral) == repr(expected2) # temp patch
 
     # PolynomialDivision test
@@ -399,8 +399,8 @@ if __name__ == "__main__":
     test_complete_the_square()
 
     # ln integral
-    assert_eq_strict((x * Log(x) - x).diff(x), Log(x))
-    assert_integral(Log(x), x * Log(x) - x)
+    assert_eq_strict((x * log(x) - x).diff(x), log(x))
+    assert_integral(log(x), x * log(x) - x)
 
     # run entire integrals
     test_lecture_example() 
@@ -420,8 +420,8 @@ if __name__ == "__main__":
     test_integrate_with_completing_the_square()
     test_complete_the_square_integrals()
 
-    integrand = Log(x + 6) / x**2
-    expected = Log(x) / 6 - Log(x + 6) / x - Log(x+6) / 6
+    integrand = log(x + 6) / x**2
+    expected = log(x) / 6 - log(x + 6) / x - log(x+6) / 6
     assert_integral(integrand, expected)
 
     # without the string search fix on InverseTrigUSub, this returns a wrong answer.

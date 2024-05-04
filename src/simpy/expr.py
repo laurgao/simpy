@@ -304,8 +304,8 @@ class Const(Number, Expr):
     def __repr__(self) -> str:
         return str(self.value)
 
-    ### ADDING THIS for now because in Prod.__post_init__ we're adding coeffs together
-    # w/o simplifying them. so that would just create a bunch of Sum([Const])'s otherwise.
+    ### These are unnecessary because it would get simplified to this by Sum/Prod anyways (it's tested---remove these, all tests pass)
+    # but I'm doing them for some sense of "efficiency" (not really, isn't actually an efficiency bottleneck at all.)
     @cast
     def __add__(self, other) -> "Expr":
         if isinstance(other, Const):
@@ -329,6 +329,9 @@ class Const(Number, Expr):
         if isinstance(other, Const):
             return Const(other.value - self.value)
         return super().__rsub__(other)
+
+    def __neg__(self):
+        return Const(-self.value)
     ###
 
     @cast
@@ -351,9 +354,6 @@ class Const(Number, Expr):
     def __lt__(self, other):
         return isinstance(other, Const) and self.value < other.value
     
-    def __neg__(self):
-        return Const(-self.value)
-
     @cast
     def evalf(self, subs: Dict[str, "Const"]):
         return self
@@ -531,12 +531,12 @@ class Sum(Associative, Expr):
             # - what if there is a constant (or variable) common factor? (i think for this i'll have to implement a .factor method)
 
             pythagorean_trig_identities: Dict[str, Callable[[Expr], Expr]] = {
-                r"1 \+ tan\((\w+)\)\^2": lambda x: Sec(x) ** 2,
-                r"1 \+ cot\((\w+)\)\^2": lambda x: Csc(x) ** 2,
-                r"1 - sin\((\w+)\)\^2": lambda x: Cos(x) ** 2,
-                r"1 - cos\((\w+)\)\^2": lambda x: Sin(x) ** 2,
-                r"1 - tan\((\w+)\)\^2": lambda x: Const(1) / (Tan(x) ** 2),
-                r"1 - cot\((\w+)\)\^2": lambda x: Const(1) / (Cot(x) ** 2),
+                r"1 \+ tan\((\w+)\)\^2": lambda x: sec(x) ** 2,
+                r"1 \+ cot\((\w+)\)\^2": lambda x: csc(x) ** 2,
+                r"1 - sin\((\w+)\)\^2": lambda x: cos(x) ** 2,
+                r"1 - cos\((\w+)\)\^2": lambda x: sin(x) ** 2,
+                r"1 - tan\((\w+)\)\^2": lambda x: Const(1) / (tan(x) ** 2),
+                r"1 - cot\((\w+)\)\^2": lambda x: Const(1) / (cot(x) ** 2),
             }
 
             for pattern, replacement_callable in pythagorean_trig_identities.items():
@@ -1039,11 +1039,11 @@ class Power(Expr):
             # because what if the term raised to this exponent can be simplified?
             # ex: if you have (ab)^n where a = c^m
             return Prod([Power(term, x) for term in b.terms])
-        if isinstance(x, Log) and b == x.base:
+        if isinstance(x, log) and b == x.base:
             return x.inner
         if isinstance(x, Prod):
             for i, t in enumerate(x.terms):
-                if isinstance(t, Log) and t.base == b:
+                if isinstance(t, log) and t.base == b:
                     rest = Prod(x.terms[:i] + x.terms[i+1:])
                     return Power(t.inner, rest) # Just in case this needs to be simplified, we will pass this through the constructor
                     # return Power(Power(b, t), rest)
@@ -1096,7 +1096,7 @@ class Power(Expr):
         if not self.exponent.contains(var):
             return self.exponent * self.base ** (self.exponent - 1) * self.base.diff(var)
         if not self.base.contains(var):
-            return Log(self.base) * self * self.exponent.diff(var)
+            return log(self.base) * self * self.exponent.diff(var)
         raise NotImplementedError(
             "Power.diff not implemented for functions with var in both base and exponent."
         )
@@ -1143,7 +1143,7 @@ def _repr(inner: Expr, label: str) -> str:
     return f"{label}({inner_repr})"
 
 
-class Log(SingleFunc):
+class log(SingleFunc):
     inner: Expr
     base: Expr = e
 
@@ -1167,18 +1167,18 @@ class Log(SingleFunc):
         # IDK if this should be in simplify or if it should be like expand, in a diff function
         # like you can move stuff together or move stuff apart
         if isinstance(inner, Power):
-            return (Log(inner.base) * inner.exponent).simplify()
+            return (log(inner.base) * inner.exponent).simplify()
         if isinstance(inner, Prod):
-            return Sum([Log(t) for t in inner.terms]).simplify()
+            return Sum([log(t) for t in inner.terms]).simplify()
         if isinstance(inner, Sum) and isinstance(inner.factor(), Prod):
-            return Sum([Log(t) for t in inner.factor().terms]).simplify()
+            return Sum([log(t) for t in inner.factor().terms]).simplify()
         
         # let's agree on some standards
         # i dont love this, can change
-        if isinstance(inner, (Sec, Csc, Cot)):
-            return -1 * Log(inner.reciprocal_class(inner.inner)).simplify()
+        if isinstance(inner, (sec, csc, cot)):
+            return -1 * log(inner.reciprocal_class(inner.inner)).simplify()
 
-        return Log(inner)
+        return log(inner)
 
     def diff(self, var) -> Expr:
         return self.inner.diff(var) / self.inner
@@ -1266,7 +1266,7 @@ class TrigFunction(SingleFunc):
         return self.__class__(inner)
 
 
-class Sin(TrigFunction):
+class sin(TrigFunction):
     def __init__(self, inner):
         super().__init__(inner, function="sin")
         self._special_values = {
@@ -1289,12 +1289,12 @@ class Sin(TrigFunction):
         }
 
     def diff(self, var) -> Expr:
-        return Cos(self.inner) * self.inner.diff(var)
+        return cos(self.inner) * self.inner.diff(var)
 
     def simplify(self) -> "Expr":
         new = super().simplify()
 
-        if not isinstance(new, Sin):
+        if not isinstance(new, sin):
             return new
 
         if new.inner == Const(0):
@@ -1309,7 +1309,7 @@ class Sin(TrigFunction):
         return new
 
 
-class Cos(TrigFunction):
+class cos(TrigFunction):
     def __init__(self, inner):
         super().__init__(inner, function="cos")
         self._special_values = {
@@ -1332,15 +1332,15 @@ class Cos(TrigFunction):
         }
 
     def diff(self, var) -> Expr:
-        return -Sin(self.inner) * self.inner.diff(var)
+        return -sin(self.inner) * self.inner.diff(var)
 
     def simplify(self) -> "Expr":
         new = super().simplify()
 
-        if not isinstance(new, Cos):
+        if not isinstance(new, cos):
             return new
         if isinstance(new.inner, Prod) and new.inner.is_subtraction:
-            return Cos((new.inner * -1).simplify())
+            return cos((new.inner * -1).simplify())
         if new.inner.symbols() != []:
             return new
 
@@ -1357,17 +1357,17 @@ class Cos(TrigFunction):
         return new
 
 
-class Tan(TrigFunction):
+class tan(TrigFunction):
     def __init__(self, inner):
         super().__init__(inner, function="tan")
 
     def diff(self, var) -> Expr:
-        return Sec(self.inner) ** 2 * self.inner.diff(var)
+        return sec(self.inner) ** 2 * self.inner.diff(var)
     
     def simplify(self) -> "Expr":
         new = super().simplify()
 
-        if not isinstance(new, Tan):
+        if not isinstance(new, tan):
             return new
 
         if new.inner == Const(0):
@@ -1378,55 +1378,55 @@ class Tan(TrigFunction):
             pi_coeff = (new.inner / pi).simplify()
             pi_coeff = pi_coeff % 2 if isinstance(pi_coeff, Const) else pi_coeff
             if isinstance(pi_coeff, Const) and str(pi_coeff.value) in self._SPECIAL_KEYS:
-                return (Sin(new.inner) / Cos(new.inner)).simplify()
+                return (sin(new.inner) / cos(new.inner)).simplify()
 
         return new
 
 
-class Csc(TrigFunction):
-    reciprocal_class = Sin
+class csc(TrigFunction):
+    reciprocal_class = sin
 
     def __init__(self, inner):
         super().__init__(inner, function="csc")
 
     def diff(self, var) -> Expr:
-        return (1 / Sin(self.inner)).diff(var)
+        return (1 / sin(self.inner)).diff(var)
 
 
-class Sec(TrigFunction):
-    reciprocal_class = Cos
+class sec(TrigFunction):
+    reciprocal_class = cos
 
     def __init__(self, inner):
         super().__init__(inner, function="sec")
 
     def diff(self, var) -> Expr:
         # TODO: handle when self.inner doesnt contain var
-        return Sec(self.inner) * Tan(self.inner) * self.inner.diff(var)
+        return sec(self.inner) * tan(self.inner) * self.inner.diff(var)
     
     def simplify(self) -> "Expr":
         new = super().simplify()
-        if not isinstance(new, Sec):
+        if not isinstance(new, sec):
             return new
         
         pi_coeff = (new.inner / pi).simplify()
         pi_coeff = pi_coeff % 2 if isinstance(pi_coeff, Const) else pi_coeff
         if isinstance(pi_coeff, Const) and str(pi_coeff.value) in self._SPECIAL_KEYS:
-            return (1 / Cos(new.inner)).simplify()
+            return (1 / cos(new.inner)).simplify()
 
         return new
 
 
-class Cot(TrigFunction):
-    reciprocal_class = Tan
+class cot(TrigFunction):
+    reciprocal_class = tan
 
     def __init__(self, inner):
         super().__init__(inner, function="cot")
 
     def diff(self, var) -> Expr:
-        return (1 / Tan(self.inner)).diff(var)
+        return (1 / tan(self.inner)).diff(var)
 
 
-class ArcSin(TrigFunction):
+class asin(TrigFunction):
     def __init__(self, inner):
         super().__init__(inner, function="sin", is_inverse=True)
 
@@ -1434,7 +1434,7 @@ class ArcSin(TrigFunction):
         return 1 / sqrt(1 - self.inner**2) * self.inner.diff(var)
 
 
-class ArcCos(TrigFunction):
+class acos(TrigFunction):
     def __init__(self, inner):
         super().__init__(inner, function="cos", is_inverse=True)
 
@@ -1442,7 +1442,7 @@ class ArcCos(TrigFunction):
         return -1 / sqrt(1 - self.inner**2) * self.inner.diff(var)
 
 
-class ArcTan(TrigFunction):
+class atan(TrigFunction):
     def __init__(self, inner):
         super().__init__(inner, function="tan", is_inverse=True)
 

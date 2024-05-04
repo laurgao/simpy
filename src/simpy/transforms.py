@@ -9,9 +9,9 @@ from typing import Callable, Dict, List, Literal, Optional, Tuple, Type, Union
 
 import numpy as np
 
-from .expr import (ArcSin, ArcTan, Const, Cos, Cot, Csc, Expr, Log, Power,
-                   Prod, Sec, Sin, Sum, Symbol, Tan, TrigFunction,
-                   contains_cls, remove_const_factor, sqrt, symbols)
+from .expr import (Const, Expr, Power, Prod, Sum, Symbol, TrigFunction, asin,
+                   atan, contains_cls, cos, cot, csc, log, remove_const_factor,
+                   sec, sin, sqrt, symbols, tan)
 from .linalg import invert
 from .polynomial import (Polynomial, polynomial_to_expr, rid_ending_zeros,
                          to_const_polynomial)
@@ -303,9 +303,9 @@ class TrigUSub2(Transform):
     _key: str = None
     # {label: trigfn class, derivative of inverse trigfunction}
     _table: Dict[str, Tuple[ExprFn, ExprFn]] = {
-        "sin": (Sin, lambda var: 1 / sqrt(1 - var**2)),  # Asin(x).diff(x)
-        "cos": (Cos, lambda var: -1 / sqrt(1 - var**2)),
-        "tan": (Tan, lambda var: 1 / (1 + var**2)),
+        "sin": (sin, lambda var: 1 / sqrt(1 - var**2)),  # Asin(x).diff(x)
+        "cos": (cos, lambda var: -1 / sqrt(1 - var**2)),
+        "tan": (tan, lambda var: 1 / (1 + var**2)),
     }
 
     def forward(self, node: Node):
@@ -350,32 +350,32 @@ class RewriteTrig(Transform):
         expr = node.expr
         r1 = replace_class(
             expr,
-            [Tan, Csc, Cot, Sec],
+            [tan, csc, cot, sec],
             [
-                lambda x: Sin(x) / Cos(x),
-                lambda x: 1 / Sin(x),
-                lambda x: Cos(x) / Sin(x),
-                lambda x: 1 / Cos(x),
+                lambda x: sin(x) / cos(x),
+                lambda x: 1 / sin(x),
+                lambda x: cos(x) / sin(x),
+                lambda x: 1 / cos(x),
             ],
         ).simplify()
         r2 = replace_class(
             expr,
-            [Sin, Cos, Cot, Sec],
+            [sin, cos, cot, sec],
             [
-                lambda x: 1 / Csc(x),
-                lambda x: 1 / Tan(x) / Csc(x),
-                lambda x: 1 / Tan(x),
-                lambda x: Tan(x) * Csc(x),
+                lambda x: 1 / csc(x),
+                lambda x: 1 / tan(x) / csc(x),
+                lambda x: 1 / tan(x),
+                lambda x: tan(x) * csc(x),
             ],
         ).simplify()
         r3 = replace_class(
             expr,
-            [Sin, Cos, Tan, Csc],
+            [sin, cos, tan, csc],
             [
-                lambda x: 1 / Cot(x) / Sec(x),
-                lambda x: 1 / Sec(x),
-                lambda x: 1 / Cot(x),
-                lambda x: Cot(x) * Sec(x),
+                lambda x: 1 / cot(x) / sec(x),
+                lambda x: 1 / sec(x),
+                lambda x: 1 / cot(x),
+                lambda x: cot(x) * sec(x),
             ],
         ).simplify()
 
@@ -406,8 +406,8 @@ class InverseTrigUSub(Transform):
 
     # {label: class, search query, dy_dx, variable_change}
     _table: Dict[str, Tuple[ExprFn, Callable[[str], str], ExprFn, ExprFn]] = {
-        "sin": (Sin, lambda symbol: 1 - symbol ** 2, lambda var: Cos(var), ArcSin),
-        "tan": (Tan, lambda symbol: 1 + symbol ** 2, lambda var: Sec(var) ** 2, ArcTan),
+        "sin": (sin, lambda symbol: 1 - symbol ** 2, lambda var: cos(var), asin),
+        "tan": (tan, lambda symbol: 1 + symbol ** 2, lambda var: sec(var) ** 2, atan),
     }
 
     def forward(self, node: Node):
@@ -597,7 +597,7 @@ class CompoundAngle(Transform):
     def check(self, node: Node) -> bool:
         def _check(e: Expr) -> bool:
             if (
-                isinstance(e, (Sin, Cos))
+                isinstance(e, (sin, cos))
                 and isinstance(e.inner, Sum)
                 and len(e.inner.terms) == 2  # for now lets j do 2 terms
             ):
@@ -609,17 +609,17 @@ class CompoundAngle(Transform):
 
     def forward(self, node: Node) -> None:
         condition = (
-            lambda expr: isinstance(expr, (Sin, Cos))
+            lambda expr: isinstance(expr, (sin, cos))
             and isinstance(expr.inner, Sum)
             and len(expr.inner.terms) == 2
         )
 
-        def _perform(expr: Union[Sin, Cos]) -> Expr:
+        def _perform(expr: Union[sin, cos]) -> Expr:
             a, b = expr.inner.terms
-            if isinstance(expr, Sin):
-                return Sin(a) * Cos(b) + Cos(a) * Sin(b)
-            elif isinstance(expr, Cos):
-                return Cos(a) * Cos(b) - Sin(a) * Sin(b)
+            if isinstance(expr, sin):
+                return sin(a) * cos(b) + cos(a) * sin(b)
+            elif isinstance(expr, cos):
+                return cos(a) * cos(b) - sin(a) * sin(b)
 
         new_integrand = replace_factory(condition, _perform)(node.expr)
 
@@ -636,8 +636,8 @@ class SinUSub(Transform):
     # TODO: generalize this in some form? to other trig fns maybe?
     # - generalize to if the sin is in a power but the cos is under no power.
     # like transform D but for trigfns
-    _sin: Sin = None
-    _cos: Cos = None
+    _sin: sin = None
+    _cos: cos = None
     _variable_change: Expr = None
 
     def check(self, node: Node) -> bool:
@@ -653,30 +653,30 @@ class SinUSub(Transform):
 
         # sins = [term.inner for term in node.expr.terms if isinstance(term, Sin)]
         # coses = [term.inner for term in node.expr.terms if isinstance(term, Cos)]
-        sins: List[Sin] = []
-        coses: List[Cos] = []
+        sins: List[sin] = []
+        coses: List[cos] = []
         for term in node.expr.terms:
-            if isinstance(term, Sin):
+            if isinstance(term, sin):
                 if not is_constant_product_of_var(term.inner, node.var):
                     continue
 
                 sins.append(term)
 
-                for cos in coses:
-                    if term.inner == cos.inner:
+                for cos_expr in coses:
+                    if term.inner == cos_expr.inner:
                         self._sin = term
-                        self._cos = cos
+                        self._cos = cos_expr
                         return True
 
-            if isinstance(term, Cos):
+            if isinstance(term, cos):
                 if not is_constant_product_of_var(term.inner, node.var):
                     continue
 
                 coses.append(term)
 
-                for sin in sins:
-                    if term.inner == sin.inner:
-                        self._sin = sin
+                for sin_expr in sins:
+                    if term.inner == sin_expr.inner:
+                        self._sin = sin_expr
                         self._cos = term
                         return True
 
@@ -712,13 +712,13 @@ class ProductToSum(Transform):
     def check(self, node: Node) -> bool:
         if isinstance(node.expr, Prod):
             if len(node.expr.terms) == 2 and all(
-                isinstance(term, (Sin, Cos)) for term in node.expr.terms
+                isinstance(term, (sin, cos)) for term in node.expr.terms
             ):
                 self._a, self._b = node.expr.terms
                 return True
 
         if isinstance(node.expr, Power):
-            if isinstance(node.expr.base, (Sin, Cos)) and node.expr.exponent == 2:
+            if isinstance(node.expr.base, (sin, cos)) and node.expr.exponent == 2:
                 self._a = self._b = node.expr.base
                 return True
 
@@ -726,14 +726,14 @@ class ProductToSum(Transform):
 
     def forward(self, node: Node) -> None:
         a, b = self._a, self._b
-        if isinstance(a, Sin) and isinstance(b, Cos):
-            temp = Sin(a.inner + b.inner) + Sin(a.inner - b.inner)
-        elif isinstance(a, Cos) and isinstance(b, Sin):
-            temp = Sin(a.inner + b.inner) - Sin(a.inner - b.inner)
-        elif isinstance(a, Cos) and isinstance(b, Cos):
-            temp = Cos(a.inner + b.inner) + Cos(a.inner - b.inner)
-        elif isinstance(a, Sin) and isinstance(b, Sin):
-            temp = Cos(a.inner - b.inner) - Cos(a.inner + b.inner)
+        if isinstance(a, sin) and isinstance(b, cos):
+            temp = sin(a.inner + b.inner) + sin(a.inner - b.inner)
+        elif isinstance(a, cos) and isinstance(b, sin):
+            temp = sin(a.inner + b.inner) - sin(a.inner - b.inner)
+        elif isinstance(a, cos) and isinstance(b, cos):
+            temp = cos(a.inner + b.inner) + cos(a.inner - b.inner)
+        elif isinstance(a, sin) and isinstance(b, sin):
+            temp = cos(a.inner - b.inner) - cos(a.inner + b.inner)
 
         new_integrand = temp / 2
         node.children.append(Node(new_integrand, node.var, self, node))
@@ -753,7 +753,7 @@ class ByParts(Transform):
 
     def check(self, node: Node) -> bool:
         if not isinstance(node.expr, Prod):
-            if (isinstance(node.expr, Log) or isinstance(node.expr, TrigFunction) and node.expr.is_inverse) and node.expr.inner == node.var: # Special case for Log, ArcSin, etc.
+            if (isinstance(node.expr, log) or isinstance(node.expr, TrigFunction) and node.expr.is_inverse) and node.expr.inner == node.var: # Special case for Log, ArcSin, etc.
                 # TODO universalize it more?? how to make it more universal without making inf loops?
                 dv = 1
                 v = node.var
@@ -1007,10 +1007,10 @@ def generate_intermediate_var() -> Symbol:
 
 
 STANDARD_TRIG_INTEGRALS: Dict[str, ExprFn] = {
-    "sin(x)": lambda x: -Cos(x),
-    "cos(x)": Sin,
-    "sec(x)^2": Tan, # Integration calculator says this is a standard integral. + i haven't encountered any transform that can solve this.
-    "sec(x)": lambda x: Log(Tan(x) + Sec(x)) # not a standard integral but it's fucked so im leaving it (unless?)
+    "sin(x)": lambda x: -cos(x),
+    "cos(x)": sin,
+    "sec(x)^2": tan, # Integration calculator says this is a standard integral. + i haven't encountered any transform that can solve this.
+    "sec(x)": lambda x: log(tan(x) + sec(x)) # not a standard integral but it's fucked so im leaving it (unless?)
 }
 
 def _check_if_solveable(integrand: Expr, var: Symbol) -> Optional[Expr]:
@@ -1020,9 +1020,9 @@ def _check_if_solveable(integrand: Expr, var: Symbol) -> Optional[Expr]:
     if isinstance(integrand, Power):
         if integrand.base == var and not integrand.exponent.contains(var):
             n = integrand.exponent
-            return ((1 / (n + 1)) * Power(var, n + 1)).simplify() if n != -1 else Log(integrand.base).simplify()
+            return ((1 / (n + 1)) * Power(var, n + 1)).simplify() if n != -1 else log(integrand.base).simplify()
         if integrand.exponent == var and not integrand.base.contains(var):
-            return (1 / Log(integrand.base) * integrand).simplify()
+            return (1 / log(integrand.base) * integrand).simplify()
     if isinstance(integrand, Symbol) and integrand == var:
         return( Fraction(1 / 2) * Power(var, 2)).simplify()
 

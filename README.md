@@ -1,6 +1,6 @@
 ## simpy
 
-*A worse version of [sympy](https://www.sympy.org)*
+_A worse version of [sympy](https://www.sympy.org)_
 
 Current version can do algebraic simplifications and integrate polynomial functions. For example, these integrals Laura had to do for homework:
 
@@ -24,3 +24,7 @@ I1 = sp.integrate((x/90 * (x-5)**2 / 350), (x, 5, 6))
 I2 = sp.integrate((F(1, 15) - F(1, 360) * (x-6))*(x-5)**2 / 350, (x, 6, 15))
 I3 = sp.integrate((F(1, 15) - F(1, 360) * (x-6))*(1 - (40-x)**2/875), (x, 15, 30))
 ```
+
+## Please make issues!
+
+This project is actively undergoing development; please let me know about any bugs you encounter! If there's an integral that we currently can't solve, create a github issue and tag "new integral."

@@ -12,14 +12,14 @@ def test_lecture_example():
     expected_integral = -5 * (
         -(x / (sqrt(1 - x**2)))
         + (F(1, 3) * x**3 / (1 - x**2) ** F(3, 2))
-        + ArcSin(x)
+        + asin(x)
     )
     diff = (integral - expected_integral).simplify()
     assert diff == Const(0), f"diff = {diff}"
 
 
 def test_sin3x():
-    expression = Sin(x) ** 3
+    expression = sin(x) ** 3
     integral = integrate(expression, x)
     breakpoint()
 

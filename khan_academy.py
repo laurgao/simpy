@@ -16,50 +16,50 @@ def test_ex():
 
 def test_xcosx():
     """Uses integration by parts"""
-    integrand = x * Cos(x)
+    integrand = x * cos(x)
     ans = integrate(integrand, (x, 3 * pi / 2, pi))
     assert_eq_plusc(ans, 3 * pi / 2 - 1)
 
 def test_partial_fractions():
     integrand = (x + 8) / (x * (x + 6))
-    expected_ans = Fraction(4, 3) * Log(x) - Fraction(1, 3) * Log(x + 6)
+    expected_ans = Fraction(4, 3) * log(x) - Fraction(1, 3) * log(x + 6)
     assert_integral(integrand, expected_ans)
 
 
 def test_arcsin():
-    ans = integrate(ArcSin(x), x)
-    expected_ans = x * ArcSin(x) + sqrt(1 - x**2)
+    ans = integrate(asin(x), x)
+    expected_ans = x * asin(x) + sqrt(1 - x**2)
     assert_eq_plusc(ans, expected_ans)
 
-    ans = integrate(ArcCos(x), x)
-    expected_ans = x * ArcCos(x) - sqrt(1 - x**2)
+    ans = integrate(acos(x), x)
+    expected_ans = x * acos(x) - sqrt(1 - x**2)
     assert_eq_plusc(ans, expected_ans)
 
-    ans = integrate(ArcTan(x), x)
-    expected_ans = x * ArcTan(x) - Log(1 + x**2) / 2
+    ans = integrate(atan(x), x)
+    expected_ans = x * atan(x) - log(1 + x**2) / 2
     assert_eq_plusc(ans, expected_ans)
 
 
 def test_sec2x_tan2x():
     """Uses either integration by parts with direct solve or generic sin/cos usub"""
-    integrand = Sec(2*x) * Tan(2*x)
+    integrand = sec(2*x) * tan(2*x)
     ans = integrate(integrand, (x, 0, pi/6))
     assert ans == Fraction(1, 2)
 
 def more_test():
-    assert_integral(4 * Sec(x) ** 2, 4 * Tan(x))
-    assert_integral(Sec(x) ** 2 * Tan(x) ** 2, Tan(x) ** 3 / 3)
-    assert_integral(5 / x - 3 * e ** x, 5 * Log(x) - 3 * e ** x)
-    assert_integral(Sec(x), Log(Sec(x) + Tan(x)))
-    assert_integral(2 * Cos(2 * x - 5), Sin(2 * x - 5)) 
+    assert_integral(4 * sec(x) ** 2, 4 * tan(x))
+    assert_integral(sec(x) ** 2 * tan(x) ** 2, tan(x) ** 3 / 3)
+    assert_integral(5 / x - 3 * e ** x, 5 * log(x) - 3 * e ** x)
+    assert_integral(sec(x), log(sec(x) + tan(x)))
+    assert_integral(2 * cos(2 * x - 5), sin(2 * x - 5)) 
     assert_integral(3 * x ** 5 - x ** 3 + 6, 6*x - x**4/4 + x**6/2)
     assert_integral(x ** 3 * e ** (x ** 4), (e**(x**4)/4))
 
     # Uses generic u-sub
-    assert_definite_integral(e ** x / (1 + e ** x), (Log(2), Log(8)), Log(9) - Log(3))
+    assert_definite_integral(e ** x / (1 + e ** x), (log(2), log(8)), log(9) - log(3))
 
     assert_definite_integral(8 * x / sqrt(1 - 4 * x ** 2), (0, Fraction(1,4)), 2 - sqrt(3))
-    assert_definite_integral(Sin(4*x), (0, pi/4), Fraction(1,2))
+    assert_definite_integral(sin(4*x), (0, pi/4), Fraction(1,2))
 
 def test_expanding_big_power():
     integrand = (2 * x - 5) ** 10
@@ -71,15 +71,15 @@ def test_expanding_big_power():
     assert_integral(integrand, expected_ans)
 
 def test_polynomial_div_integrals():
-    assert_integral((x-5) / (-2 * x + 2), - x / 2 + 2 * Log(1 - x))
-    assert_integral((x ** 3 - 1)/ (x+2), x**3/3 - x**2 + 4*x- 9*Log(2 + x))
-    assert_integral((x - 1)/ (2 * x + 4), x / 2 - Fraction(3, 2) * Log(x + 2))
+    assert_integral((x-5) / (-2 * x + 2), - x / 2 + 2 * log(1 - x))
+    assert_integral((x ** 3 - 1)/ (x+2), x**3/3 - x**2 + 4*x- 9*log(2 + x))
+    assert_integral((x - 1)/ (2 * x + 4), x / 2 - Fraction(3, 2) * log(x + 2))
     
     integrand = (2 * x ** 3 + 4 * x ** 2 - 5)/ (x + 3)
     ans = integrate(integrand, x)
     # TODO: expected = ...
 
 def test_complete_the_square_integrals():
-    assert_integral(1/(3*x**2+6*x+78), ArcTan((1 + x)/5)/15)
-    assert_integral(1/(x**2-8*x+65), ArcTan((-4 + x)/7)/7)
-    assert_integral(1/sqrt(-x**2-6*x+40), ArcSin((3 + x)/7))
+    assert_integral(1/(3*x**2+6*x+78), atan((1 + x)/5)/15)
+    assert_integral(1/(x**2-8*x+65), atan((-4 + x)/7)/7)
+    assert_integral(1/sqrt(-x**2-6*x+40), asin((3 + x)/7))
