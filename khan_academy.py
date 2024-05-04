@@ -5,7 +5,7 @@ and make sure simpy can do them
 
 from src.simpy.expr import *
 from src.simpy.integration import *
-from test_utils import assert_eq_plusc
+from test_utils import assert_eq_plusc, assert_eq_repr
 
 x = symbols("x")
 
@@ -13,7 +13,7 @@ def _assert_integral(integrand, expected):
     return assert_eq_plusc(integrate(integrand), expected)
 
 def _assert_definite_integral(integrand, bounds, expected):
-    return assert_eq_plusc(integrate(integrand, bounds), expected)
+    return assert_eq_repr(integrate(integrand, bounds), expected)
 
 def test_ex():
     integrand = 6 * e**x
