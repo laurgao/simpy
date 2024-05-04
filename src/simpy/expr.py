@@ -443,7 +443,7 @@ class Symbol(Expr):
 
 @dataclass
 class Sum(Associative, Expr):
-    def __new__(cls, terms: List[Expr]):
+    def __new__(cls, terms: List[Expr]) -> "Expr":
         """When a sum is initiated:
         - terms are converted to expr 
         - flatten
@@ -473,9 +473,7 @@ class Sum(Associative, Expr):
                     new_coeff += coeff2
                     terms[j] = None
 
-            # (sus, maybe don't use simplify here. but it's fine for now since Prod.simplify()
-            # doesn't do much, just returns if it has one term.)
-            new_terms.append(Prod([new_coeff] + non_const_factors1).simplify())
+            new_terms.append(Prod([new_coeff] + non_const_factors1))
 
         # accumulate all constants
         const = sum(t.value for t in new_terms if isinstance(t, Const))
@@ -502,6 +500,8 @@ class Sum(Associative, Expr):
 
     def simplify(self) -> "Expr":
         new_sum = Sum([t.simplify() for t in self.terms])
+        if not isinstance(new_sum, Sum):
+            return new_sum
 
         if contains_cls(new_sum, TrigFunction):
             # I WANT TO DO IT so that it's more robust.
@@ -697,7 +697,7 @@ def deconstruct_power(expr: Expr) -> Tuple[Expr, Const]:
 
 @dataclass
 class Prod(Associative, Expr):
-    def __new__(cls, initial_terms: List[Expr]):
+    def __new__(cls, initial_terms: List[Expr]) -> "Expr":
         # We need to flatten BEFORE we accumulate like terms
         # ex: Prod(x, Prod(Power(x, -1), y))
         # Stupid repeition of logic but wtv it's fine
@@ -928,20 +928,6 @@ class Power(Expr):
     base: Expr
     exponent: Expr
 
-    def __post_init__(self):
-        super().__post_init__()
-
-        b, x = self.base, self.exponent
-        if isinstance(b, Const) and isinstance(x, Const):
-            # Rewriting for consistency between same values.
-            if b.value.numerator == 1:
-                self.base = b.reciprocal()
-                self.exponent = -x
-            elif b.value.denominator != 1 and x < 0:
-                self.base = b.reciprocal()
-                self.exponent = -x
-
-
     def __repr__(self) -> str:
         isfraction = lambda x: isinstance(x, Const) and x.value.denominator != 1
         def _term_repr(term):
@@ -976,15 +962,23 @@ class Power(Expr):
 
         return "{" + _term_latex(self.base) + "}^{" + _term_latex(self.exponent) + "}"
 
-    def simplify(self) -> "Expr":
-        x = self.exponent.simplify()
-        b = self.base.simplify()
-        if x == 0 and b != 0:
+    def __new__(cls, base: Expr, exponent: Expr) -> "Expr":
+        def create_power(ba, ex) -> "Power":
+            instance = Expr.__new__(cls) # can't use super() here so have to do this. if the uh superclass of Power changes then this has to change too.
+            instance.base = ba
+            instance.exponent = ex
+            return instance
+
+        b = base
+        x = exponent
+        if x == 0:
+            # Ok this is up to debate, but since python does 0**0 = 1 I'm gonna do it too.
+            # "0**0 represents the empty product (the number of sets of 0 elements that can be chosen from a set of 0 elements), which by definition is 1. This is also the same reason why anything else raised to the power of 0 is 1."
             return Const(1)
-        if x == 0 and b == 0:
-            return NaN()
         if x == 1:
             return b
+        if b == 0:
+            return Const(0)
         if b == 1:
             return Const(1)
         if isinstance(b, Const) and isinstance(x, Const):
@@ -992,10 +986,17 @@ class Power(Expr):
                 return Const(b.value**x.value)
             except:
                 pass
-
+            
+            # Rewriting for consistency between same values.
+            if b.value.numerator == 1:
+                b = b.reciprocal()
+                x = -x
+            elif b.value.denominator != 1 and x < 0:
+                b = b.reciprocal()
+                x = -x
             if x.value.denominator % 2 == 0 and b.value.numerator < 0:
                 # Cannot be simplified further.
-                return Power(b, x)
+                return create_power(b, x)
             
             # check if one of num^exponent or denom^exponent is integer
             n, d = abs(b.value.numerator), b.value.denominator
@@ -1006,13 +1007,13 @@ class Power(Expr):
             xn = n**xv  # exponentiated numerator
             xd = d**xv
             if not isint(xn) and not isint(xd): # Cannot be simplified further
-                return Power(b, x)
+                return create_power(b, x)
 
             # the answer will be a product
             terms = []
             if isint(xn):
                 terms.append(Const(xn))
-                terms.append(Power(d, -xv))
+                terms.append(Power(d, -xv)) # will this circular? no it won't it should get caught under line after `if not isint(xn) and not...`
             else:
                 # isint(xd)
                 terms.append(Const(Fraction(1, int(xd))))
@@ -1020,24 +1021,30 @@ class Power(Expr):
             if b.value.numerator < 0:
                 terms.append(Const(-1))
             
-            return Prod(terms).simplify()
-
+            return Prod(terms)
         if isinstance(b, Power):
-            return Power(b.base, x * b.exponent).simplify()
+            return create_power(b.base, x * b.exponent)
         if isinstance(b, Prod):
             # when you construct this new power entity you have to simplify it.
             # because what if the term raised to this exponent can be simplified?
             # ex: if you have (ab)^n where a = c^m
-            return Prod([Power(term, x).simplify() for term in b.terms])
+            return Prod([Power(term, x) for term in b.terms])
         if isinstance(x, Log) and b == x.base:
-            return x.inner.simplify()
+            return x.inner
         if isinstance(x, Prod):
             for i, t in enumerate(x.terms):
                 if isinstance(t, Log) and t.base == b:
                     rest = Prod(x.terms[:i] + x.terms[i+1:])
-                    return ((b ** t).simplify() ** rest).simplify()
-                
-        return Power(b, x)
+                    return create_power(t.inner, rest)
+                    # return create_power(Power(b, t), rest)
+                    # Power(b, t) will be simplified to t.inner
+        return create_power(b, x)
+    
+    def __init__(self, base: Expr, exponent: Expr):
+        self.__post_init__()
+    
+    def simplify(self) -> "Expr":
+        return Power(self.base.simplify(), self.exponent.simplify())
     
     def _power_expandable(self) -> bool:
         return (
