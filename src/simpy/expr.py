@@ -1023,7 +1023,9 @@ class Power(Expr):
             
             return Prod(terms)
         if isinstance(b, Power):
-            return create_power(b.base, x * b.exponent)
+            # Have to call the class here. In the case that x*b.exponent = 1, this will have to re-simplfiy
+            # through calling the constructor.
+            return Power(b.base, x * b.exponent)
         if isinstance(b, Prod):
             # when you construct this new power entity you have to simplify it.
             # because what if the term raised to this exponent can be simplified?
@@ -1248,7 +1250,6 @@ class TrigFunction(SingleFunc):
             # not supporting stuff like asin(cos(x)) sorry.
 
         return self.__class__(inner)
-
 
 
 class Sin(TrigFunction):
