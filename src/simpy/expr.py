@@ -963,12 +963,13 @@ class Power(Expr):
         return "{" + _term_latex(self.base) + "}^{" + _term_latex(self.exponent) + "}"
 
     def __new__(cls, base: Expr, exponent: Expr) -> "Expr":
-        default_return = Expr.__new__(cls)
-        default_return.base = base
-        default_return.exponent = exponent
+        b = _cast(base)
+        x = _cast(exponent)
 
-        b = base
-        x = exponent
+        default_return = super().__new__(cls)
+        default_return.base = b
+        default_return.exponent = x
+
         if x == 0:
             # Ok this is up to debate, but since python does 0**0 = 1 I'm gonna do it too.
             # "0**0 represents the empty product (the number of sets of 0 elements that can be chosen from a set of 0 elements), which by definition is 1. This is also the same reason why anything else raised to the power of 0 is 1."
@@ -987,23 +988,22 @@ class Power(Expr):
             
             # Rewriting for consistency between same values.
             if b.value.numerator == 1:
-                b = b.reciprocal()
-                x = -x
+                return Power(b.reciprocal(), -x)
             elif b.value.denominator != 1 and x < 0:
-                b = b.reciprocal()
-                x = -x
+                return Power(b.reciprocal(), -x)
+            
             if x.value.denominator % 2 == 0 and b.value.numerator < 0:
                 # Cannot be simplified further.
                 return default_return
             
             # check if one of num^exponent or denom^exponent is integer
             n, d = abs(b.value.numerator), b.value.denominator
-            xv = x.abs().value
             if x < 0:
                 n, d = d, n
+            xvalue = x.abs().value
+            xn = n**xvalue  # exponentiated numerator
+            xd = d**xvalue
             isint = lambda a: int(a) == a and a != 1
-            xn = n**xv  # exponentiated numerator
-            xd = d**xv
             if not isint(xn) and not isint(xd): # Cannot be simplified further
                 return default_return
 
@@ -1011,11 +1011,11 @@ class Power(Expr):
             terms = []
             if isint(xn):
                 terms.append(Const(xn))
-                terms.append(Power(d, -xv)) # will this circular? no it won't it should get caught under line after `if not isint(xn) and not...`
+                terms.append(Power(d, -xvalue)) # will this circular? no it won't it should get caught under line after `if not isint(xn) and not...`
             else:
                 # isint(xd)
                 terms.append(Const(Fraction(1, int(xd))))
-                terms.append(Power(n, xv))
+                terms.append(Power(n, xvalue))
             if b.value.numerator < 0:
                 terms.append(Const(-1))
             
