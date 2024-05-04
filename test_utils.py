@@ -15,7 +15,9 @@ def assert_eq_plusc(a: Expr, b: Expr):
     assert len(diff.symbols()) == 0, f"diff = {diff}"
 
 @cast
-def assert_eq_repr(a: Expr, b: Expr):
+def assert_eq_value(a: Expr, b: Expr):
+    """Tests that the values of a & b are the same in spirit, regardless of how they are represented with the Expr data structures.
+    """
     a = a.simplify()
     b = b.simplify()
     if a.expandable():
@@ -24,11 +26,12 @@ def assert_eq_repr(a: Expr, b: Expr):
         b = b.expand()
     assert repr(a) == repr(b), f"a != b, {a} != {b}"
 
-
 @cast
-def assert_eq_repr_strict(a: Expr, b: Expr):
-    """Tests that the structure of a and b exprs are the same, not just their reprs"""
-    assert debug_repr(a) == debug_repr(b), f"STRICT a != b, {debug_repr(a)} != {debug_repr(b)}"
+def assert_eq_strict(a: Expr, b: Expr):
+    """Tests that the structure of a and b exprs are the same, not just their values or reprs.
+    // This does the same thing as assert a == b I believe.
+    """
+    assert a == b, f"STRICT: {a} != {b}, \n\tDebug repr: {debug_repr(a)} != {debug_repr(b)}"
 
 
 def unhashable_set_eq(a: list, b: list) -> bool:
