@@ -2,9 +2,10 @@ from fractions import Fraction
 
 import numpy as np
 
-from khan_academy import (more_test, test_arcsin,
-                          test_complete_the_square_integrals, test_ex,
-                          test_expanding_big_power, test_partial_fractions,
+from khan_academy import (assert_definite_integral, assert_integral, more_test,
+                          test_arcsin, test_complete_the_square_integrals,
+                          test_ex, test_expanding_big_power,
+                          test_partial_fractions,
                           test_polynomial_div_integrals, test_sec2x_tan2x,
                           test_xcosx)
 from src.simpy.expr import *
@@ -324,16 +325,15 @@ if __name__ == "__main__":
     assert_eq_plusc(Log(x).diff(x), 1 / x)
 
     # Basic integrals
-    assert_eq_plusc(integrate(2, (x, 5, 3)), -4)
-    assert_eq_plusc(integrate(x ** Fraction(7, 3), x), Fraction(3, 10) * x ** Fraction(10,3))
-    assert_eq_plusc(integrate(3 * x**2 - 2 * x, x), x**3 - x**2)
-    assert_eq_plusc(integrate((x + 1) ** 2, x), x + x**2 + (x**3 / 3))
-
-    assert_eq_plusc(integrate(x ** 12, x), x ** 13 / 13)
-    assert_eq_plusc(integrate(1 / x, x), Log(x))
-    assert_eq_plusc(integrate(1 / x, (x, 1, 2)), Log(2))
-    assert_eq_plusc(integrate(y, x), x * y)
-    assert_eq_plusc(integrate(Tan(y), x), x * Tan(y))
+    assert_definite_integral(2, (x, 5, 3), -4)
+    assert_integral(x ** Fraction(7, 3), Fraction(3, 10) * x ** Fraction(10,3))
+    assert_integral(3 * x**2 - 2 * x, x**3 - x**2)
+    assert_integral((x + 1) ** 2, x + x**2 + (x**3 / 3))
+    assert_integral(x ** 12, x ** 13 / 13)
+    assert_integral(1 / x, Log(x))
+    assert_definite_integral(1 / x, (x, 1, 2), Log(2))
+    assert_integral(y, x * y, var=x)
+    assert_integral(Tan(y), x * Tan(y), var=x)
 
     assert nesting(x**2, x) == 2
     assert nesting(x * y**2, x) == 2
@@ -400,7 +400,7 @@ if __name__ == "__main__":
 
     # ln integral
     assert_eq_strict((x * Log(x) - x).diff(x), Log(x))
-    assert_eq_plusc(integrate(Log(x)), x * Log(x) - x)
+    assert_integral(Log(x), x * Log(x) - x)
 
     # run entire integrals
     test_lecture_example() 
@@ -421,9 +421,8 @@ if __name__ == "__main__":
     test_complete_the_square_integrals()
 
     integrand = Log(x + 6) / x**2
-    integral = integrate(integrand, x)
     expected = Log(x) / 6 - Log(x + 6) / x - Log(x+6) / 6
-    assert_eq_plusc(integral, expected)
+    assert_integral(integrand, expected)
 
     # without the string search fix on InverseTrigUSub, this returns a wrong answer.
     integrand = sqrt(x ** 2 + 11)

@@ -1,5 +1,17 @@
-from src.simpy.expr import Expr, cast, debug_repr
+from typing import Optional
 
+from src.simpy.expr import Expr, Symbol, cast, debug_repr, symbols
+from src.simpy.integration import integrate
+
+x, y = symbols("x, y")
+
+@cast
+def assert_integral(integrand: Expr, expected: Expr, var: Optional[Symbol] = None):
+    assert_eq_plusc(integrate(integrand, var), expected)
+
+@cast
+def assert_definite_integral(integrand: Expr, bounds: tuple, expected: Expr):
+    assert_eq_strict(integrate(integrand, bounds), expected)
 
 @cast
 def assert_eq_plusc(a: Expr, b: Expr):

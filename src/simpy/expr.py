@@ -50,6 +50,10 @@ def nesting(expr: "Expr", var: Optional["Symbol"] = None) -> int:
 
 
 def _cast(x):
+    if x is None or x is True or x is False:
+        # let it slide because it's probably intentional
+        return x
+
     if type(x) == int or isinstance(x, Fraction):
         return Const(x)
     if type(x) == float and int(x) == x:  # silly patch
@@ -68,7 +72,7 @@ def _cast(x):
 
 def cast(func):
     def wrapper(*args, **kwargs) -> "Expr":
-        return func(*[_cast(a) for a in args], **kwargs)
+        return func(*[_cast(a) for a in args], **{k: _cast(v) for k, v in kwargs.items()})
 
     return wrapper
 
@@ -409,20 +413,21 @@ class E(Number, Expr):
     
 
 @dataclass
-class NaN(Number, Expr):
+class Infinity(Number, Expr):
     @cast
     def evalf(self, subs: Dict[str, "Const"]):
         return self
 
     def __repr__(self) -> str:
-        return "NaN"
+        return "inf"
 
     def latex(self) -> str:
-        raise ValueError("Cannot convert NaN to latex")
+        return "\\infty"
 
 
 pi = Pi()
 e = E()
+infinity = Infinity() # This isn't used for anything yet.
 
 
 @dataclass
@@ -1142,13 +1147,19 @@ class Log(SingleFunc):
     @property
     def _label(self):
         return "ln"
+    
+    def __new__(cls, inner: Expr, base: Expr = e):
+        if inner == 1:
+            return Const(0)
+        if inner == base:
+            return Const(1)
+        if isinstance(inner, Power) and inner.base == base:
+            return inner.exponent
+        
+        return super().__new__(cls)
 
     def simplify(self) -> Expr:
         inner = self.inner.simplify()
-        if inner == 1:
-            return Const(0)
-        if inner == self.base:
-            return Const(1)
         
         # IDK if this should be in simplify or if it should be like expand, in a diff function
         # like you can move stuff together or move stuff apart
