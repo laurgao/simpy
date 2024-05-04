@@ -963,11 +963,9 @@ class Power(Expr):
         return "{" + _term_latex(self.base) + "}^{" + _term_latex(self.exponent) + "}"
 
     def __new__(cls, base: Expr, exponent: Expr) -> "Expr":
-        def create_power(ba, ex) -> "Power":
-            instance = Expr.__new__(cls) # can't use super() here so have to do this. if the uh superclass of Power changes then this has to change too.
-            instance.base = ba
-            instance.exponent = ex
-            return instance
+        default_return = Expr.__new__(cls)
+        default_return.base = base
+        default_return.exponent = exponent
 
         b = base
         x = exponent
@@ -996,7 +994,7 @@ class Power(Expr):
                 x = -x
             if x.value.denominator % 2 == 0 and b.value.numerator < 0:
                 # Cannot be simplified further.
-                return create_power(b, x)
+                return default_return
             
             # check if one of num^exponent or denom^exponent is integer
             n, d = abs(b.value.numerator), b.value.denominator
@@ -1007,7 +1005,7 @@ class Power(Expr):
             xn = n**xv  # exponentiated numerator
             xd = d**xv
             if not isint(xn) and not isint(xd): # Cannot be simplified further
-                return create_power(b, x)
+                return default_return
 
             # the answer will be a product
             terms = []
@@ -1037,10 +1035,10 @@ class Power(Expr):
             for i, t in enumerate(x.terms):
                 if isinstance(t, Log) and t.base == b:
                     rest = Prod(x.terms[:i] + x.terms[i+1:])
-                    return create_power(t.inner, rest)
-                    # return create_power(Power(b, t), rest)
+                    return Power(t.inner, rest) # Just in case this needs to be simplified, we will pass this through the constructor
+                    # return Power(Power(b, t), rest)
                     # Power(b, t) will be simplified to t.inner
-        return create_power(b, x)
+        return default_return
     
     def __init__(self, base: Expr, exponent: Expr):
         self.__post_init__()
