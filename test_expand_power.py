@@ -1,13 +1,14 @@
 from src.simpy.combinatorics import generate_permutations
-from src.simpy.expr import Const, Prod, Sum, symbols
+from src.simpy.expr import Prod, Sum, symbols
+from test_utils import assert_eq_strict, unhashable_set_eq
 
 
 def test_expand_power():
     x = symbols("x")
     power = (x ** 3 + 1) ** 6
-    prod = Prod([Sum([x ** Const(3), Const(1)])]*6)
+    prod = Prod([Sum([x ** 3, 1])]*6)
 
-    assert power.expand() == prod.expand()
+    assert_eq_strict(power.expand(), prod.expand())
 
 
 def test_multinomial_powers():
@@ -16,7 +17,6 @@ def test_multinomial_powers():
     i = 3  # Number of terms
     n = 3 # Sum of terms
     result = generate_permutations(i, n)
-    print(result)
     expected_result = [
         [0, 0, 3],
         [0, 1, 2],
@@ -29,5 +29,8 @@ def test_multinomial_powers():
         [2, 1, 0],
         [3, 0, 0]
     ]
-    # Yup it's the same.
-    # TODO: make a assert
+
+    # lmao this is a bit sad but it works
+    a = [repr(el) for el in result]
+    b = [repr(el) for el in expected_result]
+    unhashable_set_eq(a, b)

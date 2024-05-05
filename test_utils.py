@@ -16,13 +16,7 @@ def assert_definite_integral(integrand: Expr, bounds: tuple, expected: Expr):
 @cast
 def assert_eq_plusc(a: Expr, b: Expr):
     """Assert a and b are equal up to a constant"""
-    xs, ys = a.simplify(), b.simplify()
-    ys = -ys
-    if xs.expandable():
-        xs = xs.expand()
-    if ys.expandable():
-        ys = ys.expand()
-    diff = xs + ys
+    diff = a - b
     diff = diff.expand().simplify() if diff.expandable() else diff.simplify()
     assert len(diff.symbols()) == 0, f"diff = {diff}"
 

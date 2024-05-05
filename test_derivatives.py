@@ -1,15 +1,13 @@
 from src.simpy.expr import *
-from test_utils import assert_eq_strict, x
+from test_utils import assert_eq_strict, assert_eq_value, x
 
 
 def assert_diff(a: Expr, b: Expr):
-    assert_eq_strict(diff(a, x), b)
-    # assert_eq_repr_strict(a.diff(x), b)
+    assert_eq_value(diff(a, x), b) # sometimes requires expand.
 
 def assert_diff_(a: Expr, b: Const, c: Const):
     ans = diff(a, x).evalf({"x": b})
     assert_eq_strict(ans, c)
-    # assert ans == c, f"expected {debug_repr(c)}, got {debug_repr(ans)}"
 
 
 def test_basic_differentiation():
@@ -31,7 +29,3 @@ def test_kh_derivatives():
     assert_diff(sqrt(x)*e**x, e**x/(2*sqrt(x)) + sqrt(x)*e**x)
     assert_diff(cos(x)/log(x), (-x*sin(x)*log(x)-cos(x))/(x*log(x)**2))
     assert_diff(sin(x)/e**x, (cos(x)-sin(x))/e**x)
-
-
-
-    print("passed")

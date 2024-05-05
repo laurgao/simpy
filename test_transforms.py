@@ -1,3 +1,11 @@
+"""Unsure if this file is needed // maybe combine with test_integrals
+
+Ex doesn't rlly make sense to put test_complete_the_square not next to test_integrate_with_complete_the_square
+
+Don't want to disconnect code structure from meaning too much altho it's easy to get caught up in code structure :)
+"""
+
+
 import numpy as np
 
 from src.simpy.expr import Const
