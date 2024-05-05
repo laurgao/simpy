@@ -1332,7 +1332,7 @@ class sin(TrigFunction):
     
     def __new__(cls, inner: Expr) -> Expr:
         if isinstance(inner, Prod) and inner.is_subtraction:
-            return -sin(inner * -1)
+            return -sin(-inner)
         return super().__new__(cls, inner)
 
 
@@ -1367,10 +1367,19 @@ class cos(TrigFunction):
     def diff(self, var: Symbol) -> Expr:
         return -sin(self.inner) * self.inner.diff(var)
     
+    def __init__(self, inner):
+        pass
+    
     def __new__(cls, inner: Expr) -> "Expr":
+        # bruh this is so complicated because doing cos(new, -inner) just sets inner as the original inner because of passing
+        # the same args down to init.
+        new = super().__new__(cls, inner)
+        if not isinstance(new, cos):
+            return new
+        new.inner = inner
         if isinstance(inner, Prod) and inner.is_subtraction:
-            return cos(inner * -1)
-        return super().__new__(cls, inner)
+            new.inner = -inner
+        return new
 
 
 class tan(TrigFunction):
@@ -1382,7 +1391,7 @@ class tan(TrigFunction):
     
     def __new__(cls, inner: Expr) -> Expr:
         if isinstance(inner, Prod) and inner.is_subtraction:
-            return -tan(inner * -1)
+            return -tan(-inner)
         return super().__new__(cls, inner)
 
     @classproperty
