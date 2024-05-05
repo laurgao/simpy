@@ -725,11 +725,6 @@ class Prod(Associative, Expr):
         # accumulate all like terms
         new_terms = []
         for i, term in enumerate(initial_terms):
-            # Accumulate constants seperately.
-            if isinstance(term, Const):
-                new_terms.append(term)
-                continue
-
             if term is None:
                 continue
 
