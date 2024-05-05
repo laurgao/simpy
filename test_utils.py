@@ -3,7 +3,7 @@ from typing import Optional
 from src.simpy.expr import Expr, Symbol, cast, debug_repr, symbols
 from src.simpy.integration import integrate
 
-x, y = symbols("x, y")
+x, y = symbols("x y")
 
 @cast
 def assert_integral(integrand: Expr, expected: Expr, var: Optional[Symbol] = None):

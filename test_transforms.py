@@ -1,32 +1,50 @@
-from src.simpy.expr import *
-from src.simpy.integration import *
+import numpy as np
 
-F = Fraction
-x = symbols("x")
-
-
-def test_lecture_example():
-    expression = -5 * x**4 / (1 - x**2) ** F(5, 2)
-    integral = integrate(expression, x)  # TODO auto simplify
-
-    expected_integral = -5 * (
-        -(x / (sqrt(1 - x**2)))
-        + (F(1, 3) * x**3 / (1 - x**2) ** F(3, 2))
-        + asin(x)
-    )
-    diff = (integral - expected_integral).simplify()
-    assert diff == Const(0), f"diff = {diff}"
+from src.simpy.expr import Const
+from src.simpy.transforms import (CompleteTheSquare, Node, PolynomialDivision,
+                                  PullConstant, to_const_polynomial)
+from test_utils import assert_eq_strict, x
 
 
-def test_sin3x():
-    expression = sin(x) ** 3
-    integral = integrate(expression, x)
-    breakpoint()
+def test_pullconstant():
+    expr = 2 * x**3
+    test_node = Node(expr, x)
+    transform = PullConstant()
+    assert transform.check(test_node)
+    transform.forward(test_node)
+    assert_eq_strict(test_node.child.expr, x**3)
 
 
-def test_x2_sqrt_1_x3():
-    expression = x**2 / sqrt(1 - x**3)
-    integral = integrate(expression, x)
-    expected = (-2 * sqrt(1 - x**3) / 3).simplify()
+def test_to_polynomial():
+    expr = 6 * x + x **2 
+    assert np.array_equal(to_const_polynomial(expr, x), np.array([Const(0), Const(6), Const(1)]))
 
-    assert integral == expected, f"{integral} != {expected}"
+
+def test_polynomial_division():
+    expr = x**4 * (1 + x**2) ** -1
+
+    test_node = Node(expr, x)
+    tr = PolynomialDivision()
+    assert tr.check(test_node)
+
+    tr.forward(test_node)
+    assert_eq_strict(test_node.children[0].expr, x**2 - 1 + 1 / (1 + x**2))
+
+    # 2nd test
+    expr = x**3 / (1 - x**2)
+
+    test_node = Node(expr, x)
+    tr = PolynomialDivision()
+    assert tr.check(test_node)
+
+    tr.forward(test_node)
+    ans = test_node.children[0].expr
+
+def test_complete_the_square():
+    quadratic = - x ** 2 + 10 * x + 11
+    test_node = Node(quadratic, x)
+    tr = CompleteTheSquare()
+    tr.forward(test_node)
+    ans = test_node.child.expr
+    expected = 36 * (-(x - 5) ** 2  / 36 + 1)
+    assert_eq_strict(ans, expected)

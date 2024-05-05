@@ -46,7 +46,7 @@ def test_sec2x_tan2x():
     ans = integrate(integrand, (x, 0, pi/6))
     assert ans == Fraction(1, 2)
 
-def more_test():
+def test_misc():
     assert_integral(4 * sec(x) ** 2, 4 * tan(x))
     assert_integral(sec(x) ** 2 * tan(x) ** 2, tan(x) ** 3 / 3)
     assert_integral(5 / x - 3 * e ** x, 5 * log(x) - 3 * e ** x)
