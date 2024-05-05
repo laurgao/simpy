@@ -514,6 +514,11 @@ class Sum(Associative, Expr):
         # in __new__.
         self.__post_init__()
 
+    def _sort(self):
+        # Sums are typically written from largest complexity to smallest (whereas for products it's the opposite)
+        super()._sort()
+        self.terms = list(reversed(self.terms))
+
     def expand(self) -> Expr:
         assert self.expandable(), f"Cannot expand {self}"
         return Sum([t.expand() if t.expandable() else t for t in self.terms])
@@ -531,12 +536,12 @@ class Sum(Associative, Expr):
             # - what if there is a constant (or variable) common factor? (i think for this i'll have to implement a .factor method)
 
             pythagorean_trig_identities: Dict[str, Callable[[Expr], Expr]] = {
-                r"1 \+ tan\((\w+)\)\^2": lambda x: sec(x) ** 2,
-                r"1 \+ cot\((\w+)\)\^2": lambda x: csc(x) ** 2,
-                r"1 - sin\((\w+)\)\^2": lambda x: cos(x) ** 2,
-                r"1 - cos\((\w+)\)\^2": lambda x: sin(x) ** 2,
-                r"1 - tan\((\w+)\)\^2": lambda x: Const(1) / (tan(x) ** 2),
-                r"1 - cot\((\w+)\)\^2": lambda x: Const(1) / (cot(x) ** 2),
+                r"tan\((\w+)\)\^2 \+ 1": lambda x: sec(x) ** 2,
+                r"cot\((\w+)\)\^2 \+ 1": lambda x: csc(x) ** 2,
+                r"-sin\((\w+)\)\^2 \+ 1": lambda x: cos(x) ** 2,
+                r"-cos\((\w+)\)\^2 \+ 1": lambda x: sin(x) ** 2,
+                r"-tan\((\w+)\)\^2 \+ 1": lambda x: Const(1) / (tan(x) ** 2),
+                r"-cot\((\w+)\)\^2 \+ 1": lambda x: Const(1) / (cot(x) ** 2),
             }
 
             for pattern, replacement_callable in pythagorean_trig_identities.items():

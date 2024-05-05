@@ -92,13 +92,13 @@ def test_nesting():
 def test_repr():
     # New repr standards!!!
     expr = 1 - x**2
-    assert expr.__repr__() == "1 - x^2"
+    assert expr.__repr__() == "-x^2 + 1"
     assert (2 * x).__repr__() == "2x"
-    assert (2 * (2 + x)).__repr__() == "2(2 + x)"
-    assert (2 / (2 + x)).__repr__() == "2/(2 + x)"
-    assert repr(2 * (2 + x) ** (-2)) == repr(2 / (2 + x) ** 2) == "2/(2 + x)^2"
+    assert (2 * (2 + x)).__repr__() == "2(x + 2)"
+    assert (2 / (2 + x)).__repr__() == "2/(x + 2)"
+    assert repr(2 * (2 + x) ** (-2)) == repr(2 / (2 + x) ** 2) == "2/(x + 2)^2"
     assert sqrt(3).__repr__() == "sqrt(3)"
-    assert repr(1 / sqrt(1 - x**2)) == "1/sqrt(1 - x^2)"
+    assert repr(1 / sqrt(1 - x**2)) == "1/sqrt(-x^2 + 1)"
     assert repr(sqrt(1/x)) == "1/sqrt(x)"
     assert repr(x ** -Fraction(1,2)) == "1/sqrt(x)"
 
@@ -107,13 +107,13 @@ def test_repr():
     # make sure products with negative consts and dividing by consts are treated better
     assert repr(x / 2) == "x/2"
     assert repr(x * Fraction(1, 2)) == "x/2"
-    assert repr(3 - 2 * x) == "3 - 2x"
+    assert repr(3 - 2 * x) == "-2x + 3"
     # make sure consts show up before pi
     assert repr(pi * 2) == "2pi"
     assert repr(pi * -2) == "-2pi"
     # make sure polynomials show up in the correct order
     poly = x ** 5 + 3 * x ** 4 / 2 + x ** 2 + 2 * x + 3
-    assert repr(poly) == "3 + 2x + x^2 + (3x^4)/2 + x^5"
+    assert repr(poly) == "x^5 + (3x^4)/2 + x^2 + 2x + 3"
 
 
 def test_simplify_sin2x_plus_cos2x():
