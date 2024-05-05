@@ -173,7 +173,7 @@ class Expr(ABC):
     def simplifable(self) -> bool:
         return False
 
-    # @abstractmethod
+    @abstractmethod
     def diff(self, var: "Symbol") -> "Expr":
         raise NotImplementedError(
             f"Cannot get the derivative of {self.__class__.__name__}"
@@ -1183,88 +1183,109 @@ class log(SingleFunc):
 def sqrt(x: Expr) -> Expr:
     return x ** Const(Fraction(1, 2))
 
+TrigStr = Literal["sin", "cos", "tan", "sec", "csc", "cot"]
 
-double_trigfunction_simplification_dict: Dict[str, Callable[[Expr], Expr]] = {
-    "sin acos": lambda x: sqrt(1 - x**2),
-    "sin atan": lambda x: x / sqrt(1 + x**2),
-    "cos asin": lambda x: sqrt(1 - x**2),  # same as sin acos
-    "cos atan": lambda x: 1 / sqrt(1 + x**2),
-    "tan asin": lambda x: x / sqrt(1 - x**2),
-    "tan acos": lambda x: sqrt(1 - x**2) / x,
-    # Arcsecant
-    "sin asec": lambda x: sqrt(x**2 - 1) / x,  # Since sin(asec(x)) = sqrt(x^2 - 1) / x
-    "tan asec": lambda x: sqrt(x**2 - 1),  # tan(asec(x)) = sqrt(x^2 - 1)
-    # Arccosecant
-    "cos acsc": lambda x: sqrt(1 - 1 / x**2),  # cos(acsc(x)) = sqrt(1 - 1/x^2)
-    "tan acsc": lambda x: 1 / sqrt(x**2 - 1),  # tan(acsc(x)) = 1/sqrt(x^2 - 1)
-    # Arccotangent
-    "sin acot": lambda x: 1 / sqrt(1 + x**2),  # sin(acot(x)) = 1/sqrt(1 + x^2)
-    "cos acot": lambda x: x / sqrt(1 + x**2),  # cos(acot(x)) = x/sqrt(1 + x^2)
-}
-
-reciprocal_chart: Dict[str, str] = {
-    "sin": "csc",
-    "cos": "sec",
-    "tan": "cot",
-    "csc": "sin",
-    "sec": "cos",
-    "cot": "tan",
-}
-
-
-class TrigFunction(SingleFunc):
+class TrigFunction(SingleFunc, ABC):
     inner: Expr
-    function: Literal["sin", "cos", "tan", "sec", "csc", "cot"]
+    function: TrigStr
     is_inverse: bool = False
-    reciprocal_class = None
-
+    
     _SPECIAL_KEYS = ["0", "1/6", "1/4", "1/3", "1/2", "2/3", "3/4", "5/6", "1", "7/6", "5/4", "4/3", "3/2", "5/3", "7/4", "11/6"]
+    
+    @staticmethod
+    @property
+    def _double_simplification_dict() -> Dict[str, Callable[[Expr], Expr]]:
+        # Making this a property instead of a class attribute or a global var because it requires computation.
+        return {
+            "sin acos": lambda x: sqrt(1 - x**2),
+            "sin atan": lambda x: x / sqrt(1 + x**2),
+            "cos asin": lambda x: sqrt(1 - x**2),  # same as sin acos
+            "cos atan": lambda x: 1 / sqrt(1 + x**2),
+            "tan asin": lambda x: x / sqrt(1 - x**2),
+            "tan acos": lambda x: sqrt(1 - x**2) / x,
+            # Arcsecant
+            "sin asec": lambda x: sqrt(x**2 - 1) / x,  # Since sin(asec(x)) = sqrt(x^2 - 1) / x
+            "tan asec": lambda x: sqrt(x**2 - 1),  # tan(asec(x)) = sqrt(x^2 - 1)
+            # Arccosecant
+            "cos acsc": lambda x: sqrt(1 - 1 / x**2),  # cos(acsc(x)) = sqrt(1 - 1/x^2)
+            "tan acsc": lambda x: 1 / sqrt(x**2 - 1),  # tan(acsc(x)) = 1/sqrt(x^2 - 1)
+            # Arccotangent
+            "sin acot": lambda x: 1 / sqrt(1 + x**2),  # sin(acot(x)) = 1/sqrt(1 + x^2)
+            "cos acot": lambda x: x / sqrt(1 + x**2),  # cos(acot(x)) = x/sqrt(1 + x^2)
+        }
+
+    @classmethod
+    @property
+    def reciprocal_class(cls) -> Type["TrigFunction"]:
+        if cls.is_inverse:
+            raise ValueError(f"Inverse trig function {cls.__name__} does not have a reciprocal")
+        else:
+            raise NotImplementedError(f"reciprocal_class not implemented for {cls.__name__}")
+
+    @classmethod
+    @abstractmethod
+    def special_values(cls) -> Dict[str, Expr]:
+        pass
 
     # have to have __init__ here bc if i use @dataclass on TrigFunction
     # repr no longer inherits from SingleFunc
-    def __init__(self, inner, function, is_inverse=False):
+    def __init__(self, inner, function):
         super().__init__(inner)
         self.function = function
-        self.is_inverse = is_inverse
 
     @property
-    def _label(self):
+    def _label(self) -> str:
         return f"{'a' if self.is_inverse else ''}{self.function}"
 
-    def simplify(self) -> "Expr":
-        inner = self.inner.simplify()
-
+    def __new__(cls, inner: Expr) -> "Expr":
+        # 1. Check if inner is a special value
+        pi_coeff = inner / pi
+        if isinstance(pi_coeff, Const):
+            pi_coeff = pi_coeff % 2
+            if str(pi_coeff.value) in cls._SPECIAL_KEYS:
+                return cls.special_values()[str(pi_coeff.value)]
+        
+        # 2. Check if inner is trigfunction
         # things like sin(cos(x)) cannot be more simplified.
-        if isinstance(inner, TrigFunction) and inner.is_inverse != self.is_inverse:
-            # asin(sin(x)) -> x
-            if inner.function == self.function:
+        if isinstance(inner, TrigFunction) and inner.is_inverse != cls.is_inverse:
+            # sin(asin(x)) -> x
+            if inner.function == function:
                 return inner.inner
 
-            if not self.is_inverse:
-                if inner.function == reciprocal_chart[self.function]:
-                    return (1 / inner.inner).simplify()
+            # sin(acsc(x)) -> 1/x
+            if isinstance(inner, cls.reciprocal_class):
+                return (1 / inner.inner)
 
-                if self.function in ["sin", "cos", "tan"]:
-                    callable_ = double_trigfunction_simplification_dict[
-                        f"{self.function} {inner._label}"
+            if not cls.is_inverse:
+                if function in ["sin", "cos", "tan"]:
+                    callable_ = cls._double_simplification_dict[
+                        f"{function} {inner._label}"
                     ]
-                    return callable_(inner.inner).simplify()
+                    return callable_(inner.inner)
 
                 else:
-                    callable_ = double_trigfunction_simplification_dict[
-                        f"{reciprocal_chart[self.function]} {inner._label}"
+                    callable_ = cls._double_simplification_dict[
+                        f"{cls.reciprocal_class.__name__} {inner._label}"
                     ]
-                    return (1 / callable_(inner.inner)).simplify()
+                    return (1 / callable_(inner.inner))
 
             # not supporting stuff like asin(cos(x)) sorry.
 
-        return self.__class__(inner)
+        return super().__new__(cls)
 
 
 class sin(TrigFunction):
     def __init__(self, inner):
         super().__init__(inner, function="sin")
-        self._special_values = {
+
+    @classmethod
+    @property
+    def reciprocal_class(cls):
+        return csc
+
+    @classmethod    
+    def special_values(cls):
+        return {
             "0": Const(0),
             "1/6": Const(Fraction(1,2)),
             "1/4": 1/sqrt(2),
@@ -1285,29 +1306,25 @@ class sin(TrigFunction):
 
     def diff(self, var) -> Expr:
         return cos(self.inner) * self.inner.diff(var)
-
-    def simplify(self) -> "Expr":
-        new = super().simplify()
-
-        if not isinstance(new, sin):
-            return new
-
-        if new.inner == Const(0):
-            return Const(0)
-
-        pi_coeff = (new.inner / pi).simplify()
-        if isinstance(pi_coeff, Const):
-            pi_coeff = pi_coeff % 2
-            if str(pi_coeff.value) in self._SPECIAL_KEYS:
-                return self._special_values[str(pi_coeff.value)]
-
-        return new
+    
+    def __new__(cls, inner: Expr) -> Expr:
+        if isinstance(inner, Prod) and inner.is_subtraction:
+            return -sin(inner * -1)
+        return super().__new__(cls, inner)
 
 
 class cos(TrigFunction):
-    def __init__(self, inner):
+    def __init__(self, inner: Expr):
         super().__init__(inner, function="cos")
-        self._special_values = {
+
+    @classmethod
+    @property
+    def reciprocal_class(cls):
+        return sec
+    
+    @classmethod
+    def special_values(cls):
+        return {
             "0": Const(1),
             "1/6": sqrt(3)/2,
             "1/4": 1/sqrt(2),
@@ -1326,56 +1343,34 @@ class cos(TrigFunction):
             "11/6": sqrt(3)/2,
         }
 
-    def diff(self, var) -> Expr:
+    def diff(self, var: Symbol) -> Expr:
         return -sin(self.inner) * self.inner.diff(var)
-
-    def simplify(self) -> "Expr":
-        new = super().simplify()
-
-        if not isinstance(new, cos):
-            return new
-        if isinstance(new.inner, Prod) and new.inner.is_subtraction:
-            return cos((new.inner * -1).simplify())
-        if new.inner.symbols() != []:
-            return new
-
-        if new.inner == Const(0):
-            return Const(1)
-
-        if "pi" in new.inner.__repr__():
-            pi_coeff = (new.inner / pi).simplify()
-            if isinstance(pi_coeff, Const):
-                pi_coeff = pi_coeff % 2
-                if str(pi_coeff.value) in self._SPECIAL_KEYS:
-                    return self._special_values[str(pi_coeff.value)]
-
-        return new
+    
+    def __new__(cls, inner: Expr) -> "Expr":
+        if isinstance(inner, Prod) and inner.is_subtraction:
+            return cos(inner * -1)
+        return super().__new__(cls, inner)
 
 
 class tan(TrigFunction):
+    @property
+    def reciprocal_class(cls):
+        return cot
+    
     def __init__(self, inner):
         super().__init__(inner, function="tan")
+    
+    def __new__(cls, inner: Expr) -> Expr:
+        if isinstance(inner, Prod) and inner.is_subtraction:
+            return -tan(inner * -1)
+        return super().__new__(cls, inner)
+
+    @property
+    def special_values(cls):
+        return {k: sin.special_values()[k] / cos.special_values()[k] for k in cls._SPECIAL_KEYS}
 
     def diff(self, var) -> Expr:
         return sec(self.inner) ** 2 * self.inner.diff(var)
-    
-    def simplify(self) -> "Expr":
-        new = super().simplify()
-
-        if not isinstance(new, tan):
-            return new
-
-        if new.inner == Const(0):
-            return Const(0)
-        
-        # tan(n*pi) = 0 for all n in Z
-        if "pi" in new.inner.__repr__():
-            pi_coeff = (new.inner / pi).simplify()
-            pi_coeff = pi_coeff % 2 if isinstance(pi_coeff, Const) else pi_coeff
-            if isinstance(pi_coeff, Const) and str(pi_coeff.value) in self._SPECIAL_KEYS:
-                return (sin(new.inner) / cos(new.inner)).simplify()
-
-        return new
 
 
 class csc(TrigFunction):
@@ -1383,6 +1378,10 @@ class csc(TrigFunction):
 
     def __init__(self, inner):
         super().__init__(inner, function="csc")
+
+    @classmethod
+    def special_values(cls):
+        return {k: 1 / sin.special_values()[k] for k in cls._SPECIAL_KEYS}
 
     def diff(self, var) -> Expr:
         return (1 / sin(self.inner)).diff(var)
@@ -1394,25 +1393,21 @@ class sec(TrigFunction):
     def __init__(self, inner):
         super().__init__(inner, function="sec")
 
+    @classmethod
+    def special_values(cls):
+        return {k: 1 / cos.special_values()[k] for k in cls._SPECIAL_KEYS}
+
     def diff(self, var) -> Expr:
         # TODO: handle when self.inner doesnt contain var
         return sec(self.inner) * tan(self.inner) * self.inner.diff(var)
-    
-    def simplify(self) -> "Expr":
-        new = super().simplify()
-        if not isinstance(new, sec):
-            return new
-        
-        pi_coeff = (new.inner / pi).simplify()
-        pi_coeff = pi_coeff % 2 if isinstance(pi_coeff, Const) else pi_coeff
-        if isinstance(pi_coeff, Const) and str(pi_coeff.value) in self._SPECIAL_KEYS:
-            return (1 / cos(new.inner)).simplify()
-
-        return new
 
 
 class cot(TrigFunction):
     reciprocal_class = tan
+
+    @classmethod
+    def special_values(cls):
+        return {k: cos.special_values()[k] / sin.special_values()[k] for k in cls._SPECIAL_KEYS}
 
     def __init__(self, inner):
         super().__init__(inner, function="cot")
@@ -1422,24 +1417,27 @@ class cot(TrigFunction):
 
 
 class asin(TrigFunction):
+    is_inverse = True
     def __init__(self, inner):
-        super().__init__(inner, function="sin", is_inverse=True)
+        super().__init__(inner, function="sin")
 
     def diff(self, var):
         return 1 / sqrt(1 - self.inner**2) * self.inner.diff(var)
 
 
 class acos(TrigFunction):
+    is_inverse = True
     def __init__(self, inner):
-        super().__init__(inner, function="cos", is_inverse=True)
+        super().__init__(inner, function="cos")
 
     def diff(self, var):
         return -1 / sqrt(1 - self.inner**2) * self.inner.diff(var)
 
 
 class atan(TrigFunction):
+    is_inverse = True
     def __init__(self, inner):
-        super().__init__(inner, function="tan", is_inverse=True)
+        super().__init__(inner, function="tan")
 
     def diff(self, var):
         return 1 / (1 + self.inner**2) * self.inner.diff(var)

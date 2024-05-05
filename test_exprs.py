@@ -4,13 +4,129 @@ import numpy as np
 
 from src.simpy.expr import *
 from src.simpy.integration import *
-from src.simpy.polynomial import to_const_polynomial
 from src.simpy.regex import count
-from src.simpy.transforms import (CompleteTheSquare, PolynomialDivision,
-                                  PullConstant)
-from test_utils import (assert_definite_integral, assert_eq_plusc,
-                        assert_eq_strict, assert_integral, unhashable_set_eq,
-                        x, y)
+from test_utils import assert_eq_strict, unhashable_set_eq, x, y
+
+
+def test_equality():
+    assert x == x
+    assert x == Symbol("x") # seperately created symbols with the same name should be the same
+    assert not x == y
+    assert x != y
+    assert not x == 2 * x
+    assert (x + 2) == (x + 2) # seperately created sums should be the same
+    assert (x + 2) == (2 + x)
+    assert x + 2 == Symbol("x") + 2
+    assert x * y == y * x
+
+    # consts should handle equality, inequality, greater than, less than
+    assert Const(2) == 2
+    assert Const(2) != 3
+    assert 2 == Const(2)
+    assert 2 < Const(3)
+    assert 2 <= Const(2)
+    assert Const(2) == Const(2)
+
+    # trig functions aren't dataclasses so this is more liable to not working
+    assert cos(x * 2) == cos(x * 2)
+
+
+def test_basic_simplification():
+    assert_eq_strict(x * 0, 0)
+    assert_eq_strict(x * 2, 2 * x)
+    assert_eq_strict(x**2, x * x)
+    assert_eq_strict(x * 2 - 2 * x, 0)
+    assert_eq_strict(((x + 1) ** 2 - (x + 1) * (x + 1)), 0)
+
+def test_sum_combines_like_terms():
+    assert_eq_strict(x + x, 2 * x)
+    assert_eq_strict(x + x + x, 3 * x)
+    assert_eq_strict(3 * (x + 2) + 2 * (x + 2), 5 * (x + 2)) # like terms that is a sum
+    assert_eq_strict(3 * (x + 2) + 2 * (2 + x), 5 * (x + 2)) # like terms that is a sum
+    
+def test_prod_combines_like_terms_prod():
+    assert_eq_strict(x**2, x * x)
+    assert_eq_strict(x**3, x * x * x)
+
+    # More complicated example
+    # this wasn't working when the denominator "power" wasn't flattening in simplification.
+    expr = (2*sin(x)*cos(x)**2)/(sin(x)*cos(x)**2)
+    assert expr == 2, f"expected 2, got {expr} // debug repr: {debug_repr(expr)}"
+
+
+def test_basic_power_simplification():
+    assert_eq_strict(x**0, 1)
+    assert_eq_strict(x**1, x)
+    assert_eq_strict(Const(2) ** 2, 4)
+    assert_eq_strict(sqrt(4), 2)
+    assert_eq_strict(sqrt(x**2), x)
+    assert_eq_strict(2/sqrt(2), sqrt(2))
+
+
+def test_expand_prod():
+    # make sure an expandable denominator gets expanded
+    assert_eq_strict((1 / (x * (x + 6))).expand(), 1 / (x**2 + x * 6)) # this can be converted to a power
+    assert_eq_strict((y / (x * (x + 6))).expand(), y / (x**2 + x * 6))
+    # make sure that a numberator with a single sum gets expanded
+    assert_eq_strict(((2 + x) / sin(x)).expand(), (2 / sin(x) + x / sin(x)))
+
+
+def test_flatten():
+    assert_eq_strict(x + (2 + y), x + 2 + y)
+
+    # Test nested flatten
+    expr = x ** 5 + ((3 + x) + 2 * y)
+    expected_terms = [x **5, 3, x, 2 * y]
+    assert unhashable_set_eq(expr.terms, expected_terms)
+
+def test_regex():
+    assert count(2, x) == 0
+    assert count(tan(x + 1) ** 2 - 2 * x, x) == 2
+
+def test_nesting():
+    assert nesting(x**2, x) == 2
+    assert nesting(x * y**2, x) == 2
+    assert nesting(x * (1 / y**2 * 3), x) == 2
+
+
+def test_repr():
+    # New repr standards!!!
+    expr = 1 - x**2
+    assert expr.__repr__() == "1 - x^2"
+    assert (2 * x).__repr__() == "2*x"
+    assert (2 * (2 + x)).__repr__() == "2*(2 + x)"
+    assert (2 / (2 + x)).__repr__() == "2/(2 + x)"
+    assert repr(2 * (2 + x) ** (-2)) == repr(2 / (2 + x) ** 2) == "2/(2 + x)^2"
+    assert sqrt(3).__repr__() == "sqrt(3)"
+    assert repr(1 / sqrt(1 - x**2)) == "1/sqrt(1 - x^2)"
+    assert repr(sqrt(1/x)) == "1/sqrt(x)"
+    assert repr(x ** -Fraction(1,2)) == "1/sqrt(x)"
+
+    # make sure denominator is bracketed
+    assert repr(sin(x) / (2 * x)) == "sin(x)/(2*x)"
+    # make sure products with negative consts and dividing by consts are treated better
+    assert repr(x / 2) == "x/2"
+    assert repr(x * Fraction(1, 2)) == "x/2"
+    assert repr(3 - 2 * x) == "3 - 2*x"
+    # make sure consts show up before pi
+    assert repr(pi * 2) == "2*pi"
+    assert repr(pi * -2) == "-2*pi"
+    # make sure polynomials show up in the correct order
+    poly = x ** 5 + 3 * x ** 4 / 2 + x ** 2 + 2 * x + 3
+    assert repr(poly) == "3 + 2*x + x^2 + (3*x^4)/2 + x^5"
+
+
+def test_simplify_sin2x_plus_cos2x():
+    expr = sin(x) ** 2 + cos(x) ** 2 + 3
+    simplified = expr.simplify()
+    assert_eq_strict(simplified, 4)
+
+    # when sin^2(...) -> ... is more complicated than just 'x'
+    expr = sin(x - 2 * y) ** 2 + 3 + cos(x - 2 * y) ** 2 + y**2
+    simplified = expr.simplify()
+    assert_eq_strict(simplified, 4 + y**2)
+
+    # TODO: Test when sin^2(...) and cos^2(...) share a common factor
 
 
 def test_factor():
@@ -61,17 +177,6 @@ def test_factor_const():
     factored = expr.factor()
     expected = 2 * (1 - x)
     assert_eq_strict(expected, factored)
-
-
-def test_product_combine_like_terms():
-    # this wasnt working bc the denominator "power" wasn't flattening in simplification.
-    expr = (2*sin(x)*cos(x)**2)/(sin(x)*cos(x)**2)
-    assert expr == 2, f"expected 2, got {expr} // debug repr: {debug_repr(expr)}"
-
-
-
-from src.simpy.expr import debug_repr
-
 
 def test_strict_const_power_simplification():
     """TBH I feel like I made this overly complicated LOL but whatever we live with this."""
@@ -171,108 +276,21 @@ def test_fractional_power_beauty_standards():
     assert repr(e1) == repr(e2) == "1/3^(1/7)"
     assert_eq_strict(e1, e2)
 
-def test_equality():
-    assert x == x
-    assert x == Symbol("x")
-    assert not x == y
-    assert x != y
-    assert not x == 2 * x
-    assert (x + 2) == (x + 2)
-    assert (x + 2) == (2 + x)
-    assert x + 2 == Symbol("x") + 2
-    assert Const(2) == 2
-    assert Const(2) != 3
-    assert 2 == Const(2)
-    assert 2 < Const(3)
-    assert 2 <= Const(2)
-    assert Const(2) == Const(2)
-    assert cos(x * 2) == cos(x * 2)
-
-def test_basic_simplification():
-    assert_eq_strict(x * 0, 0)
-    assert_eq_strict(x * 2, 2 * x)
-    assert_eq_strict(x**2, x * x)
-    assert_eq_strict(x * 2 - 2 * x, 0)
-    assert_eq_strict(((x + 1) ** 2 - (x + 1) * (x + 1)), 0)
-
-def test_combines_like_terms_sum():
-    assert_eq_strict(x + x, 2 * x)
-    assert_eq_strict(x + x + x, 3 * x)
-    assert_eq_strict(3 * (x + 2) + 2 * (x + 2), 5 * (x + 2)) # like terms that is a sum
-    assert_eq_strict(3 * (x + 2) + 2 * (2 + x), 5 * (x + 2)) # like terms that is a sum
-    
-def test_combines_like_terms_prod():
-    assert_eq_strict(x**2, x * x)
-    assert_eq_strict(x**3, x * x * x)
-
-def test_basic_power_simplification():
-    assert_eq_strict(x**0, 1)
-    assert_eq_strict(x**1, x)
-    assert_eq_strict(Const(2) ** 2, 4)
-    assert_eq_strict(sqrt(4), 2)
-    assert_eq_strict(sqrt(x**2), x)
-    assert_eq_strict(2/sqrt(2), sqrt(2))
+def test_singlefuncs_auto_simplify_special_values():
+    assert_eq_strict(log(1), 0)
+    assert_eq_strict(log(e**x), x)
+    assert_eq_strict(sin(3*pi), 0)
+    assert_eq_strict(cos(5*pi), -1)
+    assert_eq_strict(csc(pi/2), 1)
+    assert_eq_strict(cot(pi/4), 1)
 
 
-def test_expand_prod():
-    # make sure an expandable denominator gets expanded
-    assert_eq_strict((1 / (x * (x + 6))).expand(), 1 / (x**2 + x * 6)) # this can be converted to a power
-    assert_eq_strict((y / (x * (x + 6))).expand(), y / (x**2 + x * 6))
-    # make sure that a numberator with a single sum gets expanded
-    assert_eq_strict(((2 + x) / sin(x)).expand(), (2 / sin(x) + x / sin(x)))
+# def test_trigfunctions_special_values_are_correct():
+    # import math
 
-
-def test_flatten():
-    assert_eq_strict(x + (2 + y), x + 2 + y)
-
-    # Test nested flatten
-    expr = x ** 5 + ((3 + x) + 2 * y)
-    expected_terms = [x **5, 3, x, 2 * y]
-    assert unhashable_set_eq(expr.terms, expected_terms)
-
-
-
-def test_regex():
-    assert count(2, x) == 0
-    assert count(tan(x + 1) ** 2 - 2 * x, x) == 2
-
-def test_nesting():
-    assert nesting(x**2, x) == 2
-    assert nesting(x * y**2, x) == 2
-    assert nesting(x * (1 / y**2 * 3), x) == 2
-
-def test_sin2x_plus_cos2x():
-    expr = sin(x) ** 2 + cos(x) ** 2 + 3
-    simplified = expr.simplify()
-    assert_eq_strict(simplified, 4)
-
-    expr = sin(x - 2 * y) ** 2 + 3 + cos(x - 2 * y) ** 2 + y**2
-    simplified = expr.simplify()
-    assert_eq_strict(simplified, 4 + y**2)
-
-
-def test_repr():
-    # New repr standards!!!
-    expr = 1 - x**2
-    assert expr.__repr__() == "1 - x^2"
-    assert (2 * x).__repr__() == "2*x"
-    assert (2 * (2 + x)).__repr__() == "2*(2 + x)"
-    assert (2 / (2 + x)).__repr__() == "2/(2 + x)"
-    assert repr(2 * (2 + x) ** (-2)) == repr(2 / (2 + x) ** 2) == "2/(2 + x)^2"
-    assert sqrt(3).__repr__() == "sqrt(3)"
-    assert repr(1 / sqrt(1 - x**2)) == "1/sqrt(1 - x^2)"
-    assert repr(sqrt(1/x)) == "1/sqrt(x)"
-    assert repr(x ** -Fraction(1,2)) == "1/sqrt(x)"
-
-    # make sure denominator is bracketed
-    assert repr(sin(x) / (2 * x)) == "sin(x)/(2*x)"
-    # make sure products with negative consts and dividing by consts are treated better
-    assert repr(x / 2) == "x/2"
-    assert repr(x * Fraction(1, 2)) == "x/2"
-    assert repr(3 - 2 * x) == "3 - 2*x"
-    # make sure consts show up before pi
-    assert repr(pi * 2) == "2*pi"
-    assert repr(pi * -2) == "-2*pi"
-    # make sure polynomials show up in the correct order
-    poly = x ** 5 + 3 * x ** 4 / 2 + x ** 2 + 2 * x + 3
-    assert repr(poly) == "3 + 2*x + x^2 + (3*x^4)/2 + x^5"
+    # import numpy as np
+    # for k in TrigFunction._SPECIAL_KEYS:
+        # num = Fraction(k)
+        # breakpoint()
+        # np.testing.assert_almost_equal(sin(num*pi).value, math.sin(num*math.pi))
+        # assert sin(num * pi) == math.sin(num * math.pi)
