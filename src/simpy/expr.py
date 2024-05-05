@@ -1183,6 +1183,21 @@ class log(SingleFunc):
 def sqrt(x: Expr) -> Expr:
     return x ** Const(Fraction(1, 2))
 
+
+class classproperty:
+    """python 3.11 no longer supports
+    @classmethod
+    @property
+
+    so we make our own :)
+    """
+    def __init__(self, func):
+        self.func = func
+
+    def __get__(self, instance, cls):
+        return self.func(cls)
+
+
 TrigStr = Literal["sin", "cos", "tan", "sec", "csc", "cot"]
 
 class TrigFunction(SingleFunc, ABC):
@@ -1214,15 +1229,14 @@ class TrigFunction(SingleFunc, ABC):
             "cos acot": lambda x: x / sqrt(1 + x**2),  # cos(acot(x)) = x/sqrt(1 + x^2)
         }
 
-    @classmethod
-    @property
+    @classproperty
     def reciprocal_class(cls) -> Type["TrigFunction"]:
         if cls.is_inverse:
             raise ValueError(f"Inverse trig function {cls.__name__} does not have a reciprocal")
         else:
             raise NotImplementedError(f"reciprocal_class not implemented for {cls.__name__}")
 
-    @classmethod
+    @classproperty
     @abstractmethod
     def special_values(cls) -> Dict[str, Expr]:
         pass
@@ -1243,7 +1257,7 @@ class TrigFunction(SingleFunc, ABC):
         if isinstance(pi_coeff, Const):
             pi_coeff = pi_coeff % 2
             if str(pi_coeff.value) in cls._SPECIAL_KEYS:
-                return cls.special_values()[str(pi_coeff.value)]
+                return cls.special_values[str(pi_coeff.value)]
         
         # 2. Check if inner is trigfunction
         # things like sin(cos(x)) cannot be more simplified.
@@ -1278,12 +1292,11 @@ class sin(TrigFunction):
     def __init__(self, inner):
         super().__init__(inner, function="sin")
 
-    @classmethod
-    @property
+    @classproperty
     def reciprocal_class(cls):
         return csc
 
-    @classmethod    
+    @classproperty    
     def special_values(cls):
         return {
             "0": Const(0),
@@ -1317,12 +1330,11 @@ class cos(TrigFunction):
     def __init__(self, inner: Expr):
         super().__init__(inner, function="cos")
 
-    @classmethod
-    @property
+    @classproperty
     def reciprocal_class(cls):
         return sec
     
-    @classmethod
+    @classproperty
     def special_values(cls):
         return {
             "0": Const(1),
@@ -1353,7 +1365,7 @@ class cos(TrigFunction):
 
 
 class tan(TrigFunction):
-    @property
+    @classproperty
     def reciprocal_class(cls):
         return cot
     
@@ -1365,9 +1377,9 @@ class tan(TrigFunction):
             return -tan(inner * -1)
         return super().__new__(cls, inner)
 
-    @property
+    @classproperty
     def special_values(cls):
-        return {k: sin.special_values()[k] / cos.special_values()[k] for k in cls._SPECIAL_KEYS}
+        return {k: sin.special_values[k] / cos.special_values[k] for k in cls._SPECIAL_KEYS}
 
     def diff(self, var) -> Expr:
         return sec(self.inner) ** 2 * self.inner.diff(var)
@@ -1379,9 +1391,9 @@ class csc(TrigFunction):
     def __init__(self, inner):
         super().__init__(inner, function="csc")
 
-    @classmethod
+    @classproperty
     def special_values(cls):
-        return {k: 1 / sin.special_values()[k] for k in cls._SPECIAL_KEYS}
+        return {k: 1 / sin.special_values[k] for k in cls._SPECIAL_KEYS}
 
     def diff(self, var) -> Expr:
         return (1 / sin(self.inner)).diff(var)
@@ -1393,9 +1405,9 @@ class sec(TrigFunction):
     def __init__(self, inner):
         super().__init__(inner, function="sec")
 
-    @classmethod
+    @classproperty
     def special_values(cls):
-        return {k: 1 / cos.special_values()[k] for k in cls._SPECIAL_KEYS}
+        return {k: 1 / cos.special_values[k] for k in cls._SPECIAL_KEYS}
 
     def diff(self, var) -> Expr:
         # TODO: handle when self.inner doesnt contain var
@@ -1405,9 +1417,9 @@ class sec(TrigFunction):
 class cot(TrigFunction):
     reciprocal_class = tan
 
-    @classmethod
+    @classproperty
     def special_values(cls):
-        return {k: cos.special_values()[k] / sin.special_values()[k] for k in cls._SPECIAL_KEYS}
+        return {k: cos.special_values[k] / sin.special_values[k] for k in cls._SPECIAL_KEYS}
 
     def __init__(self, inner):
         super().__init__(inner, function="cot")
