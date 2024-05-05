@@ -283,6 +283,10 @@ def test_singlefuncs_auto_simplify_special_values():
     assert_eq_strict(cos(5*pi), -1)
     assert_eq_strict(csc(pi/2), 1)
     assert_eq_strict(cot(pi/4), 1)
+    assert_eq_strict(sin(acos(x+y)), sqrt(1 - (x+y)**2))
+    assert_eq_strict(csc(acos(x+y)), 1/sqrt(1 - (x+y)**2))
+    assert_eq_strict(sec(acos(x+y)), 1/(x+y))
+    assert_eq_strict(atan(cot(3*x+2)), 1/(3*x+2))
 
 
 # def test_trigfunctions_special_values_are_correct():
