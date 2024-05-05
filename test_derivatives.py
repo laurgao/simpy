@@ -21,7 +21,6 @@ def test_kh_derivatives():
     assert_diff_(tan(x), 2*pi/3, 4)
     assert_diff_(sec(x), 11*pi/6, -Fraction(2,3))
     assert_diff_(csc(x), pi/2, 0)
-
     assert_diff_(csc(x), 3*pi/4, sqrt(2))
 
     assert_diff(-4*e**x-sin(x)-9, -4*e**x - cos(x))

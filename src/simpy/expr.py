@@ -797,7 +797,7 @@ class Prod(Associative, Expr):
 
             return _x(numerator) + "/" + _x(denominator)
 
-        return "*".join(map(_term_repr, self.terms))
+        return "".join(map(_term_repr, self.terms))
 
     def latex(self) -> str:
         def _term_latex(term: Expr):
@@ -824,7 +824,7 @@ class Prod(Associative, Expr):
                 + "}"
             )
 
-        return " \\cdot ".join(map(_term_latex, self.terms))
+        return "".join(map(_term_latex, self.terms))
 
     @property
     def numerator_denominator(self) -> Tuple[Expr, Expr]:
@@ -1144,7 +1144,12 @@ class log(SingleFunc):
 
     @property
     def _label(self):
-        return "ln"
+        if self.base == e:
+            return "ln"
+        elif isinstance(self.base, Const) and self.base.value.denominator == 1:
+            return "log" + self.base
+        else:
+            return f"log[self.base]"
     
     def __new__(cls, inner: Expr, base: Expr = e):
         if inner == 1:
