@@ -1,8 +1,14 @@
-## simpy
+# simpy
 
 _A worse version of [sympy](https://www.sympy.org)_
 
-Current version can do algebraic simplifications and integrate polynomial functions. For example, these integrals Laura had to do for homework:
+Current version can do algebraic & trigonometric simplifications, perform any differentiation, and integrate most of AP calc functions including polynomials, rational functions, trig functions, logs, and exponentials.
+
+## Quick start
+
+Real installation instructions are coming soon! For now, just clone the repo and `pip install requirements.txt`. You can run `pytest .` in the root directory to run my tests. Look at `test_integrals.py` and `test_khan_academy_integrals.py` to see some sample integrals we can do :)
+
+For example, these polynomial integrals Laura had to do for homework:
 
 $$
 \begin{aligned}
@@ -15,7 +21,7 @@ $$
 Can be done like so:
 
 ```python
-import simpy as sp
+from src import simpy as sp
 from fractions import Fraction as F
 
 x = sp.symbols("x")
@@ -25,6 +31,8 @@ I2 = sp.integrate((F(1, 15) - F(1, 360) * (x-6))*(x-5)**2 / 350, (x, 6, 15))
 I3 = sp.integrate((F(1, 15) - F(1, 360) * (x-6))*(1 - (40-x)**2/875), (x, 15, 30))
 ```
 
+Note: we don't support floats right now so please use fractions!
+
 ## Please make issues!
 
-This project is actively undergoing development; please let me know about any bugs you encounter! If there's an integral that we currently can't solve, create a github issue and tag "new integral."
+This project is actively undergoing development; please let me know about any bugs you encounter by making a github issue! If there's an integral that we currently can't solve, create an issue and tag "new integral."
