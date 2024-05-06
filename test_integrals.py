@@ -75,10 +75,8 @@ def test_misc():
     # This integral can either be sin^2(wt) / 2w or -cos^2(wt) / 2w depending on the method used to solve it
     w, t = symbols("w t")
     expr = sin(w * t) * cos(w * t)
-    integral = integrate(expr, t)
     expected = sin(w * t) ** 2 / (2 * w)
-    expected2 = -cos(w * t) ** 2/ (2 * w)
-    assert repr(integral) == repr(expected) or repr(integral) == repr(expected2) # temp patch
+    assert_eq_plusc(integrate(expr, t), expected, t)
 
     # ln integral
     assert_eq_strict((x * log(x) - x).diff(x), log(x))

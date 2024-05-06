@@ -14,12 +14,17 @@ def assert_definite_integral(integrand: Expr, bounds: tuple, expected: Expr):
     assert_eq_strict(integrate(integrand, bounds), expected)
 
 @cast
-def assert_eq_plusc(a: Expr, b: Expr):
-    """Assert a and b are equal up to a constant"""
+def assert_eq_plusc(a: Expr, b: Expr, *vars):
+    """Assert a and b are equal up to a constant, relative to vars.
+    If no vars are given, then 
+    """
     diff = a - b
     diff = diff.expand().simplify() if diff.expandable() else diff.simplify()
-    assert len(diff.symbols()) == 0, f"diff = {diff}"
-
+    if not vars:
+        assert len(diff.symbols()) == 0, f"diff = {diff}"
+    else:
+        assert all(var not in diff.symbols() for var in vars), f"diff = {diff}"
+        
 @cast
 def assert_eq_value(a: Expr, b: Expr):
     """Tests that the values of a & b are the same in spirit, regardless of how they are represented with the Expr data structures.

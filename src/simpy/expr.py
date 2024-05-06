@@ -13,7 +13,6 @@ so I don't really mind the lack of float support, but I can see why you'd be ann
 """
 
 import itertools
-import re
 from abc import ABC, abstractmethod
 from dataclasses import dataclass, fields
 from fractions import Fraction
@@ -90,7 +89,7 @@ class Expr(ABC):
     # should be overwritten in subclasses
     def simplify(self) -> "Expr":
         return self
-
+    
     @cast
     def __add__(self, other) -> "Expr":
         return Sum([self, other])
@@ -150,7 +149,7 @@ class Expr(ABC):
 
     # overload if necessary
     def expand(self) -> "Expr":
-        """Subclasses: this function should rase AssertionError if self.expandable() is false.
+        """Subclasses: this function should raise AssertionError if self.expandable() is false.
         """
         if self.expandable():
             raise NotImplementedError(f"Expansion of {self} not implemented")
@@ -165,9 +164,13 @@ class Expr(ABC):
     def children(self) -> List["Expr"]:
         raise NotImplementedError(f"Cannot get children of {self.__class__.__name__}")
 
-    def contains(self: "Expr", var: "Symbol"):
+    def contains(self: "Expr", var: "Symbol") -> bool:
         is_var = isinstance(self, Symbol) and self.name == var.name
         return is_var or any(e.contains(var) for e in self.children())
+    
+    def has(self, cls: Type["Expr"]) -> bool:
+        from .regex import contains_cls
+        return contains_cls(self, cls)
 
     # should be overloaded
     def simplifable(self) -> bool:
@@ -271,10 +274,6 @@ class Associative:
 
         key = cmp_to_key(_compare)
         self.terms = sorted(self.terms, key=key)
-
-    @abstractmethod
-    def simplify(self) -> "Associative":
-        raise NotImplementedError(f"Cannot simplify {self.__class__.__name__}")
 
 
 class Number(ABC):
@@ -528,64 +527,8 @@ class Sum(Associative, Expr):
         if not isinstance(new_sum, Sum):
             return new_sum
 
-        if contains_cls(new_sum, TrigFunction):
-            # I WANT TO DO IT so that it's more robust.
-            # - what if the matched query is not a symbol but an expression?
-            # - ~~do something to check for sin^2x + cos^2x = 1 (and allow for it if sum has >2 terms)~~
-            # - ordering
-            # - what if there is a constant (or variable) common factor? (i think for this i'll have to implement a .factor method)
-
-            pythagorean_trig_identities: Dict[str, Callable[[Expr], Expr]] = {
-                r"tan\((\w+)\)\^2 \+ 1": lambda x: sec(x) ** 2,
-                r"cot\((\w+)\)\^2 \+ 1": lambda x: csc(x) ** 2,
-                r"-sin\((\w+)\)\^2 \+ 1": lambda x: cos(x) ** 2,
-                r"-cos\((\w+)\)\^2 \+ 1": lambda x: sin(x) ** 2,
-                r"-tan\((\w+)\)\^2 \+ 1": lambda x: Const(1) / (tan(x) ** 2),
-                r"-cot\((\w+)\)\^2 \+ 1": lambda x: Const(1) / (cot(x) ** 2),
-            }
-
-            for pattern, replacement_callable in pythagorean_trig_identities.items():
-                match = re.search(pattern, new_sum.__repr__())
-                result = match.group(1) if match else None
-
-                if result and len(new_sum.terms) == 2:
-                    other = replacement_callable(Symbol(result)).simplify()
-                    return other
-
-            # fuckit just gonna let the insides be anything and not check for paranthesis balance
-            # because im asserting beginning and end of string conditions.
-            other_table = [
-                (r"^sin\((.+)\)\^2$", r"^cos\((.+)\)\^2$", Const(1)),
-                (r"^sec\((.+)\)\^2$", r"^-tan\((.+)\)\^2$", Const(1)),
-            ]
-            for pattern1, pattern2, value in other_table:
-                match1 = []
-                match2 = []
-                for t in new_sum.terms:
-                    m1 = re.search(pattern1, t.__repr__())
-                    m2 = re.search(pattern2, t.__repr__())
-                    if m1:
-                        match1.append(m1)
-                    if m2:
-                        match2.append(m2)
-
-                if len(match1) == 0 or len(match2) == 0:
-                    continue
-
-                r1 = [m.group(1) for m in match1]
-                r2 = [m.group(1) for m in match2]
-                for m in r1:
-                    for n in r2:
-                        if m == n:
-                            new_terms = [value] + [
-                                t
-                                for t in new_sum.terms
-                                if t.__repr__() != f"sin({m})^2"
-                                and t.__repr__() != f"cos({m})^2"
-                            ]
-                            return Sum(new_terms).simplify()
-
-        return new_sum
+        from .simplify import trig_simplification
+        return trig_simplification(new_sum)
 
     @cast
     def evalf(self, subs: Dict[str, "Const"]):
@@ -618,7 +561,7 @@ class Sum(Associative, Expr):
 
         return ongoing_str
 
-    def factor(self) -> "Expr":
+    def factor(self) -> Union["Prod", "Sum"]:
         # TODO: this feels like not the most efficient algo
         # assume self is simplified please
         # If there is a factor that is common to all terms, factor it out.
@@ -1488,12 +1431,6 @@ def diff(expr: Expr, var: Symbol) -> Expr:
 
 # Problem: can't move this to regex or use general_count because regex imports from this file
 # hmmmmm
-def contains_cls(expr: Expr, cls) -> bool:
-    if isinstance(expr, cls) or issubclass(expr.__class__, cls):
-        return True
-
-    return any([contains_cls(e, cls) for e in expr.children()])
-
 
 def remove_const_factor(expr: Expr) -> Expr:
     if isinstance(expr, Prod):

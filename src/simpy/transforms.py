@@ -10,8 +10,8 @@ from typing import Callable, Dict, List, Literal, Optional, Tuple, Type, Union
 import numpy as np
 
 from .expr import (Const, Expr, Power, Prod, Sum, Symbol, TrigFunction, asin,
-                   atan, contains_cls, cos, cot, csc, log, remove_const_factor,
-                   sec, sin, sqrt, symbols, tan)
+                   atan, cos, cot, csc, log, remove_const_factor, sec, sin,
+                   sqrt, symbols, tan)
 from .linalg import invert
 from .polynomial import (Polynomial, polynomial_to_expr, rid_ending_zeros,
                          to_const_polynomial)
@@ -393,7 +393,7 @@ class RewriteTrig(Transform):
             return False
 
         expr = node.expr
-        return contains_cls(expr, TrigFunction)
+        return expr.has(TrigFunction)
 
     def backward(self, node: Node) -> None:
         super().backward(node)

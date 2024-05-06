@@ -2,7 +2,7 @@
 
 Still WIP. Ideally need to do stuff like "check if somefactor * cos(sth) + somefactor * sin(sth) exists."
 """
-from typing import Callable, List
+from typing import Callable, Iterable, List, Type
 
 from .expr import Const, Expr, Power, Prod, SingleFunc, Sum, Symbol, cast
 from .utils import ExprFn
@@ -17,6 +17,13 @@ def count(expr: Expr, query: Expr) -> int:
     return sum(count(e, query) for e in expr.children())
 
 
+def contains_cls(expr: Expr, cls: Type[Expr]) -> bool:
+    if isinstance(expr, cls):
+        return True
+
+    return any([contains_cls(e, cls) for e in expr.children()])
+
+
 def general_count(expr: Expr, condition: Callable[[Expr], bool]) -> int:
     """the `count` function above, except you can specify a condition rather than 
     only allowing exact matches.
@@ -26,16 +33,23 @@ def general_count(expr: Expr, condition: Callable[[Expr], bool]) -> int:
     return sum(general_count(e, condition) for e in expr.children())
 
 
-def replace_factory(condition: Callable[[Expr], bool], perform: ExprFn) -> ExprFn:
+def replace_factory(condition, perform) -> ExprFn:
+    return replace_factory_list([condition], [perform])
+
+
+def replace_factory_list(conditions: Iterable[Callable[[Expr], bool]], performs: Iterable[ExprFn]) -> ExprFn:
     """
+    list of iterable conditions should be ... mutually exclusive or sth
+
     every time the condition returns True, you replace that expr with the output of `perform`
     hard to explain in English. read the code.
     """
     # Ok honestly the factory might not be the best structure, might be better to have a single unested function that returns the replaced expr directly
     # or make a class bc they're cleaner than factories. haven't given this a ton of thought but we don't need the most perfect choice <3
     def _replace(expr: Expr) -> Expr:
-        if condition(expr):
-            return perform(expr)
+        for condition, perform in zip(conditions, performs):
+            if condition(expr):
+                return perform(expr)
 
         # find all instances of old in expr and replace with new
         if isinstance(expr, Sum):
@@ -66,7 +80,7 @@ def replace(expr: Expr, old: Expr, new: Expr) -> Expr:
 
 
 # cls here has to be a subclass of singlefunc
-def replace_class(expr: Expr, cls: list, newfunc: List[Callable[[Expr], Expr]]) -> Expr:
+def replace_class(expr: Expr, cls: List[Type[SingleFunc]], newfunc: List[Callable[[Expr], Expr]]) -> Expr:
     # legacy // can be rewritten with replace_factory and put directly into transform RewriteTrig
     # bc it's not used anywhere else.
     # however it doesn't matter super much rn that everything is structured in :sparkles: prestine condition :sparkles:
