@@ -172,10 +172,6 @@ class Expr(ABC):
         from .regex import contains_cls
         return contains_cls(self, cls)
 
-    # should be overloaded
-    def simplifable(self) -> bool:
-        return False
-
     @abstractmethod
     def diff(self, var: "Symbol") -> "Expr":
         raise NotImplementedError(
@@ -532,7 +528,7 @@ class Sum(Associative, Expr):
 
     @cast
     def evalf(self, subs: Dict[str, "Const"]):
-        return Sum([t.evalf(subs) for t in self.terms]).simplify()
+        return Sum([t.evalf(subs) for t in self.terms])
 
     def diff(self, var) -> "Sum":
         return Sum([diff(e, var) for e in self.terms])
@@ -543,7 +539,7 @@ class Sum(Associative, Expr):
             if i == 0:
                 ongoing_str += f"{term}"
             elif isinstance(term, Prod) and term.is_subtraction:
-                ongoing_str += f" - {(term * -1).simplify()}"
+                ongoing_str += f" - {(term * -1)}"
             else:
                 ongoing_str += f" + {term}"
 
@@ -555,7 +551,7 @@ class Sum(Associative, Expr):
             if i == 0:
                 ongoing_str += term.latex()
             elif isinstance(term, Prod) and term.is_subtraction:
-                ongoing_str += f" - {(term * -1).simplify().latex()}"
+                ongoing_str += f" - {(term * -1).latex()}"
             else:
                 ongoing_str += f" + {term.latex()}"
 
@@ -609,8 +605,8 @@ class Sum(Associative, Expr):
         # Factor coeffs
         common_coeff = coeffs[0].abs()
         for c in coeffs[1:]:
-            x: Const = (c / common_coeff).simplify()
-            y: Const = (common_coeff / c).simplify()
+            x: Const = (c / common_coeff)
+            y: Const = (common_coeff / c)
             if x.value.denominator == 1 or y.value.denominator == 1:
                 common_coeff = min(c.abs(), common_coeff.abs())
             else:
@@ -638,7 +634,7 @@ class Sum(Associative, Expr):
         for term in self.terms:
             new_terms.append(term / common_expr)
 
-        return (common_expr * Sum(new_terms)).simplify()
+        return (common_expr * Sum(new_terms))
 
 
 def _deconstruct_prod(expr: Expr) -> Tuple[Const, List[Expr]]:
@@ -648,7 +644,7 @@ def _deconstruct_prod(expr: Expr) -> Tuple[Const, List[Expr]]:
     if isinstance(expr, Prod):
         non_const_factors = [term for term in expr.terms if not isinstance(term, Const)]
         const_factors = [term for term in expr.terms if isinstance(term, Const)]
-        coeff = Prod(const_factors).simplify() if const_factors else Const(1)
+        coeff = Prod(const_factors) if const_factors else Const(1)
     else:
         non_const_factors = [expr]
         coeff = Const(1)
@@ -728,7 +724,7 @@ class Prod(Associative, Expr):
 
         # special case for subtraction:
         if self.is_subtraction:
-            new_prod = (self * -1).simplify()
+            new_prod = self * -1
             if not isinstance(new_prod, Prod):
                 return f"-{_term_repr(new_prod)}"
             return "-" + new_prod.__repr__()
@@ -755,7 +751,7 @@ class Prod(Associative, Expr):
 
         # special case for subtraction:
         if self.is_subtraction:
-            new = (self * -1).simplify()
+            new = self * -1
             if not isinstance(new, Prod):
                 return "-" + _term_latex(new)
             return "-" + new.latex()
@@ -766,9 +762,9 @@ class Prod(Associative, Expr):
             # we simplify here bc if it's single term on top/bottom, even sums don't need brackets.
             return (
                 "\\frac{"
-                + numerator.simplify().latex()
+                + numerator.latex()
                 + "}{"
-                + denominator.simplify().latex()
+                + denominator.latex()
                 + "}"
             )
 
@@ -789,7 +785,7 @@ class Prod(Associative, Expr):
 
             b, x = deconstruct_power(term)
             if isinstance(x, Const) and x.value < 0:
-                denominator.append(b if x == Const(-1) else Power(b, (-x).simplify()))
+                denominator.append(b if x == Const(-1) else Power(b, (-x)))
             else:
                 numerator.append(term)
 
@@ -836,7 +832,7 @@ class Prod(Associative, Expr):
         sums = [t for t in expanded_terms if isinstance(t, Sum)]
         other = [t for t in expanded_terms if not isinstance(t, Sum)]
         if not sums:
-            return (Prod(expanded_terms) / denom).simplify()
+            return (Prod(expanded_terms) / denom)
 
         # for every combination of terms in the sums, multiply them and add
         # (using itertools)
@@ -844,11 +840,11 @@ class Prod(Associative, Expr):
         for terms in itertools.product(*[s.terms for s in sums]):
             final_sum_terms.append(Prod(other + list(terms)) / denom)
         
-        return Sum(final_sum_terms).simplify()
+        return Sum(final_sum_terms)
 
     @cast
     def evalf(self, subs: Dict[str, "Const"]):
-        return Prod([t.evalf(subs) for t in self.terms]).simplify()
+        return Prod([t.evalf(subs) for t in self.terms])
 
     def diff(self, var) -> Sum:
         return Sum(
@@ -1026,11 +1022,11 @@ class Power(Expr):
             new_term = [Power(t, p) for t, p in zip(new.base.terms, permutation)]
             coefficient = multinomial_coefficient(permutation, n)
             expanded.append(Prod([Const(coefficient)] + new_term))
-        return Sum(expanded).simplify()
+        return Sum(expanded)
 
     @cast
     def evalf(self, subs: Dict[str, "Const"]):
-        return Power(self.base.evalf(subs), self.exponent.evalf(subs)).simplify()
+        return Power(self.base.evalf(subs), self.exponent.evalf(subs))
 
     def children(self) -> List["Expr"]:
         return [self.base, self.exponent]

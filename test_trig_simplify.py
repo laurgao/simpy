@@ -23,6 +23,8 @@ def test_one_plus_tan_squared():
     simp = expr.simplify()
     assert_eq_strict(simp, sec(x+y)**2)
 
-    # pytest.mark.xfail this
     expr = 2 + 2*tan(x+y)** 2
-    expr = y + y*tan(x+y)** 2
+    simp = expr.simplify()
+    assert_eq_strict(simp, 2 * sec(x+y) ** 2)
+
+    # expr = (2+y) + (2+y)*tan(x+y)** 2

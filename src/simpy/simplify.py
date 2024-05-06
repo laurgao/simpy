@@ -19,9 +19,9 @@ def trig_simplification(sum: Sum) -> Expr:
             (1 - cot(any_) ** 2, lambda x: 1 / cot(x) ** 2)
         ]
         for condition, perform in identities:
-            c: Expr = eq(sum, condition)
-            if c:
-                new_sum = perform(c)
+            is_eq, factor, inner = eq(sum, condition, up_to_factor=True)
+            if is_eq:
+                new_sum = factor * perform(inner)
                 return new_sum.simplify()
 
         ##------------ Simplify sin^2(...) + cos^2(...) ------------##
