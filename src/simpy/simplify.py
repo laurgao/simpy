@@ -1,33 +1,30 @@
-import re
-from typing import Callable, Dict, Iterable, Optional, Tuple, Type, Union
+from typing import Iterable, List, Optional, Tuple, Type, Union
 
-from .expr import (Const, Expr, Power, Prod, Sum, Symbol, TrigFunction, cos,
-                   cot, csc, sec, sin, tan)
+from .expr import (Const, Expr, Power, Prod, Sum, TrigFunction, cos, cot, csc,
+                   sec, sin, tan)
+from .regex import any_, eq
+from .utils import ExprFn
 
 
 def trig_simplification(sum: Sum) -> Expr:
     if sum.has(TrigFunction):
-        # I WANT TO DO IT so that it's more robust.
-        # - what if there is a constant (or variable) common factor? (i think for this i'll have to implement a .factor method)
+        ##------------ Simplify 1 +/- cls(...)^2 ------------##
+        # - for this case: what if there is a constant (or variable) common factor?
+        identities: List[Tuple[Expr, ExprFn]] = [
+            (1 + tan(any_) ** 2, lambda x: sec(x) ** 2),
+            (1 + cot(any_) ** 2, lambda x: csc(x) ** 2),
+            (1 - sin(any_) ** 2, lambda x: cos(x) ** 2),
+            (1 - cos(any_) ** 2, lambda x: sin(x) ** 2),
+            (1 - tan(any_) ** 2, lambda x: 1 / tan(x) ** 2), # unclear if this is even simpler...
+            (1 - cot(any_) ** 2, lambda x: 1 / cot(x) ** 2)
+        ]
+        for condition, perform in identities:
+            c: Expr = eq(sum, condition)
+            if c:
+                new_sum = perform(c)
+                return new_sum.simplify()
 
-        pythagorean_trig_identities: Dict[str, Callable[[Expr], Expr]] = {
-            r"tan\((\w+)\)\^2 \+ 1": lambda x: sec(x) ** 2,
-            r"cot\((\w+)\)\^2 \+ 1": lambda x: csc(x) ** 2,
-            r"-sin\((\w+)\)\^2 \+ 1": lambda x: cos(x) ** 2,
-            r"-cos\((\w+)\)\^2 \+ 1": lambda x: sin(x) ** 2,
-            r"-tan\((\w+)\)\^2 \+ 1": lambda x: Const(1) / (tan(x) ** 2),
-            r"-cot\((\w+)\)\^2 \+ 1": lambda x: Const(1) / (cot(x) ** 2),
-        }
-
-        for pattern, replacement_callable in pythagorean_trig_identities.items():
-            match = re.search(pattern, sum.__repr__())
-            result = match.group(1) if match else None
-
-            if result and len(sum.terms) == 2:
-                other = replacement_callable(Symbol(result)).simplify()
-                return other
-
-        # actually i dont need replace factory: we are already recursing on simplify so no more recursing here.
+        ##------------ Simplify sin^2(...) + cos^2(...) ------------##
         def is_thing_squared(term: Expr, cls: Union[Type[TrigFunction], Iterable[Type[TrigFunction]]]) -> Optional[Tuple[Expr, Expr]]: # returns inner, factor
             def is_(f):
                 return isinstance(f, Power) and f.exponent == 2 and isinstance(f.base, cls)

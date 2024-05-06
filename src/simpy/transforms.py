@@ -17,7 +17,7 @@ from .polynomial import (Polynomial, polynomial_to_expr, rid_ending_zeros,
                          to_const_polynomial)
 from .regex import (count, general_count, replace, replace_class,
                     replace_factory)
-from .utils import ExprFn
+from .utils import ExprFn, random_id
 
 Number_ = Union[Fraction, int]
 
@@ -991,14 +991,6 @@ SAFE_TRANSFORMS: List[Type[Transform]] = [
     Expand, # expanding a fraction is not safe bc it destroys partialfractions. but if you put it after polynomial division & partial fractions, it doesn't cause any issues. more robust solution is to refactor & put expanding a fraction seperately as a heuristic transform, but idt this is necessary right now.
     LinearUSub,
 ]
-
-
-def random_id(length):
-    # Define the pool of characters you can choose from
-    characters = string.ascii_letters + string.digits
-    # Use random.choices() to pick characters at random, then join them into a string
-    random_string = "".join(random.choices(characters, k=length))
-    return random_string
 
 
 def generate_intermediate_var() -> Symbol:

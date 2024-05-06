@@ -2,10 +2,67 @@
 
 Still WIP. Ideally need to do stuff like "check if somefactor * cos(sth) + somefactor * sin(sth) exists."
 """
-from typing import Callable, Iterable, List, Type
+from collections import defaultdict
+from dataclasses import fields
+from typing import Callable, Dict, Iterable, List, Literal, Type, Union
 
 from .expr import Const, Expr, Power, Prod, SingleFunc, Sum, Symbol, cast
-from .utils import ExprFn
+from .utils import ExprFn, random_id
+
+
+class Any_(Symbol):
+    def __init__(self, anykey = None):
+        self.name = "any"
+        if not anykey:
+            anykey = random_id(10)
+        self.anykey = anykey
+
+    def __eq__(self, other):
+        return isinstance(other, Any_) and other.anykey == self.anykey
+    
+any_ = Any_()
+
+def eq(expr: Expr, query: Expr):
+    if expr.has(Any_):
+        raise ValueError("Only query can contain 'any' objects.")
+    return Eq(expr, query)()
+
+class Eq:
+    def __init__(self, expr, query):
+        self.expr = expr
+        self.query = query
+        self.anyfind = defaultdict(list)
+
+    def __call__(self) -> Union[Literal[False], Dict["str", Expr], Expr]:
+        ans = self._eq(self.expr, self.query)
+        if ans is False:
+            return False
+        
+        # TODO: assert every element within each anykey is the same
+        if len(self.anyfind) == 1:
+            return list(self.anyfind.values())[0][0]
+        return self.anyfind
+
+    def _eq(self, expr, query):
+        if isinstance(expr, Iterable):
+            if not (isinstance(query, Iterable) and len(expr) == len(query)):
+                return False
+            return all([self._eq(e, q) for e, q in zip(expr, query)])
+        
+        if isinstance(query, Any_):
+            self.anyfind[query.anykey].append(expr)
+            return True
+        if expr.__class__ != query.__class__:
+            return False
+        
+        # base cases
+        if not isinstance(expr, Expr):
+            # ex field is a str
+            return expr == query
+        if not expr.children():
+            return expr == query
+
+        return all([self._eq(getattr(expr, field.name), getattr(query, field.name)) for field in fields(expr)])
 
 
 @cast

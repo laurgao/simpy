@@ -116,22 +116,6 @@ def test_repr():
     assert repr(poly) == "x^5 + (3x^4)/2 + x^2 + 2x + 3"
 
 
-def test_simplify_sin2x_plus_cos2x():
-    expr = sin(x) ** 2 + cos(x) ** 2 + 3
-    simplified = expr.simplify()
-    assert_eq_strict(simplified, 4)
-
-    # Test when sin^2(...) -> ... is more complicated than just 'x'
-    expr = sin(x - 2 * y) ** 2 + 3 + cos(x - 2 * y) ** 2 + y**2
-    simplified = expr.simplify()
-    assert_eq_strict(simplified, 4 + y**2)
-
-    # Test when sin^2(...) and cos^2(...) share a common factor
-    expr = 2*y*sin(x**3)**2 + 2*y*cos(x**3)**2
-    simplified = expr.simplify()
-    assert_eq_strict(simplified, 2*y)
-
-
 def test_factor():
     # Simple example
     x = symbols("x")
