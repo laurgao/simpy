@@ -640,7 +640,6 @@ class Sum(Associative, Expr):
 def _deconstruct_prod(expr: Expr) -> Tuple[Const, List[Expr]]:
     # 3*x^2*y -> (3, [x^2, y])
     # turns smtn into a constant and a list of other terms
-    # assume expr is simplified
     if isinstance(expr, Prod):
         non_const_factors = [term for term in expr.terms if not isinstance(term, Const)]
         const_factors = [term for term in expr.terms if isinstance(term, Const)]
@@ -680,7 +679,7 @@ class Prod(Associative, Expr):
                     continue
                 other = initial_terms[j]
                 base2, expo2 = deconstruct_power(other)
-                if base2 == base:  # TODO: real expr equality
+                if base2 == base:
                     expo += expo2
                     initial_terms[j] = None
             
@@ -759,14 +758,7 @@ class Prod(Associative, Expr):
         numerator, denominator = self.numerator_denominator
         if denominator != Const(1):
             # don't need brackets around num/denom bc the frac bar handles it.
-            # we simplify here bc if it's single term on top/bottom, even sums don't need brackets.
-            return (
-                "\\frac{"
-                + numerator.latex()
-                + "}{"
-                + denominator.latex()
-                + "}"
-            )
+            return "\\frac{" + numerator.latex() + "}{" + denominator.latex() + "}"
 
         return "".join(map(_term_latex, self.terms))
 
@@ -789,16 +781,8 @@ class Prod(Associative, Expr):
             else:
                 numerator.append(term)
 
-        num_expr = (
-            Prod(numerator)
-            if len(numerator) > 1
-            else numerator[0] if len(numerator) == 1 else Const(1)
-        )
-        denom_expr = (
-            Prod(denominator)
-            if len(denominator) > 1
-            else denominator[0] if len(denominator) == 1 else Const(1)
-        )
+        num_expr = Prod(numerator) if len(numerator) > 0 else Const(1)
+        denom_expr = Prod(denominator) if len(denominator) > 0  else Const(1)
         return [num_expr, denom_expr]
 
     @property
