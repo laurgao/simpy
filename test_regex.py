@@ -1,7 +1,7 @@
 import pytest
 
 from src.simpy import *
-from src.simpy.regex import any_, eq
+from src.simpy.regex import Any_, any_, eq
 from test_utils import x, y
 
 
@@ -22,3 +22,10 @@ def test_up_to_factor_on_simple_examples():
 
 def test_factor_doesnt_overstep():
     assert not eq(1 + sin(x) ** 2, 1 + tan(any_) ** 2, True)[0]
+
+@pytest.mark.xfail
+def test_unlimited_sum():
+    expr = 2 + x + sin(x) ** 2 + cos(x) ** 2
+    anyterms = Any_()
+    query = anyterms + sin(any_) + cos(any_)
+    assert eq(expr, query)[0]
