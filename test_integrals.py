@@ -16,8 +16,20 @@ def test_basic_integrals():
     assert_definite_integral(1 / x, (x, 1, 2), log(2))
     assert_integral(y, x * y, var=x)
     assert_integral(tan(y), x * tan(y), var=x)
+
+def test_stat_polynomials():
+    I1 = integrate((x/90 * (x-5)**2 / 350), (x, 5, 6))
+    I2 = integrate((F(1, 15) - F(1, 360) * (x-6))*(x-5)**2 / 350, (x, 6, 15))
+    I3 = integrate((F(1, 15) - F(1, 360) * (x-6))*(1 - (40-x)**2/875), (x, 15, 30))
+    assert (I1, I2, I3) == (F(23,378000), F(2589,56000), F(37,224))
+
     
 def test_lecture_example():
+    """The integral from the MIT OCW lecture that inspired this project:
+    https://ocw.mit.edu/courses/6-034-artificial-intelligence-fall-2010/resources/lecture-2-reasoning-goal-trees-and-problem-solving/
+    
+    Highly recommend watching this to understand how this program performs integrals.
+    """
     expression = -5 * x**4 / (1 - x**2) ** F(5, 2)
     expected_integral = -5 * (
         -(x / (sqrt(1 - x**2)))

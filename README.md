@@ -29,6 +29,7 @@ x = sp.symbols("x")
 I1 = sp.integrate((x/90 * (x-5)**2 / 350), (x, 5, 6))
 I2 = sp.integrate((F(1, 15) - F(1, 360) * (x-6))*(x-5)**2 / 350, (x, 6, 15))
 I3 = sp.integrate((F(1, 15) - F(1, 360) * (x-6))*(1 - (40-x)**2/875), (x, 15, 30))
+print(I1, I2, I3)
 ```
 
 Note: we don't support floats right now so please use fractions!
