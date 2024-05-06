@@ -99,6 +99,8 @@ def integrate(
     verbose: bool = False,
 ) -> Optional[Expr]:
     """
+    Integrates an expression.
+
     Args:
         expr: the integrand
         bounds: (var, a, b) where var is the variable of integration and a, b are the integration bounds.
