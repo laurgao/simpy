@@ -1,5 +1,5 @@
 from src.simpy.expr import *
-from test_utils import assert_eq_strict, assert_eq_value, x
+from test_utils import assert_eq_strict, assert_eq_value, x, y
 
 
 def assert_diff(a: Expr, b: Expr):
@@ -28,3 +28,5 @@ def test_kh_derivatives():
     assert_diff(sqrt(x)*e**x, e**x/(2*sqrt(x)) + sqrt(x)*e**x)
     assert_diff(cos(x)/log(x), (-x*sin(x)*log(x)-cos(x))/(x*log(x)**2))
     assert_diff(sin(x)/e**x, (cos(x)-sin(x))/e**x)
+
+    assert_diff(sec(y**3 * pi)/ 4, 0)

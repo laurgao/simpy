@@ -785,7 +785,7 @@ class Prod(Associative, Expr):
 
             b, x = deconstruct_power(term)
             if isinstance(x, Const) and x.value < 0:
-                denominator.append(b if x == Const(-1) else Power(b, (-x)))
+                denominator.append(b if x == Const(-1) else Power(b, -x))
             else:
                 numerator.append(term)
 
@@ -1372,7 +1372,6 @@ class sec(TrigFunction):
         return {k: 1 / cos.special_values[k] for k in cls._SPECIAL_KEYS}
 
     def diff(self, var) -> Expr:
-        # TODO: handle when self.inner doesnt contain var
         return sec(self.inner) * tan(self.inner) * self.inner.diff(var)
 
 
