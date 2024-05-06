@@ -759,14 +759,7 @@ class Prod(Associative, Expr):
         numerator, denominator = self.numerator_denominator
         if denominator != Const(1):
             # don't need brackets around num/denom bc the frac bar handles it.
-            # we simplify here bc if it's single term on top/bottom, even sums don't need brackets.
-            return (
-                "\\frac{"
-                + numerator.latex()
-                + "}{"
-                + denominator.latex()
-                + "}"
-            )
+            return "\\frac{" + numerator.latex() + "}{" + denominator.latex() + "}"
 
         return "".join(map(_term_latex, self.terms))
 
@@ -785,20 +778,12 @@ class Prod(Associative, Expr):
 
             b, x = deconstruct_power(term)
             if isinstance(x, Const) and x.value < 0:
-                denominator.append(b if x == Const(-1) else Power(b, (-x)))
+                denominator.append(b if x == Const(-1) else Power(b, -x))
             else:
                 numerator.append(term)
 
-        num_expr = (
-            Prod(numerator)
-            if len(numerator) > 1
-            else numerator[0] if len(numerator) == 1 else Const(1)
-        )
-        denom_expr = (
-            Prod(denominator)
-            if len(denominator) > 1
-            else denominator[0] if len(denominator) == 1 else Const(1)
-        )
+        num_expr = Prod(numerator) if len(numerator) > 0 else Const(1)
+        denom_expr = Prod(denominator) if len(denominator) > 0  else Const(1)
         return [num_expr, denom_expr]
 
     @property
