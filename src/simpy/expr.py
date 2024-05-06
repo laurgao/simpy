@@ -1356,7 +1356,6 @@ class sec(TrigFunction):
         return {k: 1 / cos.special_values[k] for k in cls._SPECIAL_KEYS}
 
     def diff(self, var) -> Expr:
-        # TODO: handle when self.inner doesnt contain var
         return sec(self.inner) * tan(self.inner) * self.inner.diff(var)
 
 
