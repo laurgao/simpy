@@ -640,7 +640,6 @@ class Sum(Associative, Expr):
 def _deconstruct_prod(expr: Expr) -> Tuple[Const, List[Expr]]:
     # 3*x^2*y -> (3, [x^2, y])
     # turns smtn into a constant and a list of other terms
-    # assume expr is simplified
     if isinstance(expr, Prod):
         non_const_factors = [term for term in expr.terms if not isinstance(term, Const)]
         const_factors = [term for term in expr.terms if isinstance(term, Const)]
@@ -680,7 +679,7 @@ class Prod(Associative, Expr):
                     continue
                 other = initial_terms[j]
                 base2, expo2 = deconstruct_power(other)
-                if base2 == base:  # TODO: real expr equality
+                if base2 == base:
                     expo += expo2
                     initial_terms[j] = None
             
