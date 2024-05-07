@@ -14,26 +14,6 @@ def _check_if_node_solvable(node: Node):
     node.solution = answer
 
 
-def _cycle(node: Node) -> Optional[Union[Node, Literal["SOLVED"]]]:
-    # 1. APPLY ALL SAFE TRANSFORMS
-    _integrate_safely(node)
-
-    # now we have a tree with all the safe transforms applied
-    # 2. LOOK IN TABLE
-    for leaf in node.unfinished_leaves:
-        _check_if_node_solvable(leaf)
-
-    if len(node.unfinished_leaves) == 0:
-        return "SOLVED"
-
-    # 3. APPLY HEURISTICS
-    next_node = node.unfinished_leaves[0]  # random lol
-    _integrate_heuristically(next_node)
-
-    next_next_node = _get_next_node_post_heuristic(next_node)
-    return next_next_node
-
-
 def _get_next_node_post_heuristic(node: Node) -> Node:
 
     if len(node.unfinished_leaves) == 0:
@@ -97,6 +77,7 @@ def integrate(
     expr: Expr,
     bounds: Optional[Union[Symbol, Tuple[Expr, Expr], Tuple[Symbol, Expr, Expr]]] = None,
     verbose: bool = False,
+    debug: bool = False,
 ) -> Optional[Expr]:
     """
     Integrates an expression.
@@ -132,10 +113,12 @@ def integrate(
             raise ValueError(f"Please specify the variable of integration for {expr}")
         bounds = (vars[0], bounds[0], bounds[1])
 
+
+    integration = Integration(verbose=verbose, debug=debug)
     if isinstance(bounds, Symbol):
-        return Integration._integrate(expr, bounds, verbose)
+        return integration.integrate(expr, bounds)
     if isinstance(bounds, tuple):
-        return Integration._integrate_bounds(expr, bounds, verbose)
+        return integration.integrate_bounds(expr, bounds)
     else:
         raise ValueError(f"Invalid bounds: {bounds}")
 
@@ -145,21 +128,75 @@ class Integration:
     Keeps track of integration work as we go
     """
 
-    def _integrate_bounds(
-        expr: Expr, bounds: Tuple[Symbol, Expr, Expr], verbose: bool
-    ) -> Expr:
-        x, a, b = bounds
-        integral = Integration._integrate(expr, bounds[0], verbose)
-        return (integral.evalf({x.name: b}) - integral.evalf({x.name: a})).simplify()
+    def __init__(self, *, verbose: bool = False, debug: bool = False, is_byparts_check: bool = False):
+        self._is_byparts_check = is_byparts_check
+        self._verbose = verbose
+        self._debug = debug
 
     @staticmethod
+    def _cycle(node: Node) -> Optional[Union[Node, Literal["SOLVED"]]]:
+        # 1. APPLY ALL SAFE TRANSFORMS
+        _integrate_safely(node)
+
+        # now we have a tree with all the safe transforms applied
+        # 2. LOOK IN TABLE
+        for leaf in node.unfinished_leaves:
+            _check_if_node_solvable(leaf)
+
+        if len(node.unfinished_leaves) == 0:
+            return "SOLVED"
+
+        # 3. APPLY HEURISTICS
+        next_node = node.unfinished_leaves[0]  # random lol
+        _integrate_heuristically(next_node)
+
+        next_next_node = _get_next_node_post_heuristic(next_node)
+        return next_next_node
+    
+    def integrate_bounds(
+        self, expr: Expr, bounds: Tuple[Symbol, Expr, Expr]
+    ) -> Optional[Expr]:
+        """Performs definite integral.
+        """
+        x, a, b = bounds
+        integral = self.integrate(expr, bounds[0])
+        if integral is None:
+            return None
+        return (integral.evalf({x.name: b}) - integral.evalf({x.name: a})).simplify()
+    
+    def integrate(self, integrand: Expr, var: Symbol) -> Optional[Expr]:
+        """Performs indefinite integral.
+        """
+        if self._is_byparts_check:
+            return self._integrate_without_heuristics(integrand, var)
+        return self._integrate(integrand, var)
+
+    def _integrate_without_heuristics(self, integrand: Expr, var: Symbol) -> Optional[Expr]:
+        """Performs indefinite integral.
+        """
+        root = Node(integrand, var)
+        _integrate_safely(root)
+        for leaf in root.unfinished_leaves:
+            _check_if_node_solvable(leaf)
+            if leaf.type != "SOLUTION":
+                leaf.type = "FAILURE"
+
+        if root.is_failed:
+            return None
+        self._go_backwards(root)
+        return root.solution.simplify()
+
     def _integrate(
-        integrand: Expr, var: Symbol, verbose: bool = False 
-    ) -> Expr:
+        self, integrand: Expr, var: Symbol 
+    ) -> Optional[Expr]:
+        """Performs indefinite integral.
+        """
         root = Node(integrand, var)
         curr_node = root
         while True:
-            answer = _cycle(curr_node)
+            answer = self._cycle(curr_node)
+            if self._debug:
+                breakpoint()
             if root.is_finished:
                 break
             if answer == "SOLVED":
@@ -170,13 +207,28 @@ class Integration:
 
         if root.is_failed:
             warnings.warn(f"Failed to integrate {integrand} wrt {var}")
-            if verbose:
+            if self._verbose:
                 _print_tree(root)
                 breakpoint()
             return None
 
-        # now we have a solved tree or a failed tree
-        # we can go back and get the answer
+        # now we have a solved tree we can go back and get the answer
+        self._go_backwards(root)
+
+        if self._verbose:
+            _print_success_tree(root)
+            breakpoint()
+        return root.solution.simplify()
+    
+    @staticmethod
+    def _go_backwards(root: Node):
+        """Mutates the tree in place/returns nothing.
+
+        At the end, root.solution should be existant.
+        """
+        if not root.is_solved:
+            raise ValueError("Cannot go backwards on an unsovled tree.")
+
         solved_leaves = [leaf for leaf in root.leaves if leaf.is_solved]
         for leaf in solved_leaves:
             # GO backwards on each leaf until it errors out, then go backwards on the next leaf.
@@ -192,11 +244,6 @@ class Integration:
 
         if root.solution is None:
             raise ValueError("something went wrong while going backwards...")
-
-        if verbose:
-            _print_success_tree(root)
-            breakpoint()
-        return root.solution.simplify()
 
 
 def _integrate_safely(node: Node):

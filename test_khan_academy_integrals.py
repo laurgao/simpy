@@ -36,6 +36,12 @@ def test_partial_fractions():
     assert_integral(integrand, expected_ans)
 
 
+def test_integration_by_parts():
+    integrand = x * e ** (-x)
+    expected = -e ** (-x) * (x + 1)
+    assert_integral(integrand, expected)
+
+
 def test_arcsin():
     ans = integrate(asin(x), x)
     expected_ans = x * asin(x) + sqrt(1 - x**2)
