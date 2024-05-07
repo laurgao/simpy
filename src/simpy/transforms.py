@@ -24,6 +24,8 @@ Number_ = Union[Fraction, int]
 
 @dataclass
 class Node:
+    """A node in the integration nodetree.
+    """
     expr: Expr
     var: Symbol  # variable that THIS EXPR is integrated by.
     transform: Optional["Transform"] = None  # the transform that led to this node
@@ -401,6 +403,8 @@ class RewriteTrig(Transform):
 
 
 class InverseTrigUSub(Transform):
+    """Does the sub of u = asin(x), u = atan(x)
+    """
     _key = None
     _variable_change = None
 
@@ -744,9 +748,9 @@ class ProductToSum(Transform):
 
 
 class ByParts(Transform):
-    _stuff: List[Tuple[Expr, Expr, Expr, Expr]] = None
-
     """Integration by parts"""
+
+    _stuff: List[Tuple[Expr, Expr, Expr, Expr]] = None
 
     def __init__(self):
         self._stuff = []
@@ -838,7 +842,7 @@ class PartialFractions(Transform):
             return False
         
         # numerator has to be a smaller order than the denom
-        if len(numerator_list) > len(denominator_list):
+        if len(numerator_list) >= len(denominator_list):
             return False
         
         # The denominator has to be a product

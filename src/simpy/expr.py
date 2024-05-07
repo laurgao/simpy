@@ -1068,7 +1068,8 @@ def _repr(inner: Expr, label: str) -> str:
 
 class log(SingleFunc):
     inner: Expr
-    base: Expr = e
+    base: Expr = e  # currently there isn't a way to set this yet from public api
+    # if we make log a dataclass, the __repr__ no longer subclsases from SingleFun
 
     @property
     def _label(self):
@@ -1078,7 +1079,14 @@ class log(SingleFunc):
             return "log" + self.base
         else:
             return f"log[self.base]"
-    
+        
+    def latex(self) -> str:
+        # Have informally tested this; does the job.
+        if self.base == e:
+            return "\\ln\\left( " + self.inner.latex() + " \\right)"
+        else:
+            return "\\log_{" + self.base.latex() + "}\\left( " + self.inner.latex() + " \\right)"
+
     def __new__(cls, inner: Expr, base: Expr = e):
         if inner == 1:
             return Const(0)
