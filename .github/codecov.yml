@@ -3,4 +3,4 @@ coverage:
         project:
             default:
                 # Basic threshold for your project
-                target: 80%
+                target: 97% # testing if this does anything
