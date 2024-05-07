@@ -25,6 +25,16 @@ def test_partial_fractions():
     expected_ans = Fraction(4, 3) * log(x) - Fraction(1, 3) * log(x + 6)
     assert_integral(integrand, expected_ans)
 
+    integrand = (18-12*x)/(4*x-1)/(x-4)
+    expected_ans = -log(4*x-1)-2*log(x-4)
+    assert_integral(integrand, expected_ans)
+    integrand = (2*x+3)/(x-3)/(x+3)
+    expected_ans = 3*log(x-3)/2 + log(x+3)/2
+    assert_integral(integrand, expected_ans)
+    integrand = (x-2)/(2*x+1)/(x+3)
+    expected_ans = -log(2*x+1)/2 + log(x+3)
+    assert_integral(integrand, expected_ans)
+
 
 def test_arcsin():
     ans = integrate(asin(x), x)
