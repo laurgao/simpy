@@ -2,6 +2,7 @@
 LOL im gonna take a bunch of integral questions from https://www.khanacademy.org/math/integral-calculus/ic-integration/ic-integration-proofs/test/ic-integration-unit-
 and make sure simpy can do them
 """
+import pytest
 
 from src.simpy.expr import *
 from src.simpy.integration import *
@@ -97,6 +98,22 @@ def test_misc():
 
     assert_definite_integral(8 * x / sqrt(1 - 4 * x ** 2), (0, Fraction(1,4)), 2 - sqrt(3))
     assert_definite_integral(sin(4*x), (0, pi/4), Fraction(1,2))
+
+@pytest.mark.xfail
+def test_csc_x_squared():
+    # idk how to simplify the answer to this one.
+    # requires simplifying 1/sinxcosx - tanx -> cotx ??
+    integrand = 5 * csc(x) ** 2
+    expected_ans = -5 * cot(x)
+    assert_integral(integrand, expected_ans)
+
+@pytest.mark.xfail
+def test_csc_x_cot_x():
+    # this one requires simpy knowing that 1/sin(x) and csc(x) are the same
+    integrand = 2 * csc(x) * cot(x)
+    expected = -2 * csc(x)
+    assert_integral(integrand, expected)
+
 
 def test_expanding_big_power():
     integrand = (2 * x - 5) ** 10
