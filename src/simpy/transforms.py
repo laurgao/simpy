@@ -762,8 +762,7 @@ class ByParts(Transform):
     @staticmethod
     def _integrate_dv_check(dv, var) -> Optional[Expr]:
         from .integration import Integration
-        integration = Integration(is_byparts_check=True)
-        return integration.integrate(dv, var)
+        return Integration.integrate_without_heuristics(dv, var)
     
     @staticmethod
     def _get_all_byparts_parents(node: Node) -> List[Node]:

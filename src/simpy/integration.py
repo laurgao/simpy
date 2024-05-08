@@ -13,6 +13,25 @@ def _check_if_node_solvable(node: Node):
     node.type = "SOLUTION"
     node.solution = answer
 
+def _cycle(node: Node) -> Optional[Union[Node, Literal["SOLVED"]]]:
+    # 1. APPLY ALL SAFE TRANSFORMS
+    _integrate_safely(node)
+
+    # now we have a tree with all the safe transforms applied
+    # 2. LOOK IN TABLE
+    for leaf in node.unfinished_leaves:
+        _check_if_node_solvable(leaf)
+
+    if len(node.unfinished_leaves) == 0:
+        return "SOLVED"
+
+    # 3. APPLY HEURISTICS
+    next_node = node.unfinished_leaves[0]  # random lol
+    _integrate_heuristically(next_node)
+
+    next_next_node = _get_next_node_post_heuristic(next_node)
+    return next_next_node
+
 
 def _get_next_node_post_heuristic(node: Node) -> Node:
 
@@ -128,30 +147,9 @@ class Integration:
     Keeps track of integration work as we go
     """
 
-    def __init__(self, *, verbose: bool = False, debug: bool = False, is_byparts_check: bool = False):
-        self._is_byparts_check = is_byparts_check
+    def __init__(self, *, verbose: bool = False, debug: bool = False):
         self._verbose = verbose
         self._debug = debug
-
-    @staticmethod
-    def _cycle(node: Node) -> Optional[Union[Node, Literal["SOLVED"]]]:
-        # 1. APPLY ALL SAFE TRANSFORMS
-        _integrate_safely(node)
-
-        # now we have a tree with all the safe transforms applied
-        # 2. LOOK IN TABLE
-        for leaf in node.unfinished_leaves:
-            _check_if_node_solvable(leaf)
-
-        if len(node.unfinished_leaves) == 0:
-            return "SOLVED"
-
-        # 3. APPLY HEURISTICS
-        next_node = node.unfinished_leaves[0]  # random lol
-        _integrate_heuristically(next_node)
-
-        next_next_node = _get_next_node_post_heuristic(next_node)
-        return next_next_node
     
     def integrate_bounds(
         self, expr: Expr, bounds: Tuple[Symbol, Expr, Expr]
@@ -164,15 +162,9 @@ class Integration:
             return None
         return (integral.evalf({x.name: b}) - integral.evalf({x.name: a})).simplify()
     
-    def integrate(self, integrand: Expr, var: Symbol) -> Optional[Expr]:
-        """Performs indefinite integral.
-        """
-        if self._is_byparts_check:
-            return self._integrate_without_heuristics(integrand, var)
-        return self._integrate(integrand, var)
-
-    def _integrate_without_heuristics(self, integrand: Expr, var: Symbol) -> Optional[Expr]:
-        """Performs indefinite integral.
+    @staticmethod
+    def integrate_without_heuristics(integrand: Expr, var: Symbol) -> Optional[Expr]:
+        """Performs indefinite integral. used for byparts checking if dv is integrateable.
         """
         root = Node(integrand, var)
         _integrate_safely(root)
@@ -183,10 +175,10 @@ class Integration:
 
         if root.is_failed:
             return None
-        self._go_backwards(root)
+        Integration._go_backwards(root)
         return root.solution.simplify()
 
-    def _integrate(
+    def integrate(
         self, integrand: Expr, var: Symbol 
     ) -> Optional[Expr]:
         """Performs indefinite integral.
@@ -194,7 +186,7 @@ class Integration:
         root = Node(integrand, var)
         curr_node = root
         while True:
-            answer = self._cycle(curr_node)
+            answer = _cycle(curr_node)
             if self._debug:
                 breakpoint()
             if root.is_finished:

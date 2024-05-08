@@ -1205,19 +1205,20 @@ class TrigFunction(SingleFunc, ABC):
 
     def __new__(cls, inner: Expr) -> "Expr":
         # 1. Check if inner is a special value
-        pi_coeff = inner / pi
-        if isinstance(pi_coeff, Const):
-            pi_coeff = pi_coeff % 2
-            if str(pi_coeff.value) in cls._SPECIAL_KEYS:
-                return cls.special_values[str(pi_coeff.value)]
-            
-        # check if inner has ... a 2pi term in a sum
-        if isinstance(inner, Sum) and inner.has(Pi):
-            for t in inner.terms:
-                if t.has(Pi):
-                    coeff = t / pi
-                    if isinstance(coeff, Const) and coeff % 2 == 0:
-                        return cls(inner - t)
+        if not cls.is_inverse:
+            pi_coeff = inner / pi
+            if isinstance(pi_coeff, Const):
+                pi_coeff = pi_coeff % 2
+                if str(pi_coeff.value) in cls._SPECIAL_KEYS:
+                    return cls.special_values[str(pi_coeff.value)]
+
+            # check if inner has ... a 2pi term in a sum
+            if isinstance(inner, Sum) and inner.has(Pi):
+                for t in inner.terms:
+                    if t.has(Pi):
+                        coeff = t / pi
+                        if isinstance(coeff, Const) and coeff % 2 == 0:
+                            return cls(inner - t)
         
         # 2. Check if inner is trigfunction
         # things like sin(cos(x)) cannot be more simplified.
