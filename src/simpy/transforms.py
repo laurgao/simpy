@@ -1,7 +1,5 @@
 # structures for integration w transforms
 
-import random
-import string
 from abc import ABC, abstractmethod
 from dataclasses import dataclass
 from fractions import Fraction
@@ -1061,17 +1059,16 @@ STANDARD_TRIG_INTEGRALS: Dict[str, ExprFn] = {
 }
 
 def _check_if_solveable(integrand: Expr, var: Symbol) -> Optional[Expr]:
-    """outputs a SIMPLIFIED expr"""
     if not integrand.contains(var):
-        return (integrand * var)
+        return integrand * var
     if isinstance(integrand, Power):
         if integrand.base == var and not integrand.exponent.contains(var):
             n = integrand.exponent
-            return ((1 / (n + 1)) * Power(var, n + 1)) if n != -1 else log(integrand.base)
+            return (1 / (n + 1)) * Power(var, n + 1) if n != -1 else log(abs(integrand.base))
         if integrand.exponent == var and not integrand.base.contains(var):
-            return (1 / log(integrand.base) * integrand)
+            return 1 / log(integrand.base) * integrand
     if isinstance(integrand, Symbol) and integrand == var:
-        return( Fraction(1 / 2) * Power(var, 2))
+        return Fraction(1 / 2) * Power(var, 2)
 
     silly_key = repr(replace(integrand, var, Symbol("x"))) # jank but does the job
     if silly_key in STANDARD_TRIG_INTEGRALS:

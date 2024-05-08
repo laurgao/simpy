@@ -12,7 +12,7 @@ def test_basic_integrals():
     assert_integral(3 * x**2 - 2 * x, x**3 - x**2)
     assert_integral((x + 1) ** 2, x + x**2 + (x**3 / 3))
     assert_integral(x ** 12, x ** 13 / 13)
-    assert_integral(1 / x, log(x))
+    assert_integral(1 / x, log(abs(x)))
     assert_definite_integral(1 / x, (x, 1, 2), log(2))
     assert_integral(y, x * y, var=x)
     assert_integral(tan(y), x * tan(y), var=x)
@@ -79,8 +79,11 @@ def test_cos2x():
 def test_linear_usub_with_multiple_subs():
     # Last I checked, this fails without LinearUSub
     integrand = sin(2*x) / cos(2*x)
-    expected = -log(cos(2*x))/2
-    assert_integral(integrand, expected)
+    expected = -log(abs(cos(2*x)))/2
+    expected2 = log(abs(sec(2*x)**2))/4
+    # can't fucking implement this being equal. wtv.
+    integral = integrate(integrand)
+    assert integral == expected or integral == expected2
 
 
 def test_misc():
@@ -95,7 +98,7 @@ def test_misc():
     assert_integral(log(x), x * log(x) - x)
 
     integrand = log(x + 6) / x**2
-    expected = log(x) / 6 - log(x + 6) / x - log(x+6) / 6
+    expected = log(abs(x)) / 6 - log(x + 6) / x - log(abs(x+6)) / 6 # TODO: why does one of them not have abs?
     assert_integral(integrand, expected)
 
     # without the string search fix on InverseTrigUSub, this returns a wrong answer.

@@ -14,6 +14,7 @@ so I don't really mind the lack of float support, but I can see why you'd be ann
 
 import inspect
 import itertools
+import warnings
 from abc import ABC, abstractmethod
 from dataclasses import dataclass, fields
 from fractions import Fraction
@@ -144,6 +145,9 @@ class Expr(ABC):
 
     def __neg__(self) -> "Expr":
         return -1 * self
+    
+    def __abs__(self) -> "Expr":
+        return Abs(self)
 
     # should be overloaded if necessary
     def expandable(self) -> bool:
@@ -1453,6 +1457,29 @@ class atan(TrigFunction):
 
     def diff(self, var):
         return 1 / (1 + self.inner**2) * self.inner.diff(var)
+
+
+class Abs(SingleFunc):
+    def __repr__(self) -> str:
+        return "|" + repr(self.inner) + "|"
+    
+    @classproperty
+    def _label(self) -> str:
+        return "abs"
+    
+    def latex(self) -> str:
+        return "\\left|" + self.inner.latex() + "\\right|"
+
+    def __new__(cls, inner: Expr) -> Expr:
+        if isinstance(inner, Const):
+            return inner.abs()
+        if inner.is_subtraction:
+            return Abs(-inner)
+        return super().__new__(cls)
+    
+    def diff(self, var) -> Expr:
+        warnings.warn(f"Differentiation of {self} not implemented, so returning diff of {self.inner}.")
+        return self.inner.diff(var)
 
 
 def symbols(symbols: str) -> Union[Symbol, List[Symbol]]:
