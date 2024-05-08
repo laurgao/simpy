@@ -12,6 +12,7 @@ so I don't really mind the lack of float support, but I can see why you'd be ann
 
 """
 
+import inspect
 import itertools
 from abc import ABC, abstractmethod
 from dataclasses import dataclass, fields
@@ -54,6 +55,9 @@ def nesting(expr: "Expr", var: Optional["Symbol"] = None) -> int:
 def _cast(x):
     if x is None or x is True or x is False:
         # let it slide because it's probably intentional
+        return x
+    
+    if inspect.isclass(x) and issubclass(x, Expr):
         return x
 
     if type(x) == int or isinstance(x, Fraction):
@@ -194,6 +198,10 @@ class Expr(ABC):
     @cast    
     def __mod__(self, other) -> "Const":
         return NotImplemented 
+    
+    @property
+    def is_subtraction(self) -> bool:
+        return False
 
 
 @dataclass
@@ -376,6 +384,10 @@ class Const(Number, Expr):
             return Const(self.value % other.value)
         else:
             return NotImplemented
+        
+    @property
+    def is_subtraction(self):
+        return self.value < 0
 
 
 
@@ -635,6 +647,10 @@ class Sum(Associative, Expr):
             new_terms.append(term / common_expr)
 
         return (common_expr * Sum(new_terms))
+    
+    @property
+    def is_subtraction(self):
+        return all([t.is_subtraction for t in self.terms])
 
 
 def _deconstruct_prod(expr: Expr) -> Tuple[Const, List[Expr]]:
@@ -726,19 +742,21 @@ class Prod(Associative, Expr):
             new_prod = self * -1
             if not isinstance(new_prod, Prod):
                 return f"-{_term_repr(new_prod)}"
+            if new_prod.is_subtraction:
+                raise ValueError(f"Cannot get repr of {debug_repr(self)}")
             return "-" + new_prod.__repr__()
 
         numerator, denominator = self.numerator_denominator
         if denominator != Const(1):
 
-            def _x(prod: Prod):
-                if not isinstance(prod, Prod):
-                    return _term_repr(prod)
-                if len(prod.terms) == 1:
-                    return _term_repr(prod.terms[0])
-                return "(" + repr(prod) + ")"
+            def _x(expr: Expr, b=True):
+                """b: bracketize multiple terms (boolean)
+                """
+                if not isinstance(expr, Prod):
+                    return _term_repr(expr)
+                return "(" + repr(expr) + ")" if b else repr(expr)
 
-            return _x(numerator) + "/" + _x(denominator)
+            return _x(numerator, b=False) + "/" + _x(denominator)
 
         return "".join(map(_term_repr, self.terms))
 
@@ -957,10 +975,12 @@ class Power(Expr):
             # Have to call the class here. In the case that x*b.exponent = 1, this will have to re-simplfiy
             # through calling the constructor.
             return Power(b.base, x * b.exponent)
-        if isinstance(b, Prod):
+        if isinstance(b, Prod) and not b.is_subtraction:
             # when you construct this new power entity you have to simplify it.
             # because what if the term raised to this exponent can be simplified?
             # ex: if you have (ab)^n where a = c^m
+
+            # it gets fucky if we isolate a negative factor of the base, so we won't bother with that.
             return Prod([Power(term, x) for term in b.terms])
         if isinstance(x, log) and b == x.base:
             return x.inner
@@ -971,6 +991,13 @@ class Power(Expr):
                     return Power(t.inner, rest) # Just in case this needs to be simplified, we will pass this through the constructor
                     # return Power(Power(b, t), rest)
                     # Power(b, t) will be simplified to t.inner
+        if b.is_subtraction and isinstance(x, Const) and x.value.denominator == 1:
+            neg_b = (-b).expand() if (-b).expandable() else -b
+            if x.value.numerator % 2 == 0:
+                return Power(neg_b, x)
+            else:
+                return -Power(neg_b, x)
+
         return default_return
     
     def __init__(self, base: Expr, exponent: Expr):
@@ -1023,6 +1050,10 @@ class Power(Expr):
         raise NotImplementedError(
             "Power.diff not implemented for functions with var in both base and exponent."
         )
+    
+    @property
+    def is_subtraction(self) -> bool:
+        return self.base.is_subtraction
 
 
 @dataclass
@@ -1203,6 +1234,7 @@ class TrigFunction(SingleFunc, ABC):
     def _label(self) -> str:
         return f"{'a' if self.is_inverse else ''}{self.func}"
 
+    @cast
     def __new__(cls, inner: Expr) -> "Expr":
         # 1. Check if inner is a special value
         if not cls.is_inverse:
@@ -1280,8 +1312,9 @@ class sin(TrigFunction):
     def diff(self, var) -> Expr:
         return cos(self.inner) * self.inner.diff(var)
     
+    @cast
     def __new__(cls, inner: Expr) -> Expr:
-        if isinstance(inner, Prod) and inner.is_subtraction:
+        if inner.is_subtraction:
             return -sin(-inner)
         return super().__new__(cls, inner)
 
@@ -1320,6 +1353,7 @@ class cos(TrigFunction):
     def __init__(self, inner):
         pass
     
+    @cast
     def __new__(cls, inner: Expr) -> "Expr":
         # bruh this is so complicated because doing cos(new, -inner) just sets inner as the original inner because of passing
         # the same args down to init.
@@ -1327,7 +1361,7 @@ class cos(TrigFunction):
         if not isinstance(new, cos):
             return new
         new.inner = inner
-        if isinstance(inner, Prod) and inner.is_subtraction:
+        if inner.is_subtraction:
             new.inner = -inner
         return new
 
@@ -1339,8 +1373,9 @@ class tan(TrigFunction):
     def reciprocal_class(cls):
         return cot
     
+    @cast
     def __new__(cls, inner: Expr) -> Expr:
-        if isinstance(inner, Prod) and inner.is_subtraction:
+        if inner.is_subtraction:
             return -tan(-inner)
         return super().__new__(cls, inner)
 

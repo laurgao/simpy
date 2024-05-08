@@ -113,7 +113,12 @@ def test_repr():
     assert repr(pi * -2) == "-2pi"
     # make sure polynomials show up in the correct order
     poly = x ** 5 + 3 * x ** 4 / 2 + x ** 2 + 2 * x + 3
-    assert repr(poly) == "x^5 + (3x^4)/2 + x^2 + 2x + 3"
+    assert repr(poly) == "x^5 + 3x^4/2 + x^2 + 2x + 3"
+
+@pytest.mark.xfail
+def test_circular_repr():
+    expr = Const(-1) ** Fraction(5, 2) * -2
+    repr(expr)
 
 
 def test_factor():
