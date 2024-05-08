@@ -1,7 +1,8 @@
 from src.simpy.expr import *
 from src.simpy.integration import *
 from test_utils import (assert_definite_integral, assert_eq_plusc,
-                        assert_eq_strict, assert_integral, x, y)
+                        assert_eq_strict, assert_eq_value, assert_integral, x,
+                        y)
 
 F = Fraction
 x = symbols("x")
@@ -111,3 +112,16 @@ def test_integrate_with_completing_the_square():
     expr = 1 / sqrt(- x ** 2 + 10 * x + 11)
     expected = asin((x - 5) / 6)
     assert_integral(expr, expected)
+
+
+def integrate_polar(r: Expr, theta: Symbol, a=0, b=2*pi) -> Expr:
+    return integrate(r ** 2, (theta, a, b)) / 2
+
+def test_area_between():
+    theta = symbols("theta")
+    r1 = 3 * sin(theta)
+    r2 = 1 + sin(theta)
+    bounds = (pi/6, 5 * pi / 6)
+    ans = integrate_polar(r1, theta, *bounds) - integrate_polar(r2, theta, *bounds)
+    assert_eq_value(ans, pi)
+
