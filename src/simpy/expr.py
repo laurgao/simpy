@@ -526,6 +526,9 @@ class Sum(Associative, Expr):
         super()._sort()
         self.terms = list(reversed(self.terms))
 
+    def __neg__(self) -> "Sum":
+        return Sum([-t for t in self.terms])
+
     def expand(self) -> Expr:
         assert self.expandable(), f"Cannot expand {self}"
         return Sum([t.expand() if t.expandable() else t for t in self.terms])
@@ -992,11 +995,10 @@ class Power(Expr):
                     # return Power(Power(b, t), rest)
                     # Power(b, t) will be simplified to t.inner
         if b.is_subtraction and isinstance(x, Const) and x.value.denominator == 1:
-            neg_b = (-b).expand() if (-b).expandable() else -b
             if x.value.numerator % 2 == 0:
-                return Power(neg_b, x)
+                return Power(-b, x)
             else:
-                return -Power(neg_b, x)
+                return -Power(-b, x)
 
         return default_return
     

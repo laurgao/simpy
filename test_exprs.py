@@ -284,12 +284,22 @@ def test_singlefuncs_auto_simplify_special_values():
     assert_eq_strict(atan(cot(3*x+2)), 1/(3*x+2))
 
 
-# def test_trigfunctions_special_values_are_correct():
-    # import math
+@pytest.mark.xfail
+def test_trigfuncs_auto_simplify_plus_2pis():
+    assert_eq_strict(cos(x + 2*pi), cos(x))
+    assert_eq_strict(sin(x + e ** y + 4*pi), sin(x + e ** y))
+    assert_eq_strict(asin(x + 2*pi), asin(x + 2*pi))
 
-    # import numpy as np
-    # for k in TrigFunction._SPECIAL_KEYS:
-        # num = Fraction(k)
-        # breakpoint()
-        # np.testing.assert_almost_equal(sin(num*pi).value, math.sin(num*math.pi))
-        # assert sin(num * pi) == math.sin(num * math.pi)
+def test_trigfuncs_auto_simplify_more_complex_negs():
+    assert_eq_strict(cos(-x-2), cos(x+2))
+
+@pytest.mark.xfail
+def test_trigfunctions_special_values_are_correct():
+    # doesn't work rn because no decimals.
+    import math
+
+    import numpy as np
+    for k in TrigFunction._SPECIAL_KEYS:
+        num = Fraction(k)
+        np.testing.assert_almost_equal(sin(num*pi).value, math.sin(num*math.pi))
+        assert sin(num * pi) == math.sin(num * math.pi)
