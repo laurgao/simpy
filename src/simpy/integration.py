@@ -13,7 +13,6 @@ def _check_if_node_solvable(node: Node):
     node.type = "SOLUTION"
     node.solution = answer
 
-
 def _cycle(node: Node) -> Optional[Union[Node, Literal["SOLVED"]]]:
     # 1. APPLY ALL SAFE TRANSFORMS
     _integrate_safely(node)
@@ -97,6 +96,7 @@ def integrate(
     expr: Expr,
     bounds: Optional[Union[Symbol, Tuple[Expr, Expr], Tuple[Symbol, Expr, Expr]]] = None,
     verbose: bool = False,
+    debug: bool = False,
 ) -> Optional[Expr]:
     """
     Integrates an expression.
@@ -132,10 +132,12 @@ def integrate(
             raise ValueError(f"Please specify the variable of integration for {expr}")
         bounds = (vars[0], bounds[0], bounds[1])
 
+
+    integration = Integration(verbose=verbose, debug=debug)
     if isinstance(bounds, Symbol):
-        return Integration._integrate(expr, bounds, verbose)
+        return integration.integrate(expr, bounds)
     if isinstance(bounds, tuple):
-        return Integration._integrate_bounds(expr, bounds, verbose)
+        return integration.integrate_bounds(expr, bounds)
     else:
         raise ValueError(f"Invalid bounds: {bounds}")
 
@@ -145,21 +147,48 @@ class Integration:
     Keeps track of integration work as we go
     """
 
-    def _integrate_bounds(
-        expr: Expr, bounds: Tuple[Symbol, Expr, Expr], verbose: bool
-    ) -> Expr:
+    def __init__(self, *, verbose: bool = False, debug: bool = False):
+        self._verbose = verbose
+        self._debug = debug
+    
+    def integrate_bounds(
+        self, expr: Expr, bounds: Tuple[Symbol, Expr, Expr]
+    ) -> Optional[Expr]:
+        """Performs definite integral.
+        """
         x, a, b = bounds
-        integral = Integration._integrate(expr, bounds[0], verbose)
+        integral = self.integrate(expr, bounds[0])
+        if integral is None:
+            return None
         return (integral.evalf({x.name: b}) - integral.evalf({x.name: a})).simplify()
-
+    
     @staticmethod
-    def _integrate(
-        integrand: Expr, var: Symbol, verbose: bool = False 
-    ) -> Expr:
+    def integrate_without_heuristics(integrand: Expr, var: Symbol) -> Optional[Expr]:
+        """Performs indefinite integral. used for byparts checking if dv is integrateable.
+        """
+        root = Node(integrand, var)
+        _integrate_safely(root)
+        for leaf in root.unfinished_leaves:
+            _check_if_node_solvable(leaf)
+            if leaf.type != "SOLUTION":
+                leaf.type = "FAILURE"
+
+        if root.is_failed:
+            return None
+        Integration._go_backwards(root)
+        return root.solution.simplify()
+
+    def integrate(
+        self, integrand: Expr, var: Symbol 
+    ) -> Optional[Expr]:
+        """Performs indefinite integral.
+        """
         root = Node(integrand, var)
         curr_node = root
         while True:
             answer = _cycle(curr_node)
+            if self._debug:
+                breakpoint()
             if root.is_finished:
                 break
             if answer == "SOLVED":
@@ -170,13 +199,28 @@ class Integration:
 
         if root.is_failed:
             warnings.warn(f"Failed to integrate {integrand} wrt {var}")
-            if verbose:
+            if self._verbose:
                 _print_tree(root)
                 breakpoint()
             return None
 
-        # now we have a solved tree or a failed tree
-        # we can go back and get the answer
+        # now we have a solved tree we can go back and get the answer
+        self._go_backwards(root)
+
+        if self._verbose:
+            _print_success_tree(root)
+            breakpoint()
+        return root.solution.simplify()
+    
+    @staticmethod
+    def _go_backwards(root: Node):
+        """Mutates the tree in place/returns nothing.
+
+        At the end, root.solution should be existant.
+        """
+        if not root.is_solved:
+            raise ValueError("Cannot go backwards on an unsovled tree.")
+
         solved_leaves = [leaf for leaf in root.leaves if leaf.is_solved]
         for leaf in solved_leaves:
             # GO backwards on each leaf until it errors out, then go backwards on the next leaf.
@@ -192,11 +236,6 @@ class Integration:
 
         if root.solution is None:
             raise ValueError("something went wrong while going backwards...")
-
-        if verbose:
-            _print_success_tree(root)
-            breakpoint()
-        return root.solution.simplify()
 
 
 def _integrate_safely(node: Node):

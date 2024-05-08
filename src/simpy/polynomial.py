@@ -4,6 +4,13 @@ from .expr import *
 
 Polynomial = np.ndarray  # has to be 1-D array
 
+def is_polynomial(expr: Expr, var: Symbol) -> bool:
+    try:
+        to_const_polynomial(expr, var)
+        return True
+    except AssertionError:
+        return False
+
 def _to_const_polynomial(expr: Expr, var: Symbol, answer: List[Const] = None, multiplier:Const=Const(1)) -> List[Const]:
     if answer is None:
         answer: List[Const] = []

@@ -13,8 +13,8 @@ from .expr import (Const, Expr, Power, Prod, Sum, Symbol, TrigFunction, asin,
                    atan, cos, cot, csc, log, remove_const_factor, sec, sin,
                    sqrt, symbols, tan)
 from .linalg import invert
-from .polynomial import (Polynomial, polynomial_to_expr, rid_ending_zeros,
-                         to_const_polynomial)
+from .polynomial import (Polynomial, is_polynomial, polynomial_to_expr,
+                         rid_ending_zeros, to_const_polynomial)
 from .regex import (count, general_count, replace, replace_class,
                     replace_factory)
 from .utils import ExprFn, random_id
@@ -165,7 +165,7 @@ class PullConstant(SafeTransform):
                     self._constant = term
                     self._non_constant_part = Prod(
                         expr.terms[:i] + expr.terms[i + 1 :]
-                    ).simplify()
+                    )
                     return True
 
         return False
@@ -175,7 +175,7 @@ class PullConstant(SafeTransform):
 
     def backward(self, node: Node) -> None:
         super().backward(node)
-        node.parent.solution = (self._constant * node.solution).simplify()
+        node.parent.solution = (self._constant * node.solution)
 
 
 class PolynomialDivision(SafeTransform):
@@ -216,7 +216,7 @@ class PolynomialDivision(SafeTransform):
 
         while self._numerator.size >= self._denominator.size:
             quotient_degree = len(self._numerator) - len(self._denominator)
-            quotient_coeff = (self._numerator[-1] / self._denominator[-1]).simplify()
+            quotient_coeff = (self._numerator[-1] / self._denominator[-1])
             quotient[quotient_degree] = quotient_coeff
             self._numerator -= np.concatenate(
                 ([Const(0)] * quotient_degree, self._denominator * quotient_coeff)
@@ -227,7 +227,7 @@ class PolynomialDivision(SafeTransform):
             self._denominator, var
         )
         quotient_expr = polynomial_to_expr(quotient, var)
-        answer = (quotient_expr + remainder).simplify()
+        answer = (quotient_expr + remainder)
         node.children = [Node(answer, var, self, node)]
 
     def backward(self, node: Node) -> None:
@@ -270,7 +270,7 @@ class Additivity(SafeTransform):
 
         node.parent.solution = Sum(
             [child.solution for child in node.parent.children]
-        ).simplify()
+        )
 
 
 def _get_last_heuristic_transform(node: Node):
@@ -342,7 +342,7 @@ class TrigUSub2(Transform):
         super().backward(node)
         node.parent.solution = replace(
             node.solution, node.var, self._variable_change
-        ).simplify()
+        )
 
 
 class RewriteTrig(Transform):
@@ -359,7 +359,7 @@ class RewriteTrig(Transform):
                 lambda x: cos(x) / sin(x),
                 lambda x: 1 / cos(x),
             ],
-        ).simplify()
+        )
         r2 = replace_class(
             expr,
             [sin, cos, cot, sec],
@@ -369,7 +369,7 @@ class RewriteTrig(Transform):
                 lambda x: 1 / tan(x),
                 lambda x: tan(x) * csc(x),
             ],
-        ).simplify()
+        )
         r3 = replace_class(
             expr,
             [sin, cos, tan, csc],
@@ -379,7 +379,7 @@ class RewriteTrig(Transform):
                 lambda x: 1 / cot(x),
                 lambda x: cot(x) * sec(x),
             ],
-        ).simplify()
+        )
 
         stuff = [r1, r2, r3]
         for thing in stuff:
@@ -418,7 +418,7 @@ class InverseTrigUSub(Transform):
         intermediate = generate_intermediate_var()
         cls, q, dy_dx, var_change = self._table[self._key]
         dy_dx = dy_dx(intermediate)
-        new_thing = (replace(node.expr, node.var, cls(intermediate)) * dy_dx).simplify()
+        new_thing = (replace(node.expr, node.var, cls(intermediate)) * dy_dx)
         node.children.append(Node(new_thing, intermediate, self, node))
 
         self._variable_change = var_change(node.var)
@@ -432,7 +432,7 @@ class InverseTrigUSub(Transform):
 
         for k, v in self._table.items():
             query = v[1](node.var)
-            if count(node.expr, query) > 0 or count(node.expr, (query * -1).simplify()) > 0:
+            if count(node.expr, query) > 0 or count(node.expr, (query * -1)) > 0:
                 self._key = k
                 return True
 
@@ -442,7 +442,7 @@ class InverseTrigUSub(Transform):
         super().backward(node)
         node.parent.solution = replace(
             node.solution, node.var, self._variable_change
-        ).simplify()
+        )
 
 
 class PolynomialUSub(Transform):
@@ -468,13 +468,13 @@ class PolynomialUSub(Transform):
                 and term.base == node.var
                 and not term.exponent.contains(node.var)
             ):
-                n = (term.exponent + 1).simplify()
-                rest = Prod(node.expr.terms[:i] + node.expr.terms[i + 1 :]).simplify()
+                n = (term.exponent + 1)
+                rest = Prod(node.expr.terms[:i] + node.expr.terms[i + 1 :])
                 break
 
             if term == node.var:
                 n = 2
-                rest = Prod(node.expr.terms[:i] + node.expr.terms[i + 1 :]).simplify()
+                rest = Prod(node.expr.terms[:i] + node.expr.terms[i + 1 :])
                 break
 
         if n is None:
@@ -483,7 +483,7 @@ class PolynomialUSub(Transform):
             # How are you gonna sub u = x^0 = 1, du = 0 dx
             return False
 
-        self._variable_change = Power(node.var, n).simplify()  # x^n
+        self._variable_change = Power(node.var, n)  # x^n
         count_ = count(node.expr, self._variable_change)
         return count_ > 0 and count_ == count(rest, node.var)
 
@@ -491,14 +491,14 @@ class PolynomialUSub(Transform):
         intermediate = generate_intermediate_var()
         dx_dy = self._variable_change.diff(node.var)
         new_integrand = replace(node.expr, self._variable_change, intermediate) / dx_dy
-        new_integrand = new_integrand.simplify()
+        new_integrand = new_integrand
         node.children.append(Node(new_integrand, intermediate, self, node))
 
     def backward(self, node: Node) -> None:
         super().backward(node)
         node.parent.solution = replace(
             node.solution, node.var, self._variable_change
-        ).simplify()
+        )
 
 
 class LinearUSub(Transform):
@@ -522,29 +522,29 @@ class LinearUSub(Transform):
                 if all(
                     [
                         not c.contains(node.var)
-                        or not (c / node.var).simplify().contains(node.var)
+                        or not (c / node.var).contains(node.var)
                         for c in expr.terms
                     ]
                 ):
                     return expr, None
             if isinstance(expr, Prod):
                 # Is a constant multiple of var
-                if not (expr / node.var).simplify().contains(node.var):
+                if not (expr / node.var).contains(node.var):
                     return expr, None
                 # or is constant multiple of var**const
                 # ex: if we have x**2/36, we want to rewrite it as (x/6)**2 and sub u=x/6
                 # if we have sth like (x+3)**2/36 we will just let the sum catch it and do 2 linearusubs in sequence :shrug:
                 if expr.is_subtraction:
-                    expr = (-expr).simplify()
+                    expr = (-expr)
                 xyz = remove_const_factor(expr)
                 is_const_multiple_of_power = isinstance(xyz, Power) and xyz.base == node.var and not xyz.exponent.contains(node.var)
                 if not is_const_multiple_of_power:
                     return None
-                coeff = (expr / xyz).simplify()
+                coeff = (expr / xyz)
                 if coeff == Const(1):
                     return None
                 coeff_abs = coeff.abs() if isinstance(coeff, Const) else coeff
-                inner_coeff = Power(coeff_abs, 1 / xyz.exponent).simplify()
+                inner_coeff = Power(coeff_abs, 1 / xyz.exponent)
                 return inner_coeff * node.var, lambda u: u / inner_coeff
             return None
 
@@ -585,14 +585,14 @@ class LinearUSub(Transform):
         else:
             new_integrand = replace(node.expr, self._variable_change, intermediate)
         new_integrand /= du_dx
-        new_integrand = new_integrand.simplify()
+        new_integrand = new_integrand
         node.children.append(Node(new_integrand, intermediate, self, node))
 
     def backward(self, node: Node) -> None:
         super().backward(node)
         node.parent.solution = replace(
             node.solution, node.var, self._variable_change
-        ).simplify()
+        )
 
 
 class CompoundAngle(Transform):
@@ -651,7 +651,7 @@ class SinUSub(Transform):
         def is_constant_product_of_var(expr, var):
             if expr == var:
                 return True
-            if not (expr / var).simplify().contains(var):
+            if not (expr / var).contains(var):
                 return True
             return False
 
@@ -704,7 +704,7 @@ class SinUSub(Transform):
         super().backward(node)
         node.parent.solution = replace(
             node.solution, node.var, self._variable_change
-        ).simplify()
+        )
 
 
 class ProductToSum(Transform):
@@ -747,10 +747,50 @@ class ProductToSum(Transform):
         node.parent.solution = node.solution
 
 
+def _parents(node: Node) -> List[Node]:
+    """Returns the node and all its parents as we ascend the tree"""
+    if node.parent is None:
+        return [node]
+    return [node] + _parents(node.parent)
+
+
 class ByParts(Transform):
     """Integration by parts"""
 
     _stuff: List[Tuple[Expr, Expr, Expr, Expr]] = None
+
+    @staticmethod
+    def _integrate_dv_check(dv, var) -> Optional[Expr]:
+        from .integration import Integration
+        return Integration.integrate_without_heuristics(dv, var)
+    
+    @staticmethod
+    def _get_all_byparts_parents(node: Node) -> List[Node]:
+        return [p for p in _parents(node) if isinstance(p.transform, ByParts)]
+    
+    @staticmethod
+    def _get_last_byparts_parent(node: Node) -> Optional[Node]:
+        for p in _parents(node):
+            if isinstance(p.transform, ByParts):
+                return p
+        return None
+    
+    @staticmethod
+    def _parents_exprs_check(node: Node, du: Expr, v: Expr) -> bool:
+            # if -u'v = node.expr, it means means you get 0 * integral(node.expr) = uv
+            # which is invalid
+            integrand2 = (du * v * -1)
+            factor = (integrand2 / node.expr)
+            if factor == 1:
+                return False
+            
+            # check for more layers above -- if any of the integrands is the same, factor = 1 and it's a nogo.
+            # honestly this is a bit sad; why don't we just always check that a node doesn't appear in its parents?
+            byparts_parents = ByParts._get_all_byparts_parents(node)
+            old_byparts_integrands = [node.expr for node in byparts_parents]
+            if integrand2 in old_byparts_integrands:
+                return False
+            return True
 
     def __init__(self):
         self._stuff = []
@@ -770,16 +810,14 @@ class ByParts(Transform):
             return False
 
         def _check(u: Expr, dv: Expr) -> bool:
+            if is_polynomial(dv, node.var):
+                return False
             du = u.diff(node.var)
-            v = _check_if_solveable(dv, node.var)
+            v = self._integrate_dv_check(dv, node.var)
             if v is None:
                 return False
             
-            # if -u'v = node.expr, it means means you get 0 * integral(node.expr) = uv
-            # which is invalid
-            integrand2 = (du * v * -1)
-            factor = (integrand2 / node.expr).simplify()
-            if factor == 1:
+            if not self._parents_exprs_check(node, du, v):
                 return False
 
             self._stuff.append((u, du, v, dv))
@@ -791,19 +829,34 @@ class ByParts(Transform):
     def forward(self, node: Node) -> None:
         # This is tricky bc you have 2 layers of children here.
         for u, du, v, dv in self._stuff:
-            child1 = (u * v).simplify()
-            integrand2 = (du * v * -1).simplify()
+            child1 = u * v
+            integrand2 = du * v * -1
 
             tr = ByParts()
             tr._stuff = [(u, du, v, dv)]
 
-            ### special case where you can jump directly to the solution wheeee
-            factor = (integrand2 / node.expr).simplify()
+            ### special case: expr is the same as current new
+            # and you can jump directly to the solution wheeee
+            factor = integrand2 / node.expr
             if not factor.contains(node.var):
                 solution = child1 / (1 - factor)
                 node.children.append(Node(node.expr, node.var, tr, node, type="SOLUTION", solution=solution))
                 return
             ### 
+
+            ### special case: when parent is same as you 2 layers above
+            parent_byparts = self._get_last_byparts_parent(node)
+            if parent_byparts:
+                factor = (integrand2 / parent_byparts.expr)
+                if not factor.contains(node.var):
+                    ## the following code is untested ##
+                    other_uv = parent_byparts.child
+                    other_uv.solution = other_uv /  (1 - factor) # mutating is sus
+                    solution = (child1) / (1 - factor)
+                    node.children.append(Node(node.expr, node.var, tr, node, type="SOLUTION", solution=solution))
+                    return
+                    ## the above code is untested ##
+            ###
             
             funky_node = Node(node.expr, node.var, tr, node, type="AND")
             funky_node.children = [
@@ -908,7 +961,7 @@ class GenericUSub(Transform):
     def forward(self, node: Node) -> None:
         intermediate = generate_intermediate_var()
         du_dx = self._u.diff(node.var)
-        new_integrand = replace((node.expr/du_dx).simplify(), self._u, intermediate)
+        new_integrand = replace((node.expr/du_dx), self._u, intermediate)
         node.children.append(Node(new_integrand, intermediate, self, node))
         self._variable_change = self._u
 
@@ -916,7 +969,7 @@ class GenericUSub(Transform):
         super().backward(node)
         node.parent.solution = replace(
             node.solution, node.var, self._variable_change
-        ).simplify()
+        )
 
 
 class CompleteTheSquare(Transform):
@@ -963,7 +1016,7 @@ class CompleteTheSquare(Transform):
             diff = normalized[0] - const ** 2
             new_expr = (((node.var + const) / sqrt(diff)) ** 2 + 1) * diff * norm_factor
 
-            return new_expr.simplify()
+            return new_expr
         
         new_expr = replace_factory(condition, perform)(node.expr)
         node.children.append(Node(new_expr, node.var, self, node))
@@ -1012,18 +1065,18 @@ STANDARD_TRIG_INTEGRALS: Dict[str, ExprFn] = {
 def _check_if_solveable(integrand: Expr, var: Symbol) -> Optional[Expr]:
     """outputs a SIMPLIFIED expr"""
     if not integrand.contains(var):
-        return (integrand * var).simplify()
+        return (integrand * var)
     if isinstance(integrand, Power):
         if integrand.base == var and not integrand.exponent.contains(var):
             n = integrand.exponent
-            return ((1 / (n + 1)) * Power(var, n + 1)).simplify() if n != -1 else log(integrand.base).simplify()
+            return ((1 / (n + 1)) * Power(var, n + 1)) if n != -1 else log(integrand.base)
         if integrand.exponent == var and not integrand.base.contains(var):
-            return (1 / log(integrand.base) * integrand).simplify()
+            return (1 / log(integrand.base) * integrand)
     if isinstance(integrand, Symbol) and integrand == var:
-        return( Fraction(1 / 2) * Power(var, 2)).simplify()
+        return( Fraction(1 / 2) * Power(var, 2))
 
     silly_key = repr(replace(integrand, var, Symbol("x"))) # jank but does the job
     if silly_key in STANDARD_TRIG_INTEGRALS:
-        return STANDARD_TRIG_INTEGRALS[silly_key](var).simplify()
+        return STANDARD_TRIG_INTEGRALS[silly_key](var)
 
     return None

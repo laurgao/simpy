@@ -1205,11 +1205,20 @@ class TrigFunction(SingleFunc, ABC):
 
     def __new__(cls, inner: Expr) -> "Expr":
         # 1. Check if inner is a special value
-        pi_coeff = inner / pi
-        if isinstance(pi_coeff, Const):
-            pi_coeff = pi_coeff % 2
-            if str(pi_coeff.value) in cls._SPECIAL_KEYS:
-                return cls.special_values[str(pi_coeff.value)]
+        if not cls.is_inverse:
+            pi_coeff = inner / pi
+            if isinstance(pi_coeff, Const):
+                pi_coeff = pi_coeff % 2
+                if str(pi_coeff.value) in cls._SPECIAL_KEYS:
+                    return cls.special_values[str(pi_coeff.value)]
+
+            # check if inner has ... a 2pi term in a sum
+            if isinstance(inner, Sum) and inner.has(Pi):
+                for t in inner.terms:
+                    if t.has(Pi):
+                        coeff = t / pi
+                        if isinstance(coeff, Const) and coeff % 2 == 0:
+                            return cls(inner - t)
         
         # 2. Check if inner is trigfunction
         # things like sin(cos(x)) cannot be more simplified.
@@ -1409,15 +1418,20 @@ def symbols(symbols: str) -> Union[Symbol, List[Symbol]]:
 
 
 @cast
-def diff(expr: Expr, var: Symbol) -> Expr:
-    if hasattr(expr, "diff"):
-        return expr.diff(var)
-    else:
+def diff(expr: Expr, var: Optional[Symbol]) -> Expr:
+    """Takes the derivative of expr relative to var. If expr has only one symbol in it, var doesn't need to be specified.
+    """
+    if not hasattr(expr, "diff"):
         raise NotImplementedError(f"Differentiation of {expr} not implemented")
 
+    if var is None:
+        symbols = expr.symbols()
+        if len(symbols) != 1:
+            return ValueError(f"Must provide variable of differentiation for {var}")
+        var = symbols[0]
+    
+    return expr.diff(var)
 
-# Problem: can't move this to regex or use general_count because regex imports from this file
-# hmmmmm
 
 def remove_const_factor(expr: Expr) -> Expr:
     if isinstance(expr, Prod):
