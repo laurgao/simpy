@@ -722,6 +722,12 @@ class Prod(Associative, Expr):
             return Const(1)
         if len(new_terms) == 1:
             return new_terms[0]
+        
+        if len(new_terms) == 2 and new_terms[0] == Const(-1) and isinstance(new_terms[1], Sum):
+            # do not let allow this to exist as a Prod because it causes a fucky repr
+            # ex -1 * (x + y) will get displayed as -x + y the way that repr is currently done.
+            # this is innaccurate and dangerous.
+            return -new_terms[1]
 
         instance = super().__new__(cls) 
         instance.terms = new_terms
