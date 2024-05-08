@@ -6,7 +6,7 @@ and make sure simpy can do them
 from src.simpy.expr import *
 from src.simpy.integration import *
 from test_utils import (assert_definite_integral, assert_eq_plusc,
-                        assert_integral, x)
+                        assert_integral, x, y)
 
 
 def test_ex():
@@ -39,6 +39,27 @@ def test_partial_fractions():
 def test_integration_by_parts():
     integrand = x * e ** (-x)
     expected = -e ** (-x) * (x + 1)
+    assert_integral(integrand, expected)
+
+    integrand = log(x) / x ** 2
+    expected = -log(x) / x - 1 / x
+    assert_integral(integrand, expected)
+
+    ans = integrate(x*sqrt(x-y), (x, 0, y))
+    assert ans == Fraction(4, 15) * (-y) ** Fraction(5, 2)
+
+    integrand =  x * e ** (4*x)
+    assert_definite_integral(integrand, (0, 2), Fraction(7, 16) * e ** 8 + Fraction(1, 16))
+
+    assert_definite_integral(-x * cos(x), (pi/2, pi), 1 + pi/2)
+
+    # Challenge questions
+    integrand = e ** x * sin(x)
+    expected = e ** x / 2 * (sin(x) - cos(x))
+    assert_integral(integrand, expected)
+
+    integrand = x ** 2 * sin(pi * x) 
+    expected = -x**2 * cos(pi * x) / pi + 2 * x * sin(pi*x) / pi ** 2 + 2*cos(pi*x)/pi**3
     assert_integral(integrand, expected)
 
 

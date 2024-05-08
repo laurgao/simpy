@@ -1,6 +1,6 @@
 from fractions import Fraction
 
-import numpy as np
+import pytest
 
 from src.simpy.expr import *
 from src.simpy.integration import *

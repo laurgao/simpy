@@ -322,9 +322,7 @@ def replace_class(expr: Expr, cls: List[Type[SingleFunc]], newfunc: List[Callabl
                 return newfunc[i](new_inner)
         return expr.__class__(new_inner)
 
-    if isinstance(expr, Const):
-        return expr
-    if isinstance(expr, Symbol):
+    if len(expr.children()) == 0: # Number, Symbol
         return expr
 
     raise NotImplementedError(

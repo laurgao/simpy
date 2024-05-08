@@ -849,13 +849,11 @@ class ByParts(Transform):
             if parent_byparts:
                 factor = (integrand2 / parent_byparts.expr)
                 if not factor.contains(node.var):
-                    ## the following code is untested ##
                     other_uv = parent_byparts.child
-                    other_uv.solution = other_uv /  (1 - factor) # mutating is sus
+                    other_uv.solution /= (1 - factor) # mutating is sus
                     solution = (child1) / (1 - factor)
                     node.children.append(Node(node.expr, node.var, tr, node, type="SOLUTION", solution=solution))
                     return
-                    ## the above code is untested ##
             ###
             
             funky_node = Node(node.expr, node.var, tr, node, type="AND")
