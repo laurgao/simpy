@@ -107,6 +107,11 @@ def test_misc():
     ans = integrate(integrand, x)
     assert ans is None
 
+    # we used to get this wrong from a byparts error
+    integrand = cos(x)*cos(2*x)
+    expected_ans = 2 * cos(x) * sin(2*x)/3 - sin(x)*cos(2*x)/3
+    assert_integral(integrand, expected_ans)
+
 
 def test_integrate_with_completing_the_square():
     expr = 1 / sqrt(- x ** 2 + 10 * x + 11)

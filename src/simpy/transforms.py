@@ -768,10 +768,13 @@ class ByParts(Transform):
     
     @staticmethod
     def _get_last_byparts_parent(node: Node) -> Optional[Node]:
+        # no heuristics have been applied yet
         for p in _parents(node):
             if isinstance(p.transform, ByParts):
                 return p
-        return None
+            if not isinstance(p.transform, (PullConstant, Additivity)):
+                return
+        return 
     
     @staticmethod
     def _parents_exprs_check(node: Node, du: Expr, v: Expr) -> bool:
@@ -823,6 +826,14 @@ class ByParts(Transform):
 
         a, b = node.expr.terms
         return _check(a, b) or _check(b, a)
+    
+    @staticmethod
+    def _get_first_factor(parent_byparts: Node, node: Node) -> Expr:
+        if parent_byparts.children[1] == node:
+            return Const(1)
+        elif isinstance(node.transform, PullConstant) and parent_byparts.children[1].child == node:
+            return node.transform._constant
+        raise ValueError
 
     def forward(self, node: Node) -> None:
         # This is tricky bc you have 2 layers of children here.
@@ -843,13 +854,16 @@ class ByParts(Transform):
             ### 
 
             ### special case: when parent is same as you 2 layers above
+            # this isnt the most elegant but it works lol
             parent_byparts = self._get_last_byparts_parent(node)
             if parent_byparts:
-                factor = (integrand2 / parent_byparts.expr)
-                if not factor.contains(node.var):
+                second_factor = (integrand2 / parent_byparts.expr)
+                if not second_factor.contains(node.var):
+                    first_factor = self._get_first_factor(parent_byparts, node)
+                    factor = first_factor * second_factor
                     other_uv = parent_byparts.child
                     other_uv.solution /= (1 - factor) # mutating is sus
-                    solution = (child1) / (1 - factor)
+                    solution = child1 / (1 - factor) # going back will mul it w second factor by default.
                     node.children.append(Node(node.expr, node.var, tr, node, type="SOLUTION", solution=solution))
                     return
             ###
