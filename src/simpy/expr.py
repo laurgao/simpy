@@ -1014,7 +1014,7 @@ class Power(Expr):
             else:
                 return -Power(-b, x)
         # not fully exhaustive.
-        if (isinstance(b, Number) or isinstance(b, Prod) and all(isinstance(t, Number) for t in terms)) and not b.is_subtraction:
+        if (isinstance(b, Number) or isinstance(b, Prod) and all(isinstance(t, Number) for t in b.terms)) and not b.is_subtraction:
             if x == oo:
                 return oo
             if x == -oo:
@@ -1075,7 +1075,8 @@ class Power(Expr):
     
     @property
     def is_subtraction(self) -> bool:
-        return self.base.is_subtraction
+        # not exhaustive properly idk
+        return self.base.is_subtraction and len(self.symbols()) == 0
 
 
 @dataclass
@@ -1168,10 +1169,12 @@ class log(SingleFunc):
             return -1 * log(inner.reciprocal_class(inner.inner)).simplify()
         
         # ugly patch lmfao. need better overall philosophy for this stuff.
+        if isinstance(inner, Abs) and isinstance(inner.inner, Power):
+            return (log(abs(inner.inner.base)) * inner.inner.exponent).simplify()
         if isinstance(inner, Abs) and isinstance(inner.inner, Prod):
-            return Sum([log(abs(term)) for term in inner.inner.terms])
+            return Sum([log(abs(term)) for term in inner.inner.terms]).simplify()
         if isinstance(inner, Abs) and isinstance(inner.inner, Sum) and isinstance(inner.inner.factor(), Prod):
-            return Sum([log(abs(term)) for term in inner.inner.factor().terms])
+            return Sum([log(abs(term)) for term in inner.inner.factor().terms]).simplify()
 
         return log(inner)
 

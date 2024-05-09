@@ -74,8 +74,7 @@ def test_arcsin():
     assert_eq_plusc(ans, expected_ans)
 
     ans = integrate(atan(x), x)
-    # expected_ans = x * atan(x) - log(abs(1 + x**2)) / 2 # TODO: can't make this equal
-    expected_ans = x * atan(x) + log(abs(1/sqrt(x**2 + 1)))
+    expected_ans = x * atan(x) - log(abs(1 + x**2)) / 2
     assert_eq_plusc(ans, expected_ans)
 
 

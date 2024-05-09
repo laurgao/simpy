@@ -303,3 +303,16 @@ def test_trigfunctions_special_values_are_correct():
         num = Fraction(k)
         np.testing.assert_almost_equal(sin(num*pi).value, math.sin(num*math.pi))
         assert sin(num * pi) == math.sin(num * math.pi)
+
+
+def test_is_subtraction():
+    assert x.is_subtraction is False
+    assert (-x).is_subtraction is True
+    assert Const(0).is_subtraction is False
+    assert Const(-2).is_subtraction is True 
+    assert (e ** x).is_subtraction is False
+    assert (-e ** -x).is_subtraction is True
+    assert (Const(-3) ** 3).is_subtraction is True
+    assert (Const(Fraction(-3, 2)) ** Fraction(2, 3)).is_subtraction is True
+    assert (Const(Fraction(-3, 2)) ** Fraction(-2, 3)).is_subtraction is True
+

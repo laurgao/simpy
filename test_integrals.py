@@ -81,7 +81,7 @@ def test_linear_usub_with_multiple_subs():
     # Last I checked, this fails without LinearUSub
     integrand = sin(2*x) / cos(2*x)
     expected = -log(abs(cos(2*x)))/2
-    expected2 = log(abs(sec(2*x)**2))/4
+    expected2 = log(abs(sec(2*x)))/2
     # can't fucking implement this being equal. wtv.
     integral = integrate(integrand)
     assert integral == expected or integral == expected2
