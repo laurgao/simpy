@@ -34,36 +34,46 @@ def _cycle(node: Node) -> Optional[Union[Node, Literal["SOLVED"]]]:
 
 
 def _get_next_node_post_heuristic(node: Node) -> Node:
-
-    if len(node.unfinished_leaves) == 0:
-        if node.is_failed:
-            # if on the first cycle, there are zero safe transforms AND no heuristics then
-            # node here would be the root.
-            if node.parent is None:
-                return None
-
-            # we want to go back and solve the parent
-            parent = node.parent
-            while len(parent.children) == 1 or parent.type == "AND":
-                if parent.parent is None:
-                    # we've reached root.
-                    # this means... we can't solve this integral.
-                    return None
-                parent = parent.parent
-            # now parent is the lowest OR node with multiple children
-            return _get_next_node_post_heuristic(parent)
-        else:
-            # This happens when we use integration by parts and the heuristic finds a whole ass solution
-            return "SOLVED"
-
+    root = node.root
+    if root.unfinished_leaves == 0:
+        if root.is_failed:
+            return None
+        return "SOLVED"
+    
     if len(node.unfinished_leaves) == 1:
         return node.unfinished_leaves[0]
     
-    return _get_leaf_with_best_nesting(node)
+    return _get_best_leaf(node)
+    # node = node.root
+    # if len(node.unfinished_leaves) == 0:
+    #     if node.is_failed:
+    #         # if on the first cycle, there are zero safe transforms AND no heuristics then
+    #         # node here would be the root.
+    #         if node.parent is None:
+    #             return None
+
+    #         # we want to go back and solve the parent
+    #         parent = node.parent
+    #         while len(parent.children) == 1 or parent.type == "AND":
+    #             if parent.parent is None:
+    #                 # we've reached root.
+    #                 # this means... we can't solve this integral.
+    #                 return None
+    #             parent = parent.parent
+    #         # now parent is the lowest OR node with multiple children
+    #         return _get_next_node_post_heuristic(parent)
+    #     else:
+    #         # This happens when we use integration by parts and the heuristic finds a whole ass solution
+    #         return "SOLVED"
+
+    # if len(node.unfinished_leaves) == 1:
+    #     return node.unfinished_leaves[0]
     
-    # you are making this way too complicated
-    if len(node.unfinished_leaves) > 1:
-        return _nesting_node(node)
+    # return _get_leaf_with_best_nesting(node)
+    
+    # # you are making this way too complicated
+    # if len(node.unfinished_leaves) > 1:
+    #     return _nesting_node(node)
 
 def _get_leaf_with_best_nesting(node: Node) -> Node:
     return _get_node_with_best_nesting(node.unfinished_leaves, min)
@@ -71,22 +81,22 @@ def _get_leaf_with_best_nesting(node: Node) -> Node:
 
 # a recursive function.
 # find the simplest problem to work on that makes progress.
-# def _nesting_node(node: Node) -> Node:
-#     if len(node.unfinished_children) == 1:
-#         return _nesting_node(node.unfinished_children[0])
+def _get_best_leaf(root: Node) -> Node:
+    if len(root.unfinished_children) == 1:
+        return _get_best_leaf(root.unfinished_children[0])
 
-#     if len(node.unfinished_children) == 0:
-#         return node  # base case ???
+    if len(root.unfinished_children) == 0:
+        return root  # base case ???
 
-#     is_2nd_lowest_parent = all(
-#         [not child.unfinished_children for child in node.unfinished_children]
-#     )
-#     fn = min if node.type == "OR" else max
-#     if is_2nd_lowest_parent:
-#         return _get_node_with_best_nesting(node.unfinished_children, fn)
+    is_2nd_lowest_parent = all(
+        [not child.unfinished_children for child in root.unfinished_children]
+    )
+    fn = min if root.type == "OR" else max
+    if is_2nd_lowest_parent:
+        return _get_node_with_best_nesting(root.unfinished_children, fn)
 
-#     childrens_best_nodes = [_nesting_node(c) for c in node.unfinished_children]
-#     return _get_node_with_best_nesting(childrens_best_nodes, fn)
+    childrens_best_nodes = [_get_best_leaf(c) for c in root.unfinished_children]
+    return _get_node_with_best_nesting(childrens_best_nodes, fn)
 
 
 def _get_node_with_best_nesting(

@@ -8,8 +8,8 @@ from typing import Callable, Dict, List, Literal, Optional, Tuple, Type, Union
 import numpy as np
 
 from .expr import (Const, Expr, Power, Prod, Sum, Symbol, TrigFunction, asin,
-                   atan, cos, cot, csc, log, remove_const_factor, sec, sin,
-                   sqrt, symbols, tan)
+                   atan, cos, cot, csc, log, nesting, remove_const_factor, sec,
+                   sin, sqrt, symbols, tan)
 from .linalg import invert
 from .polynomial import (Polynomial, is_polynomial, polynomial_to_expr,
                          rid_ending_zeros, to_const_polynomial)
@@ -23,23 +23,46 @@ Number_ = Union[Fraction, int]
 @dataclass
 class Node:
     """A node in the integration nodetree.
+
+    `_children` is private. do not modify it directly; only use the `add_child` or `add_children` methods. you can read from the
+    `children` property.
     """
     expr: Expr
     var: Symbol  # variable that THIS EXPR is integrated by.
     transform: Optional["Transform"] = None  # the transform that led to this node
     parent: Optional["Node"] = None  # None for root node only
-    children: Optional[List["Node"]] = (
-        None  # smtn smtn setting it to [] by default causes errors
-    )
     type: Literal["AND", "OR", "UNSET", "SOLUTION", "FAILURE"] = "UNSET"
     solution: Optional[Expr] = (
         None  # only for SOLUTION nodes (& their parents when we go backwards)
     )
+    is_filler: bool = False # fillers are ones where the expr is like; not real / a copy of the parents. the node exists to store info other than the expr. eventually i wanna just set expr to none.
+    _children: Optional[List["Node"]] = (
+        None  # smtn smtn setting it to [] by default causes errors
+    )
+    
     # failure = can't proceed forward.
 
     def __post_init__(self):
-        if self.children is None:
-            self.children = []
+        if self._children is None:
+            self._children = []
+        else:
+            raise ValueError
+        
+    @property
+    def children(self) -> List["Node"]:
+        return self._children
+    
+    def add_child(self, child: "Node") -> None:
+        parents = _parents(self)
+        info = lambda p: repr(replace(p.expr, p.var, self.var))
+        parents_info = [info(p) for p in parents if not p.is_filler]
+        if info(child) in parents_info:
+            return
+        self.children.append(child)
+
+    def add_children(self, children: List["Node"]) -> None:
+        for c in children:
+            self.add_child(c)
 
     def __repr__(self):
         num_children = len(self.children) if self.children else 0
@@ -123,7 +146,7 @@ class Node:
         if not self.children:
             return None
         return self.children[0]
-
+    
 
 class Transform(ABC):
     "An integral transform -- base class"
@@ -144,7 +167,19 @@ class Transform(ABC):
 
     @abstractmethod
     def check(self, node: Node) -> bool:
-        raise NotImplementedError("Not implemented")
+        # sanity check: if the nestings get strictly bigger for the past 5 levels, quit.
+        # parents = _parents(node)
+        # parents = [p for p in parents if p.transform.__class__ in HEURISTICS]
+        # if len(parents) < 5:
+        #     return True
+        # nests = [nesting(p.expr) for p in parents[:5]]
+        # breakpoint()
+        # if all(nests[i+1] < nests[i] for i in range(4)):
+        #     return False
+        # return True
+
+        return True
+
 
 
 class SafeTransform(Transform, ABC):
@@ -156,6 +191,9 @@ class PullConstant(SafeTransform):
     _non_constant_part: Expr = None
 
     def check(self, node: Node) -> bool:
+        if super().check(node) is False:
+            return False
+
         expr = node.expr
         var = node.var
         if isinstance(expr, Prod):
@@ -172,7 +210,7 @@ class PullConstant(SafeTransform):
         return False
 
     def forward(self, node: Node):
-        node.children = [Node(self._non_constant_part, node.var, self, node)]
+        node.add_child(Node(self._non_constant_part, node.var, self, node))
 
     def backward(self, node: Node) -> None:
         super().backward(node)
@@ -184,6 +222,9 @@ class PolynomialDivision(SafeTransform):
     _denominator: Polynomial = None
 
     def check(self, node: Node) -> bool:
+        if super().check(node) is False:
+            return False
+
         # This is so messy we can honestly just do catching in the `to_polynomial`
         expr = node.expr
         # currently we don't support division of polynomials with multiple variables
@@ -229,7 +270,7 @@ class PolynomialDivision(SafeTransform):
         )
         quotient_expr = polynomial_to_expr(quotient, var)
         answer = (quotient_expr + remainder)
-        node.children = [Node(answer, var, self, node)]
+        node.add_child(Node(answer, var, self, node))
 
     def backward(self, node: Node) -> None:
         super().backward(node)
@@ -238,9 +279,12 @@ class PolynomialDivision(SafeTransform):
 
 class Expand(SafeTransform):
     def forward(self, node: Node):
-        node.children.append(Node(node.expr.expand(), node.var, self, node))
+        node.add_child(Node(node.expr.expand(), node.var, self, node))
 
     def check(self, node: Node) -> bool:
+        if super().check(node) is False:
+            return False
+
         # If the last heuristic was completing the square,
         # Please give it a break.
         t = _get_last_heuristic_transform(node)
@@ -257,9 +301,12 @@ class Expand(SafeTransform):
 class Additivity(SafeTransform):
     def forward(self, node: Node):
         node.type = "AND"
-        node.children = [Node(e, node.var, self, node) for e in node.expr.terms]
+        node.add_children([Node(e, node.var, self, node) for e in node.expr.terms])
 
     def check(self, node: Node) -> bool:
+        if super().check(node) is False:
+            return False
+
         return isinstance(node.expr, Sum)
 
     def backward(self, node: Node) -> None:
@@ -318,11 +365,14 @@ class TrigUSub2(Transform):
         cls, dy_dx = self._table[self._key]
         new_integrand = replace(expr, cls(node.var), intermediate) * dy_dx(intermediate)
         new_node = Node(new_integrand, intermediate, self, node)
-        node.children.append(new_node)
+        node.add_child(new_node)
 
         self._variable_change = cls(node.var)
 
     def check(self, node: Node) -> bool:
+        if super().check(node) is False:
+            return False
+
         # Since B and C essentially undo each other, we want to make sure that the last
         # heuristic transform wasn't C.
 
@@ -382,14 +432,14 @@ class RewriteTrig(Transform):
             ],
         )
 
-        stuff = [r1, r2, r3]
-        for thing in stuff:
-            if thing.__repr__() == expr.__repr__():
-                stuff.remove(thing)
-        node.children += [Node(option, node.var, self, node) for option in stuff]
+        new_exprs = [r1, r2, r3]
+        node.add_children([Node(option, node.var, self, node) for option in new_exprs if option != expr])
         node.type = "OR"
 
     def check(self, node: Node) -> bool:
+        if super().check(node) is False:
+            return False
+
         # make sure that this node didn't get here by this transform
         t = _get_last_heuristic_transform(node)
         if isinstance(t, RewriteTrig):
@@ -420,11 +470,14 @@ class InverseTrigUSub(Transform):
         cls, q, dy_dx, var_change = self._table[self._key]
         dy_dx = dy_dx(intermediate)
         new_thing = (replace(node.expr, node.var, cls(intermediate)) * dy_dx)
-        node.children.append(Node(new_thing, intermediate, self, node))
+        node.add_child(Node(new_thing, intermediate, self, node))
 
         self._variable_change = var_change(node.var)
 
     def check(self, node: Node) -> bool:
+        if super().check(node) is False:
+            return False
+
         t = _get_last_heuristic_transform(node)
         if isinstance(t, TrigUSub2):
             # If it just went through B, C is guaranteed to have a match.
@@ -455,6 +508,9 @@ class PolynomialUSub(Transform):
     _variable_change = None  # x^n
 
     def check(self, node: Node) -> bool:
+        if super().check(node) is False:
+            return False
+
         if not isinstance(node.expr, Prod):
             return False
 
@@ -493,7 +549,7 @@ class PolynomialUSub(Transform):
         dx_dy = self._variable_change.diff(node.var)
         new_integrand = replace(node.expr, self._variable_change, intermediate) / dx_dy
         new_integrand = new_integrand
-        node.children.append(Node(new_integrand, intermediate, self, node))
+        node.add_child(Node(new_integrand, intermediate, self, node))
 
     def backward(self, node: Node) -> None:
         super().backward(node)
@@ -513,6 +569,9 @@ class LinearUSub(Transform):
     _inverse_var_change: ExprFn = None # this will write x in terms of u
 
     def check(self, node: Node) -> bool:
+        if super().check(node) is False:
+            return False
+
         if count(node.expr, node.var) < 1: # just to cover our bases bc the later thing assume it appears >=1 
             return False
 
@@ -587,7 +646,7 @@ class LinearUSub(Transform):
             new_integrand = replace(node.expr, self._variable_change, intermediate)
         new_integrand /= du_dx
         new_integrand = new_integrand
-        node.children.append(Node(new_integrand, intermediate, self, node))
+        node.add_child(Node(new_integrand, intermediate, self, node))
 
     def backward(self, node: Node) -> None:
         super().backward(node)
@@ -600,6 +659,9 @@ class CompoundAngle(Transform):
     """Compound angle formulae"""
 
     def check(self, node: Node) -> bool:
+        if super().check(node) is False:
+            return False
+
         def _check(e: Expr) -> bool:
             if (
                 isinstance(e, (sin, cos))
@@ -628,7 +690,7 @@ class CompoundAngle(Transform):
 
         new_integrand = replace_factory(condition, _perform)(node.expr)
 
-        node.children.append(Node(new_integrand, node.var, self, node))
+        node.add_child(Node(new_integrand, node.var, self, node))
 
     def backward(self, node: Node) -> None:
         super().backward(node)
@@ -646,6 +708,9 @@ class SinUSub(Transform):
     _variable_change: Expr = None
 
     def check(self, node: Node) -> bool:
+        if super().check(node) is False:
+            return False
+
         if not isinstance(node.expr, Prod):
             return False
 
@@ -701,7 +766,7 @@ class SinUSub(Transform):
         # should be done in check, here is a patch.
         if new_integrand.contains(node.var):
             return
-        node.children.append(Node(new_integrand, intermediate, self, node))
+        node.add_child(Node(new_integrand, intermediate, self, node))
         self._variable_change = self._sin
 
     def backward(self, node: Node) -> None:
@@ -764,7 +829,7 @@ class ProductToSum(Transform):
 
     def forward(self, node: Node) -> None:
         new_integrand = replace_factory(self.condition, self.perform)(node.expr)
-        node.children.append(Node(new_integrand, node.var, self, node))
+        node.add_child(Node(new_integrand, node.var, self, node))
 
     def backward(self, node: Node) -> None:
         super().backward(node)
@@ -823,6 +888,9 @@ class ByParts(Transform):
         self._stuff = []
 
     def check(self, node: Node) -> bool:
+        if super().check(node) is False:
+            return False
+
         if not isinstance(node.expr, Prod):
             if (isinstance(node.expr, log) or isinstance(node.expr, TrigFunction) and node.expr.is_inverse) and node.expr.inner == node.var: # Special case for Log, ArcSin, etc.
                 # TODO universalize it more?? how to make it more universal without making inf loops?
@@ -875,7 +943,7 @@ class ByParts(Transform):
             factor = integrand2 / node.expr
             if not factor.contains(node.var):
                 solution = child1 / (1 - factor)
-                node.children.append(Node(node.expr, node.var, tr, node, type="SOLUTION", solution=solution))
+                node.add_child(Node(node.expr, node.var, tr, node, type="SOLUTION", solution=solution, is_filler=True))
                 node.type = "OR"
                 return
             ### 
@@ -891,14 +959,14 @@ class ByParts(Transform):
                     other_uv = parent_byparts.child
                     other_uv.solution /= (1 - factor) # mutating is sus
                     solution = child1 / (1 - factor) # going back will mul it w second factor by default.
-                    node.children.append(Node(node.expr, node.var, tr, node, type="SOLUTION", solution=solution))
+                    node.add_child(Node(node.expr, node.var, tr, node, type="SOLUTION", solution=solution, is_filler=True))
                     node.type = "OR"
                     assert parent_byparts.is_solved
                     return
             ###
             
-            funky_node = Node(node.expr, node.var, tr, node, type="AND")
-            funky_node.children = [
+            funky_node = Node(node.expr, node.var, tr, node, type="AND", is_filler=True)
+            funky_node.add_children([
                 Node(
                     node.expr,
                     node.var,
@@ -906,10 +974,11 @@ class ByParts(Transform):
                     funky_node,
                     type="SOLUTION",
                     solution=child1,
+                    is_filler=True
                 ),
                 Node(integrand2, node.var, Additivity(), funky_node),
-            ]
-            node.children.append(funky_node)
+            ])
+            node.add_child(funky_node)
 
     def backward(self, node: Node) -> None:
         super().backward(node)
@@ -919,6 +988,9 @@ class ByParts(Transform):
 class PartialFractions(Transform):
     _new_integrand: Expr = None
     def check(self, node: Node) -> bool:
+        if super().check(node) is False:
+            return False
+
         # First, make sure that this is a fraction
         if not isinstance(node.expr, Prod):
             return False
@@ -971,7 +1043,7 @@ class PartialFractions(Transform):
         return True
     
     def forward(self, node: Node) -> None:
-        node.children.append(Node(self._new_integrand, node.var, self, node))
+        node.add_child(Node(self._new_integrand, node.var, self, node))
     
     def backward(self, node: Node) -> None:
         super().backward(node)
@@ -981,6 +1053,9 @@ class GenericUSub(Transform):
     _u: Expr = None
     _variable_change: Expr = None
     def check(self, node: Node) -> bool:
+        if super().check(node) is False:
+            return False
+
         if not isinstance(node.expr, Prod):
             return False
         for i, term in enumerate(node.expr.terms):
@@ -1001,7 +1076,7 @@ class GenericUSub(Transform):
         intermediate = generate_intermediate_var()
         du_dx = self._u.diff(node.var)
         new_integrand = replace((node.expr/du_dx), self._u, intermediate)
-        node.children.append(Node(new_integrand, intermediate, self, node))
+        node.add_child(Node(new_integrand, intermediate, self, node))
         self._variable_change = self._u
 
     def backward(self, node: Node) -> None:
@@ -1013,6 +1088,9 @@ class GenericUSub(Transform):
 
 class CompleteTheSquare(Transform):
     def check(self, node: Node) -> bool:
+        if super().check(node) is False:
+            return False
+
         # Completing the square is only useful if you can do InverseTrigUSub after it.
         # So we only look for these two cases:
         # 1 / quadratic
@@ -1058,7 +1136,7 @@ class CompleteTheSquare(Transform):
             return new_expr
         
         new_expr = replace_factory(condition, perform)(node.expr)
-        node.children.append(Node(new_expr, node.var, self, node))
+        node.add_child(Node(new_expr, node.var, self, node))
 
 
     def backward(self, node: Node) -> None:
@@ -1089,7 +1167,7 @@ class RewritePythagorean(Transform):
     
     def forward(self, node: Node) -> bool:
         new_expr = replace_factory(self.condition, self.perform)(node.expr)
-        node.children.append(Node(new_expr, node.var, self, node))
+        node.add_child(Node(new_expr, node.var, self, node))
 
     def backward(self, node: Node) -> None:
         super().backward(node)
@@ -1106,7 +1184,7 @@ class Simplify(Transform):
         return node.expr.simplify() != node.expr
     def forward(self, node: Node) -> None:
         new = node.expr.simplify()
-        node.children.append(Node(new, node.var, self, node))
+        node.add_child(Node(new, node.var, self, node))
     def backward(self, node: Node) -> None:
         super().backward(node)
         node.parent.solution = node.solution
