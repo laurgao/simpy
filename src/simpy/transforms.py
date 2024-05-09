@@ -38,7 +38,6 @@ class Node:
     # failure = can't proceed forward.
 
     def __post_init__(self):
-        self.expr = self.expr.simplify()
         if self.children is None:
             self.children = []
 
@@ -70,6 +69,10 @@ class Node:
         if not self.parent:
             return 0
         return 1 + self.parent.distance_from_root
+    
+    @property
+    def is_stale(self) -> bool:
+        return not self.is_solved and any(parent.is_solved for parent in _parents(self))
 
     @property
     def is_solved(self) -> bool:
@@ -695,6 +698,9 @@ class SinUSub(Transform):
             )
             / dy_dx
         )
+        # should be done in check, here is a patch.
+        if new_integrand.contains(node.var):
+            return
         node.children.append(Node(new_integrand, intermediate, self, node))
         self._variable_change = self._sin
 
@@ -711,23 +717,33 @@ class ProductToSum(Transform):
     _a: Expr = None
     _b: Expr = None
 
-    def check(self, node: Node) -> bool:
-        if isinstance(node.expr, Prod):
-            if len(node.expr.terms) == 2 and all(
-                isinstance(term, (sin, cos)) for term in node.expr.terms
+    @staticmethod
+    def condition(expr: Expr) -> bool:
+        if isinstance(expr, Prod):
+            if len(expr.terms) == 2 and all(
+                isinstance(term, (sin, cos)) for term in expr.terms
             ):
-                self._a, self._b = node.expr.terms
                 return True
 
-        if isinstance(node.expr, Power):
-            if isinstance(node.expr.base, (sin, cos)) and node.expr.exponent == 2:
-                self._a = self._b = node.expr.base
+        if isinstance(expr, Power):
+            if isinstance(expr.base, (sin, cos)) and isinstance(expr.exponent, Const) and expr.exponent % 2 == 0:
                 return True
 
         return False
+    
+    @staticmethod
+    def perform(expr: Union[Prod, Power]) -> Expr:
+        if isinstance(expr, Prod):
+            return ProductToSum._perform_on_terms(*expr.terms)
 
-    def forward(self, node: Node) -> None:
-        a, b = self._a, self._b
+        return ProductToSum._perform_on_terms(expr.base, expr.base) ** (expr.exponent / 2)
+
+    @staticmethod
+    def _perform_on_terms(a: Union[sin, cos], b: Union[sin, cos]) -> Expr:
+        # Dream:
+        # a_, b_ = any
+        # sin(a_) * sin(b_) = cos(a_-b_) - cos(a_+b_)
+        # highly readable and very cool
         if isinstance(a, sin) and isinstance(b, cos):
             temp = sin(a.inner + b.inner) + sin(a.inner - b.inner)
         elif isinstance(a, cos) and isinstance(b, sin):
@@ -736,8 +752,18 @@ class ProductToSum(Transform):
             temp = cos(a.inner + b.inner) + cos(a.inner - b.inner)
         elif isinstance(a, sin) and isinstance(b, sin):
             temp = cos(a.inner - b.inner) - cos(a.inner + b.inner)
+        
+        return temp / 2
 
-        new_integrand = temp / 2
+    def check(self, node: Node) -> bool:
+        if super().check(node) is False:
+            return False
+
+        return general_count(node.expr, self.condition) > 0
+
+
+    def forward(self, node: Node) -> None:
+        new_integrand = replace_factory(self.condition, self.perform)(node.expr)
         node.children.append(Node(new_integrand, node.var, self, node))
 
     def backward(self, node: Node) -> None:
@@ -850,6 +876,7 @@ class ByParts(Transform):
             if not factor.contains(node.var):
                 solution = child1 / (1 - factor)
                 node.children.append(Node(node.expr, node.var, tr, node, type="SOLUTION", solution=solution))
+                node.type = "OR"
                 return
             ### 
 
@@ -865,6 +892,8 @@ class ByParts(Transform):
                     other_uv.solution /= (1 - factor) # mutating is sus
                     solution = child1 / (1 - factor) # going back will mul it w second factor by default.
                     node.children.append(Node(node.expr, node.var, tr, node, type="SOLUTION", solution=solution))
+                    node.type = "OR"
+                    assert parent_byparts.is_solved
                     return
             ###
             
@@ -1036,11 +1065,58 @@ class CompleteTheSquare(Transform):
         super().backward(node)
         node.parent.solution = node.solution
 
+class RewritePythagorean(Transform):
+    """
+    """
+    @staticmethod
+    def condition(expr: Expr) -> bool:
+        return isinstance(expr, Power) and isinstance(expr.base, (sin, cos)) and isinstance(expr.exponent, Const) and expr.exponent > 1 and expr.exponent.value.denominator == 1 and expr.exponent % 2 == 1
+
+    @staticmethod
+    def perform(expr: Power) -> bool:
+        assert RewritePythagorean.condition(expr)
+        b, x = expr.base, expr.exponent
+        n = (x-1) / 2
+        d = {"sin": cos, "cos": sin}
+        return (1 - d[b.func](b.inner) ** 2) ** n * b.__class__(b.inner)
+
+
+    def check(self, node: Node) -> bool:
+        if super().check(node) is False:
+            return False
+
+        return general_count(node.expr, self.condition) > 0
+    
+    def forward(self, node: Node) -> bool:
+        new_expr = replace_factory(self.condition, self.perform)(node.expr)
+        node.children.append(Node(new_expr, node.var, self, node))
+
+    def backward(self, node: Node) -> None:
+        super().backward(node)
+        node.parent.solution = node.solution
+
+
+class Simplify(Transform):
+    def check(self, node: Node) -> bool:
+        if super().check(node) is False:
+            return False
+
+        if isinstance(_get_last_heuristic_transform(node), RewritePythagorean):
+            return False
+        return node.expr.simplify() != node.expr
+    def forward(self, node: Node) -> None:
+        new = node.expr.simplify()
+        node.children.append(Node(new, node.var, self, node))
+    def backward(self, node: Node) -> None:
+        super().backward(node)
+        node.parent.solution = node.solution
+        
 
 
 # Leave RewriteTrig, InverseTrigUSub near the end bc they are deprioritized
 # and more fucky
 HEURISTICS: List[Type[Transform]] = [
+    Simplify,
     PolynomialUSub,
     CompoundAngle,
     SinUSub,
@@ -1048,6 +1124,7 @@ HEURISTICS: List[Type[Transform]] = [
     TrigUSub2,
     ByParts,
     RewriteTrig,
+    RewritePythagorean,
     InverseTrigUSub,
     CompleteTheSquare,
     GenericUSub

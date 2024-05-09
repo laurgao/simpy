@@ -145,3 +145,24 @@ def test_complete_the_square_integrals():
 
 def test_neg_inf():
     assert integrate(-e ** x, (-oo, 1)) == -e
+
+
+def test_bigger_power_trig():
+    # uses product-to-sum on bigger powers:
+    expr = sin(x) ** 4
+    ans = integrate(expr)
+
+
+def test_rewrite_pythag():
+   
+    expr2 = sin(x) ** 2 * cos(x) ** 3
+    ans2 = integrate(expr2, verbose=True)
+    # returns the right answer, just with a tree 27 layers deep and with a very long expression
+    # probs assert equality by implemeting product-to-sum and compound angle?? which one tho? we can experiment.
+    # sin(x)cos(4x)/120 + sin(x)cos(2x)/12 - cos(x)sin(4x)/30 - cos(x)sin(2x)/6 - sin(x)^3/6 + 3sin(x)/8
+    expected_ans = sin(x) ** 3 / 3 - sin(x) ** 5 / 5
+
+    breakpoint()
+    expr = sin(x) ** 3
+    ans = integrate(expr)
+

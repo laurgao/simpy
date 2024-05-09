@@ -58,29 +58,35 @@ def _get_next_node_post_heuristic(node: Node) -> Node:
 
     if len(node.unfinished_leaves) == 1:
         return node.unfinished_leaves[0]
-
+    
+    return _get_leaf_with_best_nesting(node)
+    
+    # you are making this way too complicated
     if len(node.unfinished_leaves) > 1:
         return _nesting_node(node)
+
+def _get_leaf_with_best_nesting(node: Node) -> Node:
+    return _get_node_with_best_nesting(node.unfinished_leaves, min)
 
 
 # a recursive function.
 # find the simplest problem to work on that makes progress.
-def _nesting_node(node: Node) -> Node:
-    if len(node.unfinished_children) == 1:
-        return _nesting_node(node.unfinished_children[0])
+# def _nesting_node(node: Node) -> Node:
+#     if len(node.unfinished_children) == 1:
+#         return _nesting_node(node.unfinished_children[0])
 
-    if len(node.unfinished_children) == 0:
-        return node  # base case ???
+#     if len(node.unfinished_children) == 0:
+#         return node  # base case ???
 
-    is_2nd_lowest_parent = all(
-        [not child.unfinished_children for child in node.unfinished_children]
-    )
-    fn = min if node.type == "OR" else max
-    if is_2nd_lowest_parent:
-        return _get_node_with_best_nesting(node.unfinished_children, fn)
+#     is_2nd_lowest_parent = all(
+#         [not child.unfinished_children for child in node.unfinished_children]
+#     )
+#     fn = min if node.type == "OR" else max
+#     if is_2nd_lowest_parent:
+#         return _get_node_with_best_nesting(node.unfinished_children, fn)
 
-    childrens_best_nodes = [_nesting_node(c) for c in node.unfinished_children]
-    return _get_node_with_best_nesting(childrens_best_nodes, fn)
+#     childrens_best_nodes = [_nesting_node(c) for c in node.unfinished_children]
+#     return _get_node_with_best_nesting(childrens_best_nodes, fn)
 
 
 def _get_node_with_best_nesting(
@@ -263,7 +269,11 @@ def _integrate_heuristically(node: Node):
 
 
 def _print_tree(root: Node) -> None:
-    print(f"[{root.distance_from_root}] {root.expr} ({root.transform.__class__.__name__})")
+    if root.is_stale:
+        print('stale')
+        return
+    x = " (solved)" if root.is_solved else ''
+    print(f"[{root.distance_from_root}] {root.expr} ({root.transform.__class__.__name__}){x}")
     if not root.children:
         print(root.type)
         print("")
@@ -288,8 +298,10 @@ def _print_solution_tree(root: Node) -> None:
         return
     
     varchange = None if not hasattr(root.transform, "_variable_change") else root.transform._variable_change
-        
-    print(f"[{root.distance_from_root}] {root.solution} ({root.transform.__class__.__name__}, {varchange})")
+    
+    num = 40
+    spaces = " " * (num - len(repr(root.expr)))
+    print(f"[{root.distance_from_root}] {root.expr}{spaces}{root.solution} ({root.transform.__class__.__name__}, {varchange})")
     if not root.children:
         print("")
         return
