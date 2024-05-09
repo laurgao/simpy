@@ -1156,6 +1156,12 @@ class log(SingleFunc):
         # i dont love this, can change
         if isinstance(inner, (sec, csc, cot)):
             return -1 * log(inner.reciprocal_class(inner.inner)).simplify()
+        
+        # ugly patch lmfao. need better overall philosophy for this stuff.
+        if isinstance(inner, Abs) and isinstance(inner.inner, Prod):
+            return Sum([log(abs(term)) for term in inner.inner.terms])
+        if isinstance(inner, Abs) and isinstance(inner.inner, Sum) and isinstance(inner.inner.factor(), Prod):
+            return Sum([log(abs(term)) for term in inner.inner.factor().terms])
 
         return log(inner)
 
@@ -1475,6 +1481,10 @@ class Abs(SingleFunc):
             return inner.abs()
         if inner.is_subtraction:
             return Abs(-inner)
+        if isinstance(inner, Prod):
+            for t in inner.terms:
+                if isinstance(inner, Const):
+                    return Abs(inner/t) * Abs(t)
         return super().__new__(cls)
     
     def diff(self, var) -> Expr:

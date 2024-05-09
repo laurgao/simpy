@@ -125,10 +125,11 @@ def test_expanding_big_power():
     expected_ans = (1 + x**3)**7/7
     assert_integral(integrand, expected_ans)
 
-@pytest.mark.xfail
+
 def test_polynomial_div_integrals():
-    # TODO: investigate later
-    assert_integral((x-5) / (-2 * x + 2), - x / 2 + 2 * log(abs(1 - x)))
+    expr = (x-5) / (-2 * x + 2)
+    expected =  -x/2 + 2 * log(abs(1 - x))
+    assert_integral(expr, expected)
     assert_integral((x ** 3 - 1)/ (x+2), x**3/3 - x**2 + 4*x- 9*log(abs(2 + x)))
     assert_integral((x - 1)/ (2 * x + 4), x / 2 - Fraction(3, 2) * log(abs(x + 2)))
     
