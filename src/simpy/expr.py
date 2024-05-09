@@ -437,11 +437,15 @@ class Infinity(Number, Expr):
 
     def latex(self) -> str:
         return "\\infty"
+    
+    def __eq__(self, other) -> bool:
+        return isinstance(other, Infinity)
 
 
 pi = Pi()
 e = E()
-infinity = Infinity() # This isn't used for anything yet.
+oo = Infinity() # should division by zero be inf or be zero divisionerror or? // sympy makes it zoo
+# not gonna export this yet bc it's expiremental?
 
 
 @dataclass
@@ -1009,6 +1013,12 @@ class Power(Expr):
                 return Power(-b, x)
             else:
                 return -Power(-b, x)
+        # not fully exhaustive.
+        if (isinstance(b, Number) or isinstance(b, Prod) and all(isinstance(t, Number) for t in terms)) and not b.is_subtraction:
+            if x == oo:
+                return oo
+            if x == -oo:
+                return Const(0)
 
         return default_return
     

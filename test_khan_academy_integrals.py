@@ -143,6 +143,5 @@ def test_complete_the_square_integrals():
     assert_integral(1/sqrt(-x**2-6*x+40), asin((3 + x)/7))
 
 
-@pytest.mark.xfail
 def test_neg_inf():
     assert integrate(-e ** x, (-oo, 1)) == -e
