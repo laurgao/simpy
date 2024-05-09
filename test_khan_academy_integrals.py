@@ -7,7 +7,7 @@ import pytest
 from src.simpy.expr import *
 from src.simpy.integration import *
 from test_utils import (assert_definite_integral, assert_eq_plusc,
-                        assert_integral, x, y)
+                        assert_eq_value, assert_integral, x, y)
 
 
 def test_ex():
@@ -109,7 +109,7 @@ def test_csc_x_squared():
     # takes forever
     integrand = 5 * csc(x) ** 2
     expected_ans = -5 * cot(x)
-    # assert_integral(integrand, expected_ans)
+    assert_integral(integrand, expected_ans)
 
 @pytest.mark.xfail
 def test_csc_x_cot_x():
@@ -174,4 +174,11 @@ def test_tan_x_4():
 
     # this still takes a long time ngl but does not loop to hell.
     ans = integrate(tan(x)**4, (0, pi/4))
-    assert_eq_plusc(ans, pi/4 - Fraction(2,3))
+    assert_eq_value(ans, pi/4 - Fraction(2,3))
+
+
+def test_more_complicated_trig():
+    expr = tan(x) ** 5 * sec(x) ** 4
+    ans = integrate(expr) # 1/(4cos(x)^4) - 1/(3cos(x)^6) + 1/(8cos(x)^8)
+    expected_ans = tan(x) ** 6 / 6 + tan(x) ** 8 / 8
+    # the answer is the correct value but it does not simplify it to the expected answer

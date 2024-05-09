@@ -8,6 +8,7 @@ x, y = symbols("x y")
 @cast
 def assert_integral(integrand: Expr, expected: Expr, var: Optional[Symbol] = None):
     assert_eq_plusc(integrate(integrand, var), expected)
+    # assert_eq_value(diff(expected, var), integrand) # this might be nice; idk. catch some potential diff errors.
 
 @cast
 def assert_definite_integral(integrand: Expr, bounds: tuple, expected: Expr):

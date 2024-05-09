@@ -1,7 +1,10 @@
+import time
 import warnings
-from typing import Callable, List, Literal, Tuple, Union
+from collections import defaultdict
+from typing import Callable, Dict, List, Literal, Tuple, Union
 
 from .expr import Const, Expr, Optional, Symbol, cast, nesting
+from .regex import replace, replace_factory
 from .transforms import HEURISTICS, SAFE_TRANSFORMS, Node, _check_if_solveable
 
 
@@ -12,71 +15,6 @@ def _check_if_node_solvable(node: Node):
 
     node.type = "SOLUTION"
     node.solution = answer
-
-def _cycle(node: Node) -> Optional[Union[Node, Literal["SOLVED"]]]:
-    # 1. APPLY ALL SAFE TRANSFORMS
-    _integrate_safely(node)
-
-    # now we have a tree with all the safe transforms applied
-    # 2. LOOK IN TABLE
-    for leaf in node.unfinished_leaves:
-        _check_if_node_solvable(leaf)
-
-    if len(node.unfinished_leaves) == 0:
-        return "SOLVED"
-
-    # 3. APPLY HEURISTICS
-    next_node = node.unfinished_leaves[0]  # random lol
-    _integrate_heuristically(next_node)
-
-    next_next_node = _get_next_node_post_heuristic(next_node)
-    return next_next_node
-
-
-def _get_next_node_post_heuristic(node: Node) -> Node:
-    root = node.root
-    if root.unfinished_leaves == 0:
-        if root.is_failed:
-            return None
-        return "SOLVED"
-    
-    if len(node.unfinished_leaves) == 1:
-        return node.unfinished_leaves[0]
-    
-    return _get_best_leaf(node)
-    # node = node.root
-    # if len(node.unfinished_leaves) == 0:
-    #     if node.is_failed:
-    #         # if on the first cycle, there are zero safe transforms AND no heuristics then
-    #         # node here would be the root.
-    #         if node.parent is None:
-    #             return None
-
-    #         # we want to go back and solve the parent
-    #         parent = node.parent
-    #         while len(parent.children) == 1 or parent.type == "AND":
-    #             if parent.parent is None:
-    #                 # we've reached root.
-    #                 # this means... we can't solve this integral.
-    #                 return None
-    #             parent = parent.parent
-    #         # now parent is the lowest OR node with multiple children
-    #         return _get_next_node_post_heuristic(parent)
-    #     else:
-    #         # This happens when we use integration by parts and the heuristic finds a whole ass solution
-    #         return "SOLVED"
-
-    # if len(node.unfinished_leaves) == 1:
-    #     return node.unfinished_leaves[0]
-    
-    # return _get_leaf_with_best_nesting(node)
-    
-    # # you are making this way too complicated
-    # if len(node.unfinished_leaves) > 1:
-    #     return _nesting_node(node)
-
-def _get_leaf_with_best_nesting(node: Node) -> Node:
-    return _get_node_with_best_nesting(node.unfinished_leaves, min)
 
 
 # a recursive function.
@@ -111,8 +49,7 @@ def _get_node_with_best_nesting(
 def integrate(
     expr: Expr,
     bounds: Optional[Union[Symbol, Tuple[Expr, Expr], Tuple[Symbol, Expr, Expr]]] = None,
-    verbose: bool = False,
-    debug: bool = False,
+    **kwargs
 ) -> Optional[Expr]:
     """
     Integrates an expression.
@@ -121,10 +58,13 @@ def integrate(
         expr: the integrand
         bounds: (var, a, b) where var is the variable of integration and a, b are the integration bounds.
             can omit var if integrand contains exactly one symbol. omit a, b for an indefinite integral.
+    kwargs:
         verbose: prints the integration tree + enables the python debugger right before returning.
             you can use the python debugger to trace back the integration tree & find out what went wrong.
             if you don't know what this means, don't worry about it -- this is mostly for developers and
             particularly nerdy adventurers.
+        debug
+        breadth_first
 
         Examples of valid uses:
             integrate(x**2)
@@ -149,7 +89,7 @@ def integrate(
         bounds = (vars[0], bounds[0], bounds[1])
 
 
-    integration = Integration(verbose=verbose, debug=debug)
+    integration = Integration(**kwargs)
     if isinstance(bounds, Symbol):
         return integration.integrate(expr, bounds)
     if isinstance(bounds, tuple):
@@ -163,9 +103,11 @@ class Integration:
     Keeps track of integration work as we go
     """
 
-    def __init__(self, *, verbose: bool = False, debug: bool = False):
+    def __init__(self, *, verbose: bool = False, debug: bool = False, breadth_first = True):
         self._verbose = verbose
         self._debug = debug
+        self._breadth_first = breadth_first
+        self._timeout = 2 # seconds
     
     def integrate_bounds(
         self, expr: Expr, bounds: Tuple[Symbol, Expr, Expr]
@@ -193,6 +135,72 @@ class Integration:
             return None
         Integration._go_backwards(root)
         return root.solution.simplify()
+    
+    def _cycle(self, node: Node) -> Optional[Union[Node, Literal["SOLVED"]]]:
+        # 1. APPLY ALL SAFE TRANSFORMS
+        _integrate_safely(node)
+
+        # now we have a tree with all the safe transforms applied
+        # 2. LOOK IN TABLE
+        for leaf in node.unfinished_leaves:
+            _check_if_node_solvable(leaf)
+
+        if len(node.unfinished_leaves) == 0:
+            return "SOLVED"
+
+        # 3. APPLY HEURISTICS
+        next_node = node.unfinished_leaves[0]  # random lol
+        _integrate_heuristically(next_node)
+
+        # 4. FIND BEST NEXT NODE BASED ON NESTING
+        return self._get_next_node_post_heuristic(next_node)
+
+        
+    def _get_next_node_post_heuristic(self, node: Node) -> Node:
+        if self._breadth_first:
+            return self._get_next_node_post_heuristic_breadth_first(node)
+        else:
+            return self._get_next_node_post_heuristic_depth_first(node)
+    
+    def _get_next_node_post_heuristic_breadth_first(self, node: Node) -> Node:
+        root = node.root
+        if root.unfinished_leaves == 0:
+            if root.is_failed:
+                return None
+            return "SOLVED"
+        
+        if len(node.unfinished_leaves) == 1:
+            return node.unfinished_leaves[0]
+        
+        return _get_best_leaf(node)
+    
+    def _get_next_node_post_heuristic_depth_first(self, node: Node) -> Node:
+        if len(node.unfinished_leaves) == 0:
+            if node.is_failed:
+                # if on the first cycle, there are zero safe transforms AND no heuristics then
+                # node here would be the root.
+                if node.parent is None:
+                    return None
+
+                # we want to go back and solve the parent
+                parent = node.parent
+                while len(parent.children) == 1 or parent.type == "AND":
+                    if parent.parent is None:
+                        # we've reached root.
+                        # this means... we can't solve this integral.
+                        return None
+                    parent = parent.parent
+                # now parent is the lowest OR node with multiple children
+                return self._get_next_node_post_heuristic_depth_first(parent)
+            else:
+                # This happens when we use integration by parts and the heuristic finds a whole ass solution
+                return "SOLVED"
+
+        if len(node.unfinished_leaves) == 1:
+            return node.unfinished_leaves[0]
+        
+        return _get_node_with_best_nesting(node.unfinished_leaves, min)
+
 
     def integrate(
         self, integrand: Expr, var: Symbol 
@@ -201,20 +209,26 @@ class Integration:
         """
         root = Node(integrand, var)
         curr_node = root
+        start = time.time()
         while True:
-            answer = _cycle(curr_node)
-            if self._debug:
-                breakpoint()
+            answer = self._cycle(curr_node)
+
+            current = time.time()
+            if current - start >= self._timeout:
+                break
             if root.is_finished:
                 break
             if answer == "SOLVED":
                 # just do any other thing in root
-                curr_node = _get_next_node_post_heuristic(root)
+                curr_node = self._get_next_node_post_heuristic_breadth_first(root)
             else:
                 curr_node = answer
 
-        if root.is_failed:
-            warnings.warn(f"Failed to integrate {integrand} wrt {var}")
+        if not root.is_solved:
+            message = f"Failed to integrate {integrand} wrt {var}"
+            if not root.is_failed:
+                message += ", TIMED OUT"
+            warnings.warn(message)
             if self._verbose:
                 _print_tree(root)
                 breakpoint()
@@ -278,29 +292,48 @@ def _integrate_heuristically(node: Node):
         node.type = "OR"
 
 
-def _print_tree(root: Node) -> None:
-    if root.is_stale:
-        print('stale')
-        return
+
+def _print_tree(root: Node, show_stale=False, show_failures=False, _vardict = None) -> None:
+    if _vardict is None:
+        _vardict = defaultdict(str)
+
+    # if (not show_stale) and root.is_stale:
+    #     return
+    # if (not show_failures) and root.is_failed:
+    #     return
+
+    if root.var.name.startswith("u_"):
+        if not _vardict[root.var.name]:
+            new_name = "u_" + str(len(_vardict))
+            _vardict[root.var.name] = Symbol(new_name)
+        expr = replace(root.expr, root.var, _vardict[root.var.name])
+    else:
+        _vardict[root.var.name] = root.var
+        expr = root.expr
+
     x = " (solved)" if root.is_solved else ''
-    print(f"[{root.distance_from_root}] {root.expr} ({root.transform.__class__.__name__}){x}")
+    varchange = '' if not hasattr(root.transform, "_variable_change") else " (" + _vardict[root.var.name].name + "=" + repr(_replaceall(root.transform._variable_change, _vardict)) + ")"
+    ending = " (" + root.type + ")" if not root.children else ''
+    n = '{' + str(nesting(expr)) + '}'
+    print(f"[{root.distance_from_root}] {n} {expr} ({root.transform.__class__.__name__}){x}{varchange}{ending}")
     if not root.children:
-        print(root.type)
         print("")
         return
     for child in root.children:
-        _print_tree(child)
+        _print_tree(child, show_stale, show_failures, _vardict=_vardict)
+
+
+def _replaceall(expr: Expr, vardict: Dict[str, Symbol]) -> Expr:
+    def condition(expr):
+        return isinstance(expr, Symbol)
+    def perform(expr):
+        return vardict[expr.name]
+    return replace_factory(condition, perform)(expr)
+    
 
 
 def _print_success_tree(root: Node) -> None:
-    if not root.is_solved:
-        return
-    print(f"[{root.distance_from_root}] {root.expr} ({root.transform.__class__.__name__})")
-    if not root.children:
-        print("")
-        return
-    for child in root.children:
-        _print_success_tree(child)
+    _print_tree(root, False, False)
 
 
 def _print_solution_tree(root: Node) -> None:

@@ -43,6 +43,8 @@ def nesting(expr: "Expr", var: Optional["Symbol"] = None) -> int:
     # special case
     if isinstance(expr, Prod) and expr.terms[0] == Const(-1) and len(expr.terms) == 2:
         return nesting(expr.terms[1], var)
+    if isinstance(expr, Prod):
+        return 1 + max(_nesting(sub_expr, var) for sub_expr in expr.children())
 
     if isinstance(expr, Symbol) and (var is None or expr.name == var.name):
         return 1
@@ -51,6 +53,11 @@ def nesting(expr: "Expr", var: Optional["Symbol"] = None) -> int:
     else:
         return 1 + max(nesting(sub_expr, var) for sub_expr in expr.children())
 
+
+def _nesting(e, v) -> int:
+    if isinstance(e, Power) and e.exponent == -1:
+        return nesting(e.base, v)
+    return nesting(e, v)
 
 
 def _cast(x):

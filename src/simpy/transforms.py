@@ -95,7 +95,8 @@ class Node:
     
     @property
     def is_stale(self) -> bool:
-        return not self.is_solved and any(parent.is_solved for parent in _parents(self))
+        """Stale = unfinished node that is no longer needed"""
+        return not self.is_finished and any(parent.is_finished for parent in _parents(self))
 
     @property
     def is_solved(self) -> bool:
