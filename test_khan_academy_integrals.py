@@ -151,16 +151,25 @@ def test_neg_inf():
 def test_bigger_power_trig():
     # uses product-to-sum on bigger powers:
     expr = sin(x) ** 4
-    ans = integrate(expr)
+    expected = (sin(4*x) - 8*sin(2*x) + 12*x) / 32
+    assert_integral(expr, expected)
 
 
 def test_rewrite_pythag():
-    expr2 = sin(x) ** 2 * cos(x) ** 3
-    ans2 = integrate(expr2)
+    expr = sin(x) ** 2 * cos(x) ** 3
+    ## USED TO
     # returns the right answer, just with a tree 27 layers deep and with a very long expression
     # probs assert equality by implemeting product-to-sum and compound angle?? which one tho? we can experiment.
     # sin(x)cos(4x)/120 + sin(x)cos(2x)/12 - cos(x)sin(4x)/30 - cos(x)sin(2x)/6 - sin(x)^3/6 + 3sin(x)/8
+    ## USED TO
+    # ^ im proud this no longer happens <3 i didnt even optimize for it; i just made the changes to
+    # changing depth first to breadth first when expression became too complicated <3
+    # and this happend as a bypproduct!
+    # this means that the decision was a good architectural decision; not a narrow patch that only fixes that one specific case.
+    
+    # this one still takes ~.9s to complete, which is quite long & much longer than any other integral in our tests as of 05/10.
     expected_ans = sin(x) ** 3 / 3 - sin(x) ** 5 / 5
+    assert_integral(expr, expected_ans)
 
     assert_integral(sin(x)**3, cos(x)**3/3 - cos(x))
     assert_integral(cos(x)**5, sin(x)**5/5 - 2*sin(x)**3/3 + sin(x))
@@ -168,14 +177,14 @@ def test_rewrite_pythag():
 def test_tan_x_4():
     # this would take forever if i don't have node.add_child 
     # when sin^4x/cos^4x on the first one, it never goes onto the inversetrigusub.
-
-    # this still takes a long time ngl but does not loop to hell.
     ans = integrate(tan(x)**4, (0, pi/4))
     assert_eq_value(ans, pi/4 - Fraction(2,3))
 
 
+@pytest.mark.xfail
 def test_more_complicated_trig():
     expr = tan(x) ** 5 * sec(x) ** 4
-    ans = integrate(expr) # 1/(4cos(x)^4) - 1/(3cos(x)^6) + 1/(8cos(x)^8)
     expected_ans = tan(x) ** 6 / 6 + tan(x) ** 8 / 8
+    assert_integral(expr, expected_ans)
     # the answer is the correct value but it does not simplify it to the expected answer
+    # 1/(4cos(x)^4) - 1/(3cos(x)^6) + 1/(8cos(x)^8)
