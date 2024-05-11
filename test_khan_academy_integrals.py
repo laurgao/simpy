@@ -155,7 +155,6 @@ def test_bigger_power_trig():
 
 
 def test_rewrite_pythag():
-   
     expr2 = sin(x) ** 2 * cos(x) ** 3
     ans2 = integrate(expr2)
     # returns the right answer, just with a tree 27 layers deep and with a very long expression
@@ -163,8 +162,8 @@ def test_rewrite_pythag():
     # sin(x)cos(4x)/120 + sin(x)cos(2x)/12 - cos(x)sin(4x)/30 - cos(x)sin(2x)/6 - sin(x)^3/6 + 3sin(x)/8
     expected_ans = sin(x) ** 3 / 3 - sin(x) ** 5 / 5
 
-    expr = sin(x) ** 3
-    ans = integrate(expr)
+    assert_integral(sin(x)**3, cos(x)**3/3 - cos(x))
+    assert_integral(cos(x)**5, sin(x)**5/5 - 2*sin(x)**3/3 + sin(x))
 
 def test_tan_x_4():
     # this would take forever if i don't have node.add_child 

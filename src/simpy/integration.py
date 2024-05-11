@@ -59,11 +59,11 @@ def integrate(
         bounds: (var, a, b) where var is the variable of integration and a, b are the integration bounds.
             can omit var if integrand contains exactly one symbol. omit a, b for an indefinite integral.
     kwargs:
-        verbose: prints the integration tree + enables the python debugger right before returning.
+        debug: prints the integration tree + enables the python debugger right before returning.
             you can use the python debugger to trace back the integration tree & find out what went wrong.
             if you don't know what this means, don't worry about it -- this is mostly for developers and
             particularly nerdy adventurers.
-        debug
+        debug_hardcore
         breadth_first
 
         Examples of valid uses:
@@ -103,9 +103,9 @@ class Integration:
     Keeps track of integration work as we go
     """
 
-    def __init__(self, *, verbose: bool = False, debug: bool = False, breadth_first = True):
-        self._verbose = verbose
+    def __init__(self, *, debug: bool = False, debug_hardcore: bool = False, breadth_first = True):
         self._debug = debug
+        self._debug_hardcore = debug_hardcore
         self._breadth_first = breadth_first
         self._timeout = 2 # seconds
     
@@ -169,10 +169,10 @@ class Integration:
                 return None
             return "SOLVED"
         
-        if len(node.unfinished_leaves) == 1:
-            return node.unfinished_leaves[0]
+        if len(root.unfinished_leaves) == 1:
+            return root.unfinished_leaves[0]
         
-        return _get_best_leaf(node)
+        return _get_best_leaf(root)
     
     def _get_next_node_post_heuristic_depth_first(self, node: Node) -> Node:
         if len(node.unfinished_leaves) == 0:
@@ -229,7 +229,7 @@ class Integration:
             if not root.is_failed:
                 message += ", TIMED OUT"
             warnings.warn(message)
-            if self._verbose:
+            if self._debug:
                 _print_tree(root)
                 breakpoint()
             return None
@@ -237,7 +237,7 @@ class Integration:
         # now we have a solved tree we can go back and get the answer
         self._go_backwards(root)
 
-        if self._verbose:
+        if self._debug:
             _print_success_tree(root)
             breakpoint()
         return root.solution.simplify()
