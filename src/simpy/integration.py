@@ -1,3 +1,6 @@
+"""Transversing integration tree logic.
+"""
+
 import time
 import warnings
 from collections import defaultdict
@@ -102,8 +105,10 @@ class Integration:
     """
     Keeps track of integration work as we go
     """
+    # tweakable params
+    DEPTH_FIRST_MAX_NESTING = 7 # chosen somewhat-arbitarily: on may 10th, it lead to lowest time spent on my tests.
 
-    def __init__(self, *, debug: bool = False, debug_hardcore: bool = False, breadth_first = True):
+    def __init__(self, *, debug: bool = False, debug_hardcore: bool = False, breadth_first = False):
         self._debug = debug
         self._debug_hardcore = debug_hardcore
         self._breadth_first = breadth_first
@@ -138,7 +143,7 @@ class Integration:
     
     def _cycle(self, node: Node) -> Optional[Union[Node, Literal["SOLVED"]]]:
         # 1. APPLY ALL SAFE TRANSFORMS
-        _integrate_safely(node)
+        # _integrate_safely(node)
 
         # now we have a tree with all the safe transforms applied
         # 2. LOOK IN TABLE
@@ -197,17 +202,34 @@ class Integration:
                 return "SOLVED"
 
         if len(node.unfinished_leaves) == 1:
-            return node.unfinished_leaves[0]
-        
-        return _get_node_with_best_nesting(node.unfinished_leaves, min)
+            ans = node.unfinished_leaves[0]
+        else:
+            ans = _get_node_with_best_nesting(node.unfinished_leaves, min)
+        if self._check_if_depth_first_bad(ans):
+            return self._get_next_node_post_heuristic_breadth_first(ans)
+        return ans
+    
+    def _check_if_depth_first_bad(self, ans: Node) -> bool:
+            # setting this alone makes csc^2 get solved when depth first!!
+        # if nesting is greater than 5 i honestly don't see how it can get solved super easily??
+        # byparts should not be depth first.
 
+        if nesting(ans.expr) >= self.DEPTH_FIRST_MAX_NESTING:
+            return True
+        from .transforms import (Additivity, ByParts, Expand, PullConstant,
+                                 _get_last_heuristic_transform)
+        t = _get_last_heuristic_transform(ans, (Expand, PullConstant, Additivity))
+        if isinstance(t, ByParts):
+            return True
+        return False
 
     def integrate(
         self, integrand: Expr, var: Symbol 
     ) -> Optional[Expr]:
         """Performs indefinite integral.
         """
-        root = Node(integrand, var)
+        root = Node(integrand.simplify(), var)
+        _integrate_safely(root)
         curr_node = root
         start = time.time()
         while True:
@@ -284,6 +306,9 @@ def _integrate_heuristically(node: Node):
         if tr.check(node):
             tr.forward(node)
 
+    if node.is_solved:
+        return
+
     if not node.children:
         node.type = "FAILURE"
         return
@@ -291,36 +316,60 @@ def _integrate_heuristically(node: Node):
     if len(node.children) > 1:
         node.type = "OR"
 
+    for child in node.children:
+        _integrate_safely(child)
 
 
-def _print_tree(root: Node, show_stale=False, show_failures=False, _vardict = None) -> None:
+
+def _print_tree(root: Node, show_stale=True, show_failures=True, show_solution = False, _vardict = None) -> None:
     if _vardict is None:
         _vardict = defaultdict(str)
 
-    # if (not show_stale) and root.is_stale:
-    #     return
-    # if (not show_failures) and root.is_failed:
-    #     return
+    if (not show_stale) and root.is_stale:
+        return
+    if (not show_failures) and root.is_failed:
+        return
+    
+    def _exprify(expr: Expr):
+        if root.var.name.startswith("u_"):
+            if not _vardict[root.var.name]:
+                new_name = "u_" + str(len(_vardict))
+                _vardict[root.var.name] = Symbol(new_name)
+            return replace(expr, root.var, _vardict[root.var.name])
+        else:
+            _vardict[root.var.name] = root.var
+            return expr
 
-    if root.var.name.startswith("u_"):
-        if not _vardict[root.var.name]:
-            new_name = "u_" + str(len(_vardict))
-            _vardict[root.var.name] = Symbol(new_name)
-        expr = replace(root.expr, root.var, _vardict[root.var.name])
+    if root.is_filler:
+        repr_expr = "filler"
     else:
-        _vardict[root.var.name] = root.var
-        expr = root.expr
+        expr = _exprify(root.expr)
+        repr_expr = repr(expr)
+        
 
-    x = " (solved)" if root.is_solved else ''
+    x = "" if (not root.children and (root.is_solved or root.is_failed)) else " (solved)" if root.is_solved else ' (failed)' if root.is_failed else ' (stale)' if root.is_stale else ''
     varchange = '' if not hasattr(root.transform, "_variable_change") else " (" + _vardict[root.var.name].name + "=" + repr(_replaceall(root.transform._variable_change, _vardict)) + ")"
     ending = " (" + root.type + ")" if not root.children else ''
-    n = '{' + str(nesting(expr)) + '}'
-    print(f"[{root.distance_from_root}] {n} {expr} ({root.transform.__class__.__name__}){x}{varchange}{ending}")
+    n = '{' + str(nesting(root.expr)) + '}'
+
+    def _wrap(string: str, num: int) -> str:
+        if len(string) > num:
+            string = string[:num-3] + "..."
+            spaces = ""
+        else:
+            spaces = " " * (num - len(string))
+        return string + spaces
+    
+    repr_expr = _wrap(repr_expr, 50)
+    solution = _wrap(repr(_exprify(root.solution)), 50) if (show_solution and root.is_solved) else ""
+    distance = _wrap(f"[{root.distance_from_root}]", 4)
+
+    print(f"{distance} {n} {repr_expr}  {solution}  ({root.transform.__class__.__name__}){x}{varchange}{ending}")
     if not root.children:
         print("")
         return
     for child in root.children:
-        _print_tree(child, show_stale, show_failures, _vardict=_vardict)
+        _print_tree(child, show_stale, show_failures, show_solution, _vardict=_vardict)
 
 
 def _replaceall(expr: Expr, vardict: Dict[str, Symbol]) -> Expr:
@@ -331,22 +380,9 @@ def _replaceall(expr: Expr, vardict: Dict[str, Symbol]) -> Expr:
     return replace_factory(condition, perform)(expr)
     
 
-
 def _print_success_tree(root: Node) -> None:
     _print_tree(root, False, False)
 
 
 def _print_solution_tree(root: Node) -> None:
-    if not root.is_solved:
-        return
-    
-    varchange = None if not hasattr(root.transform, "_variable_change") else root.transform._variable_change
-    
-    num = 40
-    spaces = " " * (num - len(repr(root.expr)))
-    print(f"[{root.distance_from_root}] {root.expr}{spaces}{root.solution} ({root.transform.__class__.__name__}, {varchange})")
-    if not root.children:
-        print("")
-        return
-    for child in root.children:
-        _print_solution_tree(child)
+    _print_tree(root, False, False, show_solution=True)

@@ -323,8 +323,8 @@ class Additivity(SafeTransform):
         )
 
 
-def _get_last_heuristic_transform(node: Node):
-    if isinstance(node.transform, (PullConstant, Additivity)):
+def _get_last_heuristic_transform(node: Node, tup = (PullConstant, Additivity)):
+    if isinstance(node.transform, tup):
         # We'll let polynomial division go because it changes things sufficiently that
         # we actually sorta make progress towards the integral.
         # PullConstant and Additivity are like fake, they dont make any substantial changes.
@@ -336,7 +336,7 @@ def _get_last_heuristic_transform(node: Node):
         # Idk this thing rn is a lil messy and there might be a better way to do it.
 
         # 05/13/2024: no more expand bc it's not even a "safe transform" anymore lwk.
-        return _get_last_heuristic_transform(node.parent)
+        return _get_last_heuristic_transform(node.parent, tup)
     return node.transform
 
 
@@ -443,7 +443,9 @@ class RewriteTrig(Transform):
             return False
 
         # make sure that this node didn't get here by this transform
-        t = _get_last_heuristic_transform(node)
+        # lots of time, rewriting trig would make it naturally expand.
+        # without this including expand, csc^2 did not get solved depth-first.
+        t = _get_last_heuristic_transform(node, (Additivity, PullConstant, Expand))
         if isinstance(t, RewriteTrig):
             return False
 
@@ -1147,6 +1149,8 @@ class CompleteTheSquare(Transform):
 
 class RewritePythagorean(Transform):
     """
+
+    ykw idk if this transform has ever helped anyone when it's not performed at the outer level of nesting.
     """
     @staticmethod
     def condition(expr: Expr) -> bool:
@@ -1165,10 +1169,24 @@ class RewritePythagorean(Transform):
         if super().check(node) is False:
             return False
 
+        # this is a complete waste of resources.
         return general_count(node.expr, self.condition) > 0
     
     def forward(self, node: Node) -> bool:
-        new_expr = replace_factory(self.condition, self.perform)(node.expr)
+        def _replace_factory(c, p, e):
+            # chill replace factory that only checks outer layer of nesting.
+            def _replace(e) -> Expr:
+                if c(e):
+                    return p(e)
+                if isinstance(e, Prod):
+                    return Prod([_replace(term) for term in e.terms])
+                else:
+                    return e
+            return _replace(e)
+
+        new_expr = _replace_factory(self.condition, self.perform, node.expr)
+        if new_expr == node.expr:
+            return
         node.add_child(Node(new_expr, node.var, self, node))
 
     def backward(self, node: Node) -> None:
