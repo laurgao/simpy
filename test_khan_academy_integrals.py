@@ -109,7 +109,6 @@ def test_csc_x_squared():
     expected_ans = -5 * cot(x)
     assert_integral(integrand, expected_ans)
 
-@pytest.mark.xfail
 def test_csc_x_cot_x():
     # this one requires simpy knowing that 1/sin(x) and csc(x) are the same
     integrand = 2 * csc(x) * cot(x)

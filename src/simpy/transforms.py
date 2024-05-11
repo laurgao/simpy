@@ -1198,8 +1198,10 @@ class Simplify(Transform):
     def check(self, node: Node) -> bool:
         if super().check(node) is False:
             return False
-
-        if isinstance(_get_last_heuristic_transform(node), RewritePythagorean):
+        
+        t = _get_last_heuristic_transform(node)
+        # The point of these 2 transforms is to rewrite the expr in a not necessarily 'simpler' form.
+        if isinstance(t, (RewritePythagorean, RewriteTrig)):
             return False
         return node.expr.simplify() != node.expr
     def forward(self, node: Node) -> None:

@@ -1033,7 +1033,18 @@ class Power(Expr):
         self.__post_init__()
     
     def simplify(self) -> "Expr":
-        return Power(self.base.simplify(), self.exponent.simplify())
+        # in the LR this shouldnt be in simplify necessarily; i see the point of sympy having diff
+        # functions for simplify. like, after rewritetrig you can't apply this one but you can apply
+        # other simplifies. idk.
+        
+        # or just in general during integration it's not useful to apply this simplify; it's only
+        # useful for simplifying the expression for the user to see & for subtractions.
+        b = self.base.simplify()
+        x = self.exponent.simplify()
+        if isinstance(x, Const) and x < 0 and isinstance(b, TrigFunction) and not b.is_inverse:
+            new_b = b.reciprocal_class(b.inner)
+            return Power(new_b, -x).simplify()
+        return Power(b, x) 
     
     def _power_expandable(self) -> bool:
         return (
