@@ -6,8 +6,8 @@ from src.simpy.integration import integrate
 x, y = symbols("x y")
 
 @cast
-def assert_integral(integrand: Expr, expected: Expr, var: Optional[Symbol] = None):
-    assert_eq_plusc(integrate(integrand, var), expected)
+def assert_integral(integrand: Expr, expected: Expr, var: Optional[Symbol] = None, **kwargs):
+    assert_eq_plusc(integrate(integrand, var, **kwargs), expected)
     # assert_eq_value(diff(expected, var), integrand) # this might be nice; idk. catch some potential diff errors.
 
 @cast

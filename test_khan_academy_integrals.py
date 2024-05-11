@@ -37,7 +37,6 @@ def test_partial_fractions():
     assert_integral(integrand, expected_ans)
 
 
-@pytest.mark.xfail
 def test_integration_by_parts():
     integrand = x * e ** (-x)
     expected = -e ** (-x) * (x + 1)
@@ -65,7 +64,6 @@ def test_integration_by_parts():
     assert_integral(integrand, expected)
 
 
-@pytest.mark.xfail
 def test_arcsin():
     ans = integrate(asin(x), x)
     expected_ans = x * asin(x) + sqrt(1 - x**2)

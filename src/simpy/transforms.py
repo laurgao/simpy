@@ -53,11 +53,12 @@ class Node:
         return self._children
     
     def add_child(self, child: "Node") -> None:
-        parents = _parents(self)
-        info = lambda p: repr(replace(p.expr, p.var, self.var))
-        parents_info = [info(p) for p in parents if not p.is_filler]
-        if info(child) in parents_info:
-            return
+        if not child.is_filler:
+            parents = _parents(self)
+            info = lambda p: repr(replace(p.expr, p.var, self.var))
+            parents_info = [info(p) for p in parents if not p.is_filler]
+            if info(child) in parents_info:
+                return
         self.children.append(child)
 
     def add_children(self, children: List["Node"]) -> None:
@@ -965,7 +966,7 @@ class ByParts(Transform):
                     assert parent_byparts.is_solved
                     return
             ###
-            
+
             funky_node = Node(node.expr, node.var, tr, node, type="AND", is_filler=True)
             funky_node.add_children([
                 Node(
