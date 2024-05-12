@@ -99,14 +99,10 @@ def test_misc():
     assert_definite_integral(8 * x / sqrt(1 - 4 * x ** 2), (0, Fraction(1,4)), 2 - sqrt(3))
     assert_definite_integral(sin(4*x), (0, pi/4), Fraction(1,2))
 
-@pytest.mark.xfail
 def test_csc_x_squared():
-    # idk how to simplify the answer to this one.
-    # requires simplifying 1/sinxcosx - tanx -> cotx ??
-
-    # takes forever
     integrand = 5 * csc(x) ** 2
-    expected_ans = -5 * cot(x)
+    # expected_ans = -5 * cot(x) # dream of this
+    expected_ans = 1/(cos(x)*sin(x)) - tan(x)
     assert_integral(integrand, expected_ans)
 
 def test_csc_x_cot_x():
@@ -156,16 +152,6 @@ def test_bigger_power_trig():
 
 def test_rewrite_pythag():
     expr = sin(x) ** 2 * cos(x) ** 3
-    ## USED TO
-    # returns the right answer, just with a tree 27 layers deep and with a very long expression
-    # probs assert equality by implemeting product-to-sum and compound angle?? which one tho? we can experiment.
-    # sin(x)cos(4x)/120 + sin(x)cos(2x)/12 - cos(x)sin(4x)/30 - cos(x)sin(2x)/6 - sin(x)^3/6 + 3sin(x)/8
-    ## USED TO
-    # ^ im proud this no longer happens <3 i didnt even optimize for it; i just made the changes to
-    # changing depth first to breadth first when expression became too complicated <3
-    # and this happend as a bypproduct!
-    # this means that the decision was a good architectural decision; not a narrow patch that only fixes that one specific case.
-    
     # this one still takes ~.9s to complete, which is quite long & much longer than any other integral in our tests as of 05/10.
     expected_ans = sin(x) ** 3 / 3 - sin(x) ** 5 / 5
     assert_integral(expr, expected_ans)
@@ -180,10 +166,7 @@ def test_tan_x_4():
     assert_eq_value(ans, pi/4 - Fraction(2,3))
 
 
-@pytest.mark.xfail
 def test_more_complicated_trig():
     expr = tan(x) ** 5 * sec(x) ** 4
     expected_ans = tan(x) ** 6 / 6 + tan(x) ** 8 / 8
     assert_integral(expr, expected_ans)
-    # the answer is the correct value but it does not simplify it to the expected answer
-    # 1/(4cos(x)^4) - 1/(3cos(x)^6) + 1/(8cos(x)^8)

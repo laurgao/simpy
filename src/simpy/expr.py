@@ -98,9 +98,9 @@ class Expr(ABC):
             if field.type is Expr or field.type is List[Expr]:
                 setattr(self, field.name, _cast(getattr(self, field.name)))
 
-    # should be overwritten in subclasses
     def simplify(self) -> "Expr":
-        return self
+        from .simplify import simplify
+        return simplify(self)
     
     @cast
     def __add__(self, other) -> "Expr":
@@ -591,14 +591,6 @@ class Sum(Associative, Expr):
         assert self.expandable(), f"Cannot expand {self}"
         return Sum([t.expand() if t.expandable() else t for t in self.terms])
 
-    def simplify(self) -> "Expr":
-        new_sum = Sum([t.simplify() for t in self.terms])
-        if not isinstance(new_sum, Sum):
-            return new_sum
-
-        from .simplify import trig_simplification
-        return trig_simplification(new_sum)
-
     @cast
     def evalf(self, subs: Dict[str, "Const"]):
         return Sum([t.evalf(subs) for t in self.terms])
@@ -794,9 +786,6 @@ class Prod(Associative, Expr):
     def __init__(self, terms: List[Expr]):
         # terms are already set in __new__
         self.__post_init__()
-
-    def simplify(self) -> "Expr":
-        return Prod([t.simplify() for t in self.terms])
 
     def __repr__(self) -> str:
         def _term_repr(term):
@@ -1076,25 +1065,11 @@ class Power(Expr):
     def __init__(self, base: Expr, exponent: Expr):
         self.__post_init__()
     
-    def simplify(self) -> "Expr":
-        # in the LR this shouldnt be in simplify necessarily; i see the point of sympy having diff
-        # functions for simplify. like, after rewritetrig you can't apply this one but you can apply
-        # other simplifies. idk.
-        
-        # or just in general during integration it's not useful to apply this simplify; it's only
-        # useful for simplifying the expression for the user to see & for subtractions.
-        b = self.base.simplify()
-        x = self.exponent.simplify()
-        if isinstance(x, Const) and x < 0 and isinstance(b, TrigFunction) and not b.is_inverse:
-            new_b = b.reciprocal_class(b.inner)
-            return Power(new_b, -x).simplify()
-        return Power(b, x) 
-    
     def _power_expandable(self) -> bool:
         return (
             isinstance(self.exponent, Const)
             and self.exponent.value.denominator == 1
-            and self.exponent.value > 1
+            and self.exponent.abs() != 1
             and isinstance(self.base, Sum)
         )
 
@@ -1110,14 +1085,14 @@ class Power(Expr):
             return new
 
         expanded = []
-        n = new.exponent.value.numerator
+        n = abs(new.exponent.value.numerator)
         i = len(new.base.terms)
         permutations = generate_permutations(i, n)
         for permutation in permutations:
             new_term = [Power(t, p) for t, p in zip(new.base.terms, permutation)]
             coefficient = multinomial_coefficient(permutation, n)
             expanded.append(Prod([Const(coefficient)] + new_term))
-        return Sum(expanded)
+        return Sum(expanded) ** (n / new.exponent.value.numerator)
 
     @cast
     def evalf(self, subs: Dict[str, "Const"]):
@@ -1152,10 +1127,6 @@ class SingleFunc(Expr):
 
     def children(self) -> List["Expr"]:
         return [self.inner]
-
-    def simplify(self) -> "Expr":
-        inner = self.inner.simplify()
-        return self.__class__(inner)
 
     def __repr__(self) -> str:
         return _repr(self.inner, self._label)
@@ -1212,33 +1183,6 @@ class log(SingleFunc):
             return inner.exponent
         
         return super().__new__(cls)
-
-    def simplify(self) -> Expr:
-        inner = self.inner.simplify()
-        
-        # IDK if this should be in simplify or if it should be like expand, in a diff function
-        # like you can move stuff together or move stuff apart
-        if isinstance(inner, Power):
-            return (log(inner.base) * inner.exponent).simplify()
-        if isinstance(inner, Prod):
-            return Sum([log(t) for t in inner.terms]).simplify()
-        if isinstance(inner, Sum) and isinstance(inner.factor(), Prod):
-            return Sum([log(t) for t in inner.factor().terms]).simplify()
-        
-        # let's agree on some standards
-        # i dont love this, can change
-        if isinstance(inner, (sec, csc, cot)):
-            return -1 * log(inner.reciprocal_class(inner.inner)).simplify()
-        
-        # ugly patch lmfao. need better overall philosophy for this stuff.
-        if isinstance(inner, Abs) and isinstance(inner.inner, Power):
-            return (log(abs(inner.inner.base)) * inner.inner.exponent).simplify()
-        if isinstance(inner, Abs) and isinstance(inner.inner, Prod):
-            return Sum([log(abs(term)) for term in inner.inner.terms]).simplify()
-        if isinstance(inner, Abs) and isinstance(inner.inner, Sum) and isinstance(inner.inner.factor(), Prod):
-            return Sum([log(abs(term)) for term in inner.inner.factor().terms]).simplify()
-
-        return log(inner)
 
     def diff(self, var) -> Expr:
         return self.inner.diff(var) / self.inner

@@ -15,6 +15,7 @@ from .polynomial import (Polynomial, is_polynomial, polynomial_to_expr,
                          rid_ending_zeros, to_const_polynomial)
 from .regex import (count, general_count, replace, replace_class,
                     replace_factory)
+from .simplify import pythagorean_simplification
 from .utils import ExprFn, random_id
 
 Number_ = Union[Fraction, int]
@@ -788,6 +789,7 @@ class ProductToSum(Transform):
 
     @staticmethod
     def condition(expr: Expr) -> bool:
+        expr = remove_const_factor(expr)
         if isinstance(expr, Prod):
             if len(expr.terms) == 2 and all(
                 isinstance(term, (sin, cos)) for term in expr.terms
@@ -802,10 +804,12 @@ class ProductToSum(Transform):
     
     @staticmethod
     def perform(expr: Union[Prod, Power]) -> Expr:
-        if isinstance(expr, Prod):
-            return ProductToSum._perform_on_terms(*expr.terms)
+        nexpr = remove_const_factor(expr)
+        const = expr / nexpr
+        if isinstance(nexpr, Prod):
+            return const * ProductToSum._perform_on_terms(*nexpr.terms)
 
-        return ProductToSum._perform_on_terms(expr.base, expr.base) ** (expr.exponent / 2)
+        return const * ProductToSum._perform_on_terms(nexpr.base, nexpr.base) ** (nexpr.exponent / 2)
 
     @staticmethod
     def _perform_on_terms(a: Union[sin, cos], b: Union[sin, cos]) -> Expr:
@@ -1203,9 +1207,9 @@ class Simplify(Transform):
         # The point of these 2 transforms is to rewrite the expr in a not necessarily 'simpler' form.
         if isinstance(t, (RewritePythagorean, RewriteTrig)):
             return False
-        return node.expr.simplify() != node.expr
+        return pythagorean_simplification(node.expr, verbose=True)[1]
     def forward(self, node: Node) -> None:
-        new = node.expr.simplify()
+        new = pythagorean_simplification(node.expr)
         node.add_child(Node(new, node.var, self, node))
     def backward(self, node: Node) -> None:
         super().backward(node)

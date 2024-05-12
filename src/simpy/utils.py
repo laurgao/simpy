@@ -1,10 +1,11 @@
 import random
 import string
-from typing import Callable
+from typing import Callable, Optional
 
 from .expr import Expr
 
 ExprFn = Callable[[Expr], Expr]
+OptionalExprFn = Callable[[Expr], Optional[Expr]]
 
 def random_id(length):
     # Define the pool of characters you can choose from

@@ -8,7 +8,7 @@ from typing import (Any, Callable, Dict, Iterable, List, Optional, Tuple, Type,
                     Union)
 
 from .expr import Const, Expr, Power, Prod, SingleFunc, Sum, Symbol, cast
-from .utils import ExprFn, random_id
+from .utils import ExprFn, OptionalExprFn, random_id
 
 
 class Any_(Expr):
@@ -289,6 +289,48 @@ def replace_factory_list(conditions: Iterable[Callable[[Expr], bool]], performs:
         raise NotImplementedError(f"replace not implemented for {expr.__class__.__name__}")
 
     return _replace
+
+def kinder_replace(expr: Expr, perform: OptionalExprFn, **kwargs) -> Expr:
+    return kinder_replace_many(expr, [perform], **kwargs)
+
+def kinder_replace_many(expr: Expr, performs: Iterable[OptionalExprFn], verbose=False, _d=False) -> Expr:
+    """
+    kinder, bc some queries dont have a clean condition.
+    ex: checking multiple any_ matches.
+
+    assumes mutual exclusivity.
+    it' snot possible to do the thing where we process the output of one transform thru other transforms
+    bc sometimes the output of one trnasfomr effects the overall expr structure which makes another
+    transform possible.
+    """
+    is_hit = {"hi": False}
+
+    def _replace(e: Expr) -> Expr:
+        for p in performs:
+            new = p(e)
+            if new:
+                is_hit["hi"] = True
+                return new
+
+        # find all instances of old in expr and replace with new
+        if isinstance(e, Sum):
+            return Sum([_replace(t) for t in e.terms])
+        if isinstance(e, Prod):
+            return Prod([_replace(t) for t in e.terms])
+        if isinstance(e, Power):
+            return Power(base=_replace(e.base), exponent=_replace(e.exponent))
+        # i love recursion
+        if isinstance(e, SingleFunc):
+            return e.__class__(_replace(e.inner))
+        
+        if len(e.children()) == 0: # Number, Symbol
+            return e
+        
+        raise NotImplementedError(f"replace not implemented for {e.__class__.__name__}")
+
+    ans = _replace(expr)
+    return (ans, is_hit["hi"]) if verbose else ans
+
 
 
 def replace(expr: Expr, old: Expr, new: Expr) -> Expr:

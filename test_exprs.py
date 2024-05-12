@@ -31,7 +31,10 @@ def test_equality():
     assert cos(x * 2) == cos(x * 2)
 
 
-def test_basic_simplification():
+def test_defaults():
+    assert Sum([]) == 0
+    assert Prod([]) == 1
+
     assert_eq_strict(x * 0, 0)
     assert_eq_strict(x * 2, 2 * x)
     assert_eq_strict(x**2, x * x)
@@ -70,6 +73,9 @@ def test_expand_prod():
     # make sure that a numberator with a single sum gets expanded
     assert_eq_strict(((2 + x) / sin(x)).expand(), (2 / sin(x) + x / sin(x)))
 
+def test_expand_neg_power():
+    expr = (cos(2*x) + 1)**2 - 8/(3*(cos(2*x) + 1)**3) + 2/(cos(2*x) + 1)**-4
+    assert expr.expandable()
 
 def test_flatten():
     assert_eq_strict(x + (2 + y), x + 2 + y)
@@ -112,7 +118,7 @@ def test_repr():
     assert repr(pi * 2) == "2pi"
     assert repr(pi * -2) == "-2pi"
     # make sure polynomials show up in the correct order
-    poly = x ** 5 + 3 * x ** 4 / 2 + x ** 2 + 2 * x + 3
+    poly = 3 * x ** 4 / 2 + x ** 5 + 2 * x + 3 + x ** 2
     assert repr(poly) == "x^5 + 3x^4/2 + x^2 + 2x + 3"
 
 @pytest.mark.xfail
