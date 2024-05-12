@@ -220,6 +220,7 @@ class Associative:
     terms: List[Expr]
 
     def __post_init__(self):
+        assert len(self.terms) >= 2
         # Calls super because: If we have Sum(Associative, Expr) and Sum.__post_init__()
         # will call Associative.__post_init__(). the super in Associative will call Expr.__post_init__()
         # (This is according to chatgpt and I haven't confirmed it yet.)
@@ -227,8 +228,8 @@ class Associative:
         self._flatten()
         self._sort()
 
-    @staticmethod
-    def _flatten_terms(terms: List[Expr], cls: Type["Associative"]):
+    @classmethod
+    def _flatten_terms(cls, terms: List[Expr]):
         """Utility function for flattening a list.
         """
         new_terms = []
@@ -247,7 +248,7 @@ class Associative:
         Can go down as many levels deep as necessary.
         """
         # no need to flatten in simplify because we can then always assume ALL Prod and Sum class objects are flattened
-        self.terms = self._flatten_terms(self.terms, self.__class__)
+        self.terms = self._flatten_terms(self.terms)
 
     def children(self) -> List["Expr"]:
         return self.terms
@@ -291,7 +292,10 @@ class Associative:
         self.terms = sorted(self.terms, key=key)
 
 
-class Number(ABC):
+class Num(ABC):
+    """all subclasses must implement value"""
+    value = None
+
     def diff(self, var) -> "Const":
         return Const(0)
 
@@ -301,19 +305,60 @@ class Number(ABC):
     @cast
     def subs(self, subs: Dict[str, "Const"]):
         return self
+   
+    @cast
+    def evalf(self, subs: Dict[str, "Const"]):
+        return self
+    
+    def __repr__(self):
+        # default, override if necessary.
+        return repr(self.value)
+
+    @cast
+    def __eq__(self, other):
+        return isinstance(other, Num) and self.value == other.value
+
+    @cast
+    def __ge__(self, other):
+        return isinstance(other, Num) and self.value >= other.value
+
+    @cast
+    def __gt__(self, other):
+        return isinstance(other, Num) and self.value > other.value
+
+    @cast
+    def __le__(self, other):
+        return isinstance(other, Num) and self.value <= other.value
+
+    @cast
+    def __lt__(self, other):
+        return isinstance(other, Num) and self.value < other.value
+    
+    @property
+    def is_subtraction(self):
+        return self.value < 0
 
 
-@dataclass
-class Const(Number, Expr):
+class Const(Num, Expr):
     value: Fraction
 
-    def __post_init__(self):
-        assert (
-            isinstance(self.value, (int, Fraction)) or int(self.value) == self.value
-        ), f"got value={self.value} not allowed Const"
+    def __new__(cls, value):
+        if value == float('inf'):
+            return Infinity()
+        if value == float('-inf'):
+            return NegInfinity()
+        if value == float('NaN'):
+            return NaN()
 
-        if not isinstance(self.value, Fraction):
-            self.value = Fraction(self.value)
+        assert (
+            isinstance(value, (int, Fraction)) or int(value) == value
+        ), f"got value={value} not allowed Const"
+        return super().__new__(cls)
+
+    def __init__(self, value):
+        if not isinstance(value, Fraction):
+            value = Fraction(value)
+        self.value = value
 
     def __repr__(self) -> str:
         return str(self.value)
@@ -348,30 +393,6 @@ class Const(Number, Expr):
         return Const(-self.value)
     ###
 
-    @cast
-    def __eq__(self, other):
-        return isinstance(other, Const) and self.value == other.value
-
-    @cast
-    def __ge__(self, other):
-        return isinstance(other, Const) and self.value >= other.value
-
-    @cast
-    def __gt__(self, other):
-        return isinstance(other, Const) and self.value > other.value
-
-    @cast
-    def __le__(self, other):
-        return isinstance(other, Const) and self.value <= other.value
-
-    @cast
-    def __lt__(self, other):
-        return isinstance(other, Const) and self.value < other.value
-    
-    @cast
-    def evalf(self, subs: Dict[str, "Const"]):
-        return self
-
     def latex(self) -> str:
         if self.value.denominator == 1:
             return f"{self.value}"
@@ -395,19 +416,11 @@ class Const(Number, Expr):
             return Const(self.value % other.value)
         else:
             return NotImplemented
-        
-    @property
-    def is_subtraction(self):
-        return self.value < 0
-
 
 
 @dataclass
-class Pi(Number, Expr):
-    @cast
-    def evalf(self, subs: Dict[str, "Const"]):
-        # return 3.141592653589793
-        return self
+class Pi(Num, Expr):
+    value = 3.141592653589793
 
     def __repr__(self) -> str:
         return "pi"
@@ -417,11 +430,8 @@ class Pi(Number, Expr):
 
 
 @dataclass
-class E(Number, Expr):
-    @cast
-    def evalf(self, subs: Dict[str, "Const"]):
-        return self
-        # return 2.718281828459045
+class E(Num, Expr):
+    value = 2.718281828459045
 
     def __repr__(self) -> str:
         return "e"
@@ -433,20 +443,52 @@ class E(Number, Expr):
         return isinstance(other, E)
     
 
-@dataclass
-class Infinity(Number, Expr):
-    @cast
-    def evalf(self, subs: Dict[str, "Const"]):
-        return self
+class Infinity(Num, Expr):
+    value = float("inf")
 
-    def __repr__(self) -> str:
-        return "inf"
+    def __init__(self):
+        pass
 
     def latex(self) -> str:
         return "\\infty"
     
-    def __eq__(self, other) -> bool:
-        return isinstance(other, Infinity)
+    def __abs__(self) -> "Infinity":
+        return self
+
+    def reciprocal(self) -> "Const":
+        return Const(0)
+    
+    def __neg__(self):
+        return NegInfinity()
+
+
+class NegInfinity(Num, Expr):
+    value = float("-inf")
+
+    def __init__(self):
+        pass
+
+    def latex(self) -> str:
+        return "-\\infty"
+    
+    def __abs__(self) -> "Infinity":
+        return oo
+
+    def reciprocal(self) -> "Const":
+        return Const(0)
+    
+    def __neg__(self):
+        return oo
+
+
+class NaN(Num, Expr):
+    value = float("-inf")
+
+    def __init__(self):
+        pass
+
+    def latex(self):
+        return NotImplemented
 
 
 pi = Pi()
@@ -481,6 +523,7 @@ class Symbol(Expr):
     def latex(self) -> str:
         return self.name
 
+Accumulateable = (Const, Infinity, NegInfinity)
 
 @dataclass
 class Sum(Associative, Expr):
@@ -491,7 +534,7 @@ class Sum(Associative, Expr):
         - accumulate like terms & constants
         - sort
         """
-        terms = cls._flatten_terms(terms, cls)
+        terms = cls._flatten_terms(terms)
         # accumulate all like terms
         new_terms = []
         for i, term in enumerate(terms):
@@ -518,15 +561,15 @@ class Sum(Associative, Expr):
             new_terms.append(Prod([new_coeff] + non_const_factors1))
 
         # accumulate all constants
-        const = sum(t.value for t in new_terms if isinstance(t, Const))
-        non_constant_terms = [t for t in new_terms if not isinstance(t, Const)]
+        const = sum(t.value for t in new_terms if isinstance(t, Accumulateable))
+        non_constant_terms = [t for t in new_terms if not isinstance(t, Accumulateable)]
 
         final_terms = ([Const(const)] if const != 0 else []) + non_constant_terms
         if len(final_terms) == 0:
             return Const(0)
         if len(final_terms) == 1:
             return final_terms[0]
-         
+
         instance = super().__new__(cls)
         instance.terms = final_terms
         return instance
@@ -697,7 +740,7 @@ class Prod(Associative, Expr):
     def __new__(cls, terms: List[Expr]) -> "Expr":
         # We need to flatten BEFORE we accumulate like terms
         # ex: Prod(x, Prod(Power(x, -1), y))
-        initial_terms = cls._flatten_terms(terms, cls)
+        initial_terms = cls._flatten_terms(terms)
 
         # accumulate all like terms
         new_terms = []
@@ -725,12 +768,12 @@ class Prod(Associative, Expr):
         
         # accumulate constants to the front
         const = reduce(
-            lambda x, y: x * y, [t.value for t in new_terms if isinstance(t, Const)], 1
+            lambda x, y: x * y, [t.value for t in new_terms if isinstance(t, Accumulateable)], 1
         )
         if const == 0:
             return Const(0)
 
-        non_constant_terms = [t for t in new_terms if not isinstance(t, Const)]
+        non_constant_terms = [t for t in new_terms if not isinstance(t, Accumulateable)]
         new_terms = ([] if const == 1 else [Const(const)]) + non_constant_terms
         
         if len(new_terms) == 0:
@@ -937,9 +980,10 @@ class Power(Expr):
 
         return "{" + _term_latex(self.base) + "}^{" + _term_latex(self.exponent) + "}"
 
+    @cast
     def __new__(cls, base: Expr, exponent: Expr) -> "Expr":
-        b = _cast(base)
-        x = _cast(exponent)
+        b = base
+        x = exponent
 
         default_return = super().__new__(cls)
         default_return.base = b
@@ -955,7 +999,7 @@ class Power(Expr):
             return Const(0)
         if b == 1:
             return Const(1)
-        if isinstance(b, Const) and isinstance(x, Const):
+        if isinstance(b, Accumulateable) and isinstance(x, Accumulateable):
             try:
                 return Const(b.value**x.value)
             except:
@@ -1021,7 +1065,7 @@ class Power(Expr):
             else:
                 return -Power(-b, x)
         # not fully exhaustive.
-        if (isinstance(b, Number) or isinstance(b, Prod) and all(isinstance(t, Number) for t in b.terms)) and not b.is_subtraction:
+        if (isinstance(b, Num) or isinstance(b, Prod) and all(isinstance(t, Num) for t in b.terms)) and not b.is_subtraction:
             if x == oo:
                 return oo
             if x == -oo:
@@ -1547,11 +1591,5 @@ def diff(expr: Expr, var: Optional[Symbol]) -> Expr:
 def remove_const_factor(expr: Expr) -> Expr:
     if isinstance(expr, Prod):
         new_terms = [t for t in expr.terms if len(t.symbols()) > 0]
-        # simplifying manually because don't wanna invoke the recursive stuff by calling
-        # simplify
-        if len(new_terms) == 0:
-            return Const(1)
-        if len(new_terms) == 1:
-            return new_terms[0]
         return Prod(new_terms)
     return expr
