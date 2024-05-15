@@ -936,9 +936,9 @@ class Power(Expr):
     exponent: Expr
 
     def __repr__(self) -> str:
-        isfraction = lambda x: isinstance(x, Const) and x.value.denominator != 1
+        isfractionorneg = lambda x: isinstance(x, Const) and (x.value.denominator != 1 or x < 0)
         def _term_repr(term):
-            if isinstance(term, Sum) or isinstance(term, Prod) or isfraction(term):
+            if isinstance(term, Sum) or isinstance(term, Prod) or isfractionorneg(term):
                 return "(" + repr(term) + ")"
             return repr(term)
 

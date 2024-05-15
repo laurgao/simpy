@@ -104,6 +104,7 @@ def test_repr():
     assert (2 * (2 + x)).__repr__() == "2(x + 2)"
     assert (2 / (2 + x)).__repr__() == "2/(x + 2)"
     assert repr(2 * (2 + x) ** (-2)) == repr(2 / (2 + x) ** 2) == "2/(x + 2)^2"
+    assert repr(Const(-1) ** Fraction(1, 3)) == "(-1)^(1/3)"
     assert sqrt(3).__repr__() == "sqrt(3)"
     assert repr(1 / sqrt(1 - x**2)) == "1/sqrt(-x^2 + 1)"
     assert repr(sqrt(1/x)) == "1/sqrt(x)"
@@ -119,8 +120,8 @@ def test_repr():
     assert repr(pi * 2) == "2pi"
     assert repr(pi * -2) == "-2pi"
     # make sure polynomials show up in the correct order
-    poly = 3 * x ** 4 / 2 + x ** 5 + 2 * x + 3 + x ** 2
-    assert repr(poly) == "x^5 + 3x^4/2 + x^2 + 2x + 3"
+    poly = 3 * x ** 4 / 2 + x ** 5 + 2 * x + 3 - x ** 2
+    assert repr(poly) == "x^5 + 3x^4/2 - x^2 + 2x + 3"
 
 @pytest.mark.xfail
 def test_circular_repr():
