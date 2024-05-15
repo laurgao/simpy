@@ -123,9 +123,20 @@ def test_repr():
     poly = 3 * x ** 4 / 2 + x ** 5 + 2 * x + 3 - x ** 2
     assert repr(poly) == "x^5 + 3x^4/2 - x^2 + 2x + 3"
 
+
+def test_neg_power():
+    expr = Const(-1) ** Fraction(5, 2) # this is i. ig it should just stay this way & not simplify.
+    breakpoint()
+    assert debug_repr(expr) == "Power(-1, 5/2)"
+
+
 @pytest.mark.xfail
 def test_circular_repr():
     expr = Const(-1) ** Fraction(5, 2) * -2
+    repr(expr)
+    expr = Prod([-Fraction(4, 5), Const(-1)**Fraction(5, 2)])
+    repr(expr)
+    expr = Prod([-Fraction(4, 5), Const(-1)**Fraction(5, 2)*x**Fraction(5,2)])
     repr(expr)
 
 

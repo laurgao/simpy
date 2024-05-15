@@ -416,6 +416,10 @@ class Const(Num, Expr):
             return Const(self.value % other.value)
         else:
             return NotImplemented
+        
+    @property
+    def is_int(self) -> bool:
+        return self.value.denominator == 1
 
 
 @dataclass
@@ -527,6 +531,7 @@ Accumulateable = (Const, Infinity, NegInfinity)
 
 @dataclass
 class Sum(Associative, Expr):
+    @cast
     def __new__(cls, terms: List[Expr]) -> "Expr":
         """When a sum is initiated:
         - terms are converted to expr 
@@ -729,6 +734,7 @@ def deconstruct_power(expr: Expr) -> Tuple[Expr, Const]:
 
 @dataclass
 class Prod(Associative, Expr):
+    @cast
     def __new__(cls, terms: List[Expr]) -> "Expr":
         # We need to flatten BEFORE we accumulate like terms
         # ex: Prod(x, Prod(Power(x, -1), y))
@@ -1000,7 +1006,7 @@ class Power(Expr):
             elif b.value.denominator != 1 and x < 0:
                 return Power(b.reciprocal(), -x)
             
-            if x.value.denominator % 2 == 0 and b.value.numerator < 0:
+            if x.value.denominator % 2 == 0 and b < 0:
                 # Cannot be simplified further.
                 return default_return
             
@@ -1112,9 +1118,8 @@ class Power(Expr):
     
     @property
     def is_subtraction(self) -> bool:
-        # not exhaustive properly idk
-        return self.base.is_subtraction and len(self.symbols()) == 0
-
+        # if base is negative and the -1 can be factored out, we would have factored it out in new.
+        return False
 
 @dataclass
 class SingleFunc(Expr):
@@ -1174,6 +1179,7 @@ class log(SingleFunc):
         else:
             return "\\log_{" + self.base.latex() + "}\\left( " + self.inner.latex() + " \\right)"
 
+    @cast
     def __new__(cls, inner: Expr, base: Expr = e):
         if inner == 1:
             return Const(0)
@@ -1495,6 +1501,7 @@ class Abs(SingleFunc):
     def latex(self) -> str:
         return "\\left|" + self.inner.latex() + "\\right|"
 
+    @cast
     def __new__(cls, inner: Expr) -> Expr:
         if isinstance(inner, Const):
             return inner.abs()
