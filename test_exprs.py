@@ -99,6 +99,7 @@ def test_repr():
     # New repr standards!!!
     expr = 1 - x**2
     assert expr.__repr__() == "-x^2 + 1"
+    assert repr(x - 2) == "x - 2"
     assert (2 * x).__repr__() == "2x"
     assert (2 * (2 + x)).__repr__() == "2(x + 2)"
     assert (2 / (2 + x)).__repr__() == "2/(x + 2)"

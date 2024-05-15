@@ -603,8 +603,8 @@ class Sum(Associative, Expr):
         for i, term in enumerate(self.terms):
             if i == 0:
                 ongoing_str += f"{term}"
-            elif isinstance(term, Prod) and term.is_subtraction:
-                ongoing_str += f" - {(term * -1)}"
+            elif term.is_subtraction:
+                ongoing_str += f" - {term * -1}"
             else:
                 ongoing_str += f" + {term}"
 
