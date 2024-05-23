@@ -4,18 +4,26 @@ Still WIP. Ideally need to do stuff like "check if somefactor * cos(sth) + somef
 """
 from collections import defaultdict
 from dataclasses import dataclass, fields
-from typing import (Any, Callable, Dict, Iterable, List, Optional, Tuple, Type,
-                    Union)
+from typing import Any, Callable, Dict, Iterable, List, Tuple, Type
 
 from .expr import Const, Expr, Power, Prod, SingleFunc, Sum, Symbol, cast
 from .utils import ExprFn, OptionalExprFn, random_id
 
 
 class Any_(Expr):
-    def __init__(self, anykey = None):
+    def __init__(self, anykey = None, *, is_multiple_terms=False):
         if not anykey:
             anykey = random_id(10)
-        self.anykey = anykey
+        self._anykey = anykey
+        self._is_multiple_terms = is_multiple_terms
+
+    @property
+    def anykey(self) -> str:
+        return self._anykey
+    
+    @property
+    def is_multiple_terms(self) -> bool:
+        return self._is_multiple_terms
 
     def __eq__(self, other):
         if isinstance(other, Any_):
@@ -26,7 +34,7 @@ class Any_(Expr):
         return False
     
     def __repr__(self) -> str:
-        return "(any" + self.anykey + ")"
+        return "(any_" + self.anykey + ")"
     
     # implementing some Expr abstract methods
     def evalf(self, subs: Dict[str, "Const"]):
@@ -44,22 +52,22 @@ class Any_(Expr):
         raise NotImplementedError(f"Cannot convert {self.__class__.__name__} to latex")
 
 
-    
+
 any_ = Any_()
 
 @cast
-def eq(expr: Expr, query: Expr, up_to_factor = False):
-    return Eq(expr, query, up_to_factor)()
+def eq(expr: Expr, query: Expr, up_to_factor = False, up_to_sum=False):
+    return Eq(expr, query, up_to_factor, up_to_sum=up_to_sum)()
 
 @dataclass
-class Reversed(Expr):
+class Inverse(Expr):
     inner: Expr # = 1
 
     def __eq__(self, other):
-        return isinstance(other, Reversed) and other.inner == self.inner
+        return isinstance(other, Inverse) and other.inner == self.inner
     
     def __repr__(self) -> str:
-        return f"Reversed({self.inner})"
+        return f"Inverse({self.inner})"
 
     # implementing some Expr abstract methods
     def evalf(self, subs: Dict[str, "Const"]):
@@ -95,10 +103,42 @@ def all_same(list_: list):
     return True
     
 
+AnyfindInProgress = Dict[str, List[Expr]]
+Anyfind = Dict[str, Expr]
+
+
+def _anyfinds_eq(x: Anyfind, y: Anyfind):
+    # assert there aren't contradictions.
+    for k in x:
+        if k in y and not y[k] == x[k]:
+            return False
+            
+    for k in y:
+        if k in x and not y[k] == x[k]:
+            return False
+            
+    return True
+
+
+
+def consolidate(query_anyfinds: Dict[str, List[Anyfind]]) -> Anyfind:
+    final = defaultdict(list)
+    for query in query_anyfinds.values():
+        for set in query:
+            if all(any(_anyfinds_eq(x, set) for x in y) for y in query_anyfinds.values()):
+                join_dicts(final, set)
+
+    assert all(all_same(v) for v in final.values())
+    final = {k: v[0] for k, v in final.items()}
+    assert all(any(_anyfinds_eq(x, final) for x in y) for y in query_anyfinds.values())
+    return final
+
+
+
 class Eq:
     """Create a new instance every time you run an Eq comparison.
     """
-    def __init__(self, expr: Expr, query: Expr, up_to_factor: bool = False, decompose_singles=True, _is_divide=False):
+    def __init__(self, expr: Expr, query: Expr, up_to_factor: bool = False, decompose_singles=True, up_to_sum=False, _is_divide=False):
         if expr.has(Any_):
             raise ValueError("Only query can contain 'any' objects.")
 
@@ -107,9 +147,10 @@ class Eq:
         self._up_to_factor = up_to_factor
         self._decompose_singles = decompose_singles
         self._is_divide = _is_divide
+        self._up_to_sum = up_to_sum
 
         # Mutable:
-        self._anyfind: Dict[str, List[Expr]] = defaultdict(list)
+        self._anyfind: AnyfindInProgress = defaultdict(list)
 
         if up_to_factor:
             self._anyfactor = Any_("factor_" + random_id(5))
@@ -119,16 +160,58 @@ class Eq:
     def __call__(self) -> Tuple[bool, ...]:
         """Returns (is_equal, factor, anyfinds) if up_to_factor=True and (is_equal, anyfinds) otherwise.
         """
-        ans = self._eq(self._expr, self._query)
-        if ans is False:
-            return (False, None, None) if self._up_to_factor else (False, None)
+        falsereturn = (False, None, None) if self._up_to_factor else (False, None)
+        if self._up_to_sum:
+            # Usually, this means that self._expr is a sum and self._query is also a sum.
+            # we want to check if the query.terms is a subset of expr.terms
+            if not isinstance(self._expr, Sum) or not isinstance(self._query, Sum):
+                raise NotImplementedError
+            if not len(self._query.terms) <= len(self._expr.terms):
+                return falsereturn
+            
+            # i want to prioritize most exact returns first.
+            # actually i want to have most exact return only fuck shit lmao
 
-        for k, v in self._anyfind.items():
-            if all_same(v):
-                if self._decompose_singles:
+            # xx = [[self._eq(expr_term, term) for expr_term in self._expr.terms] for term in self._query.terms]
+            
+            # return the anyfind of each one
+            # if there is like sth in each query terms where the anyfind is the same...
+
+            def _is_sum_eq(expr: Sum, query: Sum) -> tuple:
+                query_anyfinds: Dict[str, List[Anyfind]] = defaultdict(list)
+                for query_term in query.terms:
+                    for expr_term in expr.terms:
+                        is_eq, anyfinds = Eq(expr_term, query_term, decompose_singles=False)()
+                        if is_eq and all(any(_anyfinds_eq(x, anyfinds) for x in y) for y in query_anyfinds.values()):
+                            query_anyfinds[repr(query_term)].append(anyfinds)
+
+                    if query_anyfinds[repr(query_term)] == []:
+                        breakpoint()
+                        return False, None
+                
+                breakpoint()
+                final_anyfinds = consolidate(query_anyfinds)
+                return True, final_anyfinds
+            
+            
+            ans, anyfinds = _is_sum_eq(self._expr, self._query)
+            if ans is False:
+                return falsereturn
+            self._anyfind = anyfinds
+
+        else:
+            ans = self._eq(self._expr, self._query)
+            if ans is False:
+                return falsereturn
+
+            for k, v in self._anyfind.items():
+                if all_same(v):
                     self._anyfind[k] = v[0]
-            else:
-                return (False, None, None) if self._up_to_factor else (False, None)
+                else:
+                    return falsereturn
+
+        ## AT THIS POINT:
+        self._anyfind: Anyfind
 
         factor = None 
         if self._up_to_factor:
@@ -163,16 +246,19 @@ class Eq:
                 return True
 
             if len(one.symbols()) == 0:
-                join_dicts(self._anyfind, quotient_anyfinds)
                 anys = get_anys(one)
+
+                # if one contains a factor of any.
                 if len(anys) == 1:
                     anyvalue = one / anys[0]
-                    self._anyfind[anys[0].anykey].append(anyvalue)
-                    return True
+                    if get_anys(anyvalue) == []:
+                        join_dicts(self._anyfind, quotient_anyfinds)
+                        self._anyfind[anys[0].anykey].append(anyvalue)
+                        return True
 
-                for a in anys:
-                    self._anyfind[a.anykey].append(Reversed(one))
-                return True
+                # for a in anys:
+                #     self._anyfind[a.anykey].append(Inverse(one))
+                # return True
         
         if not expr.__class__ == query.__class__:
             return False
@@ -221,13 +307,10 @@ def anydivide(num: Expr, denom: Expr) -> Tuple[Expr, Dict[str, List[Expr]]]:
     new_nf = [nf for nf in numfactors if nf is not None]
     return Prod(new_nf) / Prod(new_df), anyfinds
 
-def join_dicts(d1: Dict[str, List[Expr]], d2: Dict[str, List[Expr]]) -> None:
+def join_dicts(d1: AnyfindInProgress, d2: Anyfind) -> None:
     """Mutates d1 to add the stuff in d2"""
     for k in d2.keys():
-        if k in d1:
-            d1[k].extend(d2[k])
-        else:
-            d1[k] = d2[k]
+        d1[k].append(d2[k])
 
 @cast
 def count(expr: Expr, query: Expr) -> int:

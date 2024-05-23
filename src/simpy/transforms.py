@@ -1153,7 +1153,8 @@ class CompleteTheSquare(Transform):
 
 class RewritePythagorean(Transform):
     """
-
+    sin(x)^(2n+1) -> sin(x) (1-cos^2(x))^n
+    
     ykw idk if this transform has ever helped anyone when it's not performed at the outer level of nesting.
     """
     @staticmethod

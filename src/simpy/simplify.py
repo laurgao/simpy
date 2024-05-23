@@ -59,8 +59,9 @@ def _pythagorean_perform(sum: Expr) -> Optional[Expr]:
         (1 - sin(any_) ** 2, lambda x: cos(x) ** 2),
         (1 - cos(any_) ** 2, lambda x: sin(x) ** 2),
     ]
-    for condition, perform in identities:
-        is_eq, factor, inner = eq(sum, condition, up_to_factor=True)
+    for cond, perform in identities:
+        is_eq, factor, inner = eq(sum, cond, up_to_factor=True, up_to_sum=True)
+        breakpoint()
         if is_eq:
             new_sum = factor * perform(inner)
             return new_sum

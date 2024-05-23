@@ -867,7 +867,7 @@ class Prod(Associative, Expr):
 
     @property
     def is_subtraction(self):
-        return isinstance(self.terms[0], Const) and self.terms[0].value < 0
+        return isinstance(self.terms[0], Const) and self.terms[0] < 0
 
     @cast
     def expandable(self) -> bool:
@@ -917,7 +917,6 @@ class Prod(Associative, Expr):
                 for e in self.terms
             ]
         )
-
 
 
 def debug_repr(expr: Expr) -> str:
