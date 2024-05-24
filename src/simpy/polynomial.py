@@ -11,18 +11,18 @@ def is_polynomial(expr: Expr, var: Symbol) -> bool:
     except AssertionError:
         return False
 
-def _to_const_polynomial(expr: Expr, var: Symbol, answer: List[Const] = None, multiplier:Const=Const(1)) -> List[Const]:
+def _to_const_polynomial(expr: Expr, var: Symbol, answer: List[Rat] = None, multiplier:Rat=Rat(1)) -> List[Rat]:
     if answer is None:
-        answer: List[Const] = []
+        answer: List[Rat] = []
     
-    def _add_answer(const: Const, idx: int, answer: List[Const]=answer, multiplier: Const=multiplier):
+    def _add_answer(const: Rat, idx: int, answer: List[Rat]=answer, multiplier: Rat=multiplier):
         new_const = (const * multiplier).simplify() # you really shouldn't need simplify here. combine like terms should happen in init.
         if idx < len(answer):
             answer[idx] += new_const
         elif idx == len(answer):
             answer.append(new_const)
         else:
-            answer += [Const(0)] * (idx - len(answer))
+            answer += [Rat(0)] * (idx - len(answer))
             answer.append(new_const)
 
     
@@ -37,15 +37,15 @@ def _to_const_polynomial(expr: Expr, var: Symbol, answer: List[Const] = None, mu
         # has to be product of 2 terms: a constant and a power.
         assert len(expr.terms) == 2
         const, other = expr.terms
-        assert isinstance(const, Const)
+        assert isinstance(const, Rat)
         _to_const_polynomial(other, var, answer, multiplier=const)
     elif isinstance(expr, Power):
         assert expr.base == var
-        assert isinstance(expr.exponent, Const) and expr.exponent.value == int(expr.exponent.value) and expr.exponent.value >= 1
+        assert isinstance(expr.exponent, Rat) and expr.exponent.value == int(expr.exponent.value) and expr.exponent.value >= 1
         _add_answer(1, int(expr.exponent.value))
     elif isinstance(expr, Symbol):
         assert expr == var
-        _add_answer(Const(1), 1)
+        _add_answer(Rat(1), 1)
     else:
         raise AssertionError(f"Not allowed expr for polynomial: {expr}")
     
@@ -58,7 +58,7 @@ def to_const_polynomial(expr: Expr, var: Symbol) -> Polynomial:
 
 
 def polynomial_to_expr(poly: Polynomial, var: Symbol) -> Expr:
-    final = Const(0)
+    final = Rat(0)
     for i, element in enumerate(poly):
         final += element * var**i
     return final.simplify()

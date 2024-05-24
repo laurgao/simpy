@@ -6,7 +6,7 @@ from test_utils import x, y
 
 
 def test_any_basic():
-    assert not eq(Const(1), Const(-1))[0]
+    assert not eq(Rat(1), Rat(-1))[0]
     assert eq(sin(x), sin(any_))[0]
 
 

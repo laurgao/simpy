@@ -5,7 +5,7 @@ from test_utils import assert_eq_strict, assert_eq_value, x, y
 def assert_diff(a: Expr, b: Expr):
     assert_eq_value(diff(a, x), b) # sometimes requires expand.
 
-def assert_diff_(a: Expr, b: Const, c: Const):
+def assert_diff_(a: Expr, b: Rat, c: Rat):
     ans = diff(a, x).evalf({"x": b})
     assert_eq_strict(ans, c)
 

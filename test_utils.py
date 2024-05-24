@@ -1,8 +1,7 @@
 from typing import Optional, Tuple, Type
 
-from src.simpy.expr import (Const, Expr, Power, SingleFunc, Symbol,
-                            TrigFunction, cast, cos, debug_repr, sec, symbols,
-                            tan)
+from src.simpy.expr import (Expr, Power, Rat, SingleFunc, Symbol, TrigFunction,
+                            cast, cos, debug_repr, sec, symbols, tan)
 from src.simpy.integration import integrate
 from src.simpy.regex import replace_class, replace_factory
 
@@ -31,7 +30,7 @@ def assert_eq_plusc(a: Expr, b: Expr, *vars):
         assert all(var not in diff.symbols() for var in vars), f"diff = {diff}"
         
 def is_cls_squared(expr, cls) -> bool:
-    return isinstance(expr, Power) and isinstance(expr.base, cls) and isinstance(expr.exponent, Const) and expr.exponent % 2 == 0
+    return isinstance(expr, Power) and isinstance(expr.base, cls) and isinstance(expr.exponent, Rat) and expr.exponent % 2 == 0
 
 def only_contains_class_squared(expr: Expr, cls: Type[SingleFunc]) -> bool:
     """Return if it's a function of cls squared.

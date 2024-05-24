@@ -6,7 +6,7 @@ from collections import defaultdict
 from dataclasses import dataclass, fields
 from typing import Any, Callable, Dict, Iterable, List, Tuple, Type
 
-from .expr import Const, Expr, Power, Prod, SingleFunc, Sum, Symbol, cast
+from .expr import Expr, Power, Prod, Rat, SingleFunc, Sum, Symbol, cast
 from .utils import ExprFn, OptionalExprFn, random_id
 
 
@@ -37,7 +37,7 @@ class Any_(Expr):
         return "(any_" + self.anykey + ")"
     
     # implementing some Expr abstract methods
-    def evalf(self, subs: Dict[str, "Const"]):
+    def evalf(self, subs: Dict[str, "Rat"]):
         raise NotImplementedError(f"Cannot evaluate {self}")
     
     def children(self) -> List["Expr"]:
@@ -70,7 +70,7 @@ class Inverse(Expr):
         return f"Inverse({self.inner})"
 
     # implementing some Expr abstract methods
-    def evalf(self, subs: Dict[str, "Const"]):
+    def evalf(self, subs: Dict[str, "Rat"]):
         raise NotImplementedError(f"Cannot evaluate {self}")
     
     def children(self) -> List["Expr"]:
@@ -241,7 +241,7 @@ class Eq:
             # You don't get to divide if we already is --- prevents inf recursion.
             one, quotient_anyfinds = anydivide(query,expr)
             if isinstance(one, Any_):
-                self._anyfind[one.anykey].append(Const(1))
+                self._anyfind[one.anykey].append(Rat(1))
                 join_dicts(self._anyfind, quotient_anyfinds)
                 return True
 

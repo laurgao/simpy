@@ -20,15 +20,21 @@ def test_equality():
     assert x * y == y * x
 
     # consts should handle equality, inequality, greater than, less than
-    assert Const(2) == 2
-    assert Const(2) != 3
-    assert 2 == Const(2)
-    assert 2 < Const(3)
-    assert 2 <= Const(2)
-    assert Const(2) == Const(2)
+    assert Rat(2) == 2
+    assert Rat(2) != 3
+    assert 2 == Rat(2)
+    assert 2 < Rat(3)
+    assert 2 <= Rat(2)
+    assert Rat(2) == Rat(2)
 
     # trig functions aren't dataclasses so this is more liable to not working
     assert cos(x * 2) == cos(x * 2)
+
+
+def test_floats():
+    assert_eq_strict(Float(3.2), Rat(16, 5))
+    assert_eq_strict(Sum([Float(2.32), Float(.31)]), Float(2.63))
+    assert_eq_strict(Prod([Float(2.32), Float(.31)]), Float(0.7192))
 
 
 def test_defaults():
@@ -60,7 +66,7 @@ def test_prod_combines_like_terms_prod():
 def test_basic_power_simplification():
     assert_eq_strict(x**0, 1)
     assert_eq_strict(x**1, x)
-    assert_eq_strict(Const(2) ** 2, 4)
+    assert_eq_strict(Rat(2) ** 2, 4)
     assert_eq_strict(sqrt(4), 2)
     assert_eq_strict(sqrt(x**2), x)
     assert_eq_strict(2/sqrt(2), sqrt(2))
@@ -104,7 +110,7 @@ def test_repr():
     assert (2 * (2 + x)).__repr__() == "2(x + 2)"
     assert (2 / (2 + x)).__repr__() == "2/(x + 2)"
     assert repr(2 * (2 + x) ** (-2)) == repr(2 / (2 + x) ** 2) == "2/(x + 2)^2"
-    assert repr(Const(-1) ** Fraction(1, 3)) == "(-1)^(1/3)"
+    assert repr(Rat(-1) ** Fraction(1, 3)) == "(-1)^(1/3)"
     assert sqrt(3).__repr__() == "sqrt(3)"
     assert repr(1 / sqrt(1 - x**2)) == "1/sqrt(-x^2 + 1)"
     assert repr(sqrt(1/x)) == "1/sqrt(x)"
@@ -125,18 +131,18 @@ def test_repr():
 
 
 def test_neg_power():
-    expr = Const(-1) ** Fraction(5, 2) # this is i. ig it should just stay this way & not simplify.
+    expr = Rat(-1) ** Fraction(5, 2) # this is i. ig it should just stay this way & not simplify.
     breakpoint()
     assert debug_repr(expr) == "Power(-1, 5/2)"
 
 
 @pytest.mark.xfail
 def test_circular_repr():
-    expr = Const(-1) ** Fraction(5, 2) * -2
+    expr = Rat(-1) ** Fraction(5, 2) * -2
     repr(expr)
-    expr = Prod([-Fraction(4, 5), Const(-1)**Fraction(5, 2)])
+    expr = Prod([-Fraction(4, 5), Rat(-1)**Fraction(5, 2)])
     repr(expr)
-    expr = Prod([-Fraction(4, 5), Const(-1)**Fraction(5, 2)*x**Fraction(5,2)])
+    expr = Prod([-Fraction(4, 5), Rat(-1)**Fraction(5, 2)*x**Fraction(5,2)])
     repr(expr)
 
 
@@ -191,68 +197,68 @@ def test_factor_const():
 
 def test_strict_const_power_simplification():
     """TBH I feel like I made this overly complicated LOL but whatever we live with this."""
-    half = Const(Fraction(1, 2))
-    neg_half = Const(Fraction(-1, 2))
+    half = Rat(Fraction(1, 2))
+    neg_half = Rat(Fraction(-1, 2))
 
     # All permutations of (3/4)^(1/2)
-    expr = Power(Const(Fraction(3, 4)), half)
+    expr = Power(Rat(Fraction(3, 4)), half)
     expected = Prod([Power(3, half), half])
     assert_eq_strict(expr, expected)
 
-    expr = Power(Const(Fraction(4, 3)), half)
-    expected = Prod([Const(2), Power(3, neg_half)])
+    expr = Power(Rat(Fraction(4, 3)), half)
+    expected = Prod([Rat(2), Power(3, neg_half)])
     assert_eq_strict(expr, expected)
 
-    expr = Power(Const(Fraction(3, 4)), neg_half)
-    expected = Prod([Power(3, neg_half), Const(2)])
+    expr = Power(Rat(Fraction(3, 4)), neg_half)
+    expected = Prod([Power(3, neg_half), Rat(2)])
     assert_eq_strict(expr, expected)
 
-    expr = Power(Const(Fraction(4, 3)), neg_half)
+    expr = Power(Rat(Fraction(4, 3)), neg_half)
     expected = Prod([half, Power(3, half)])
     assert_eq_strict(expr, expected)
 
     # If the base is negative, it cannot square root.
-    expr = Power(Const(Fraction(-4, 3)), half)
-    expected = Power(Const(Fraction(-4, 3)), half)
+    expr = Power(Rat(Fraction(-4, 3)), half)
+    expected = Power(Rat(Fraction(-4, 3)), half)
     assert_eq_strict(expr, expected)
 
     # but it can cube root
-    expr = Power(Const(Fraction(-8, 3)), Fraction(1,3))
-    expected = Prod([Const(-2), Power(3, Fraction(-1,3))])
+    expr = Power(Rat(Fraction(-8, 3)), Fraction(1,3))
+    expected = Prod([Rat(-2), Power(3, Fraction(-1,3))])
     assert_eq_strict(expr, expected)
-    expr = Power(Const(Fraction(-8, 3)), Fraction(-1,3))
+    expr = Power(Rat(Fraction(-8, 3)), Fraction(-1,3))
     expected = Prod([neg_half, Power(3, Fraction(1,3))])
     assert_eq_strict(expr, expected)
 
 
     # All permutations of (36)^(1/2)
-    expr = Power(Const(Fraction(1, 36)), neg_half)
-    expected = Const(6)
+    expr = Power(Rat(Fraction(1, 36)), neg_half)
+    expected = Rat(6)
     assert_eq_strict(expr, expected)
 
-    expr = Power(Const(36), neg_half)
-    expected = Const(Fraction(1, 6))
+    expr = Power(Rat(36), neg_half)
+    expected = Rat(Fraction(1, 6))
     assert_eq_strict(expr, expected)
 
-    expr = Power(Const(36), half)
-    expected = Const(6)
+    expr = Power(Rat(36), half)
+    expected = Rat(6)
     assert_eq_strict(expr, expected)
 
-    expr = Power(Const(Fraction(1, 36)), half)
-    expected = Const(Fraction(1, 6))
+    expr = Power(Rat(Fraction(1, 36)), half)
+    expected = Rat(Fraction(1, 6))
     assert_eq_strict(expr, expected)
 
     # Nothing should happen when it's unsimplifiable
     # (this might change in the future bc maybe i want standards for frac^(neg x) vs reciprocal_frac^abs(neg x))
-    expr = Power(Const(2), neg_half)
+    expr = Power(Rat(2), neg_half)
     assert debug_repr(expr) == "Power(2, -1/2)"
 
     # This is the expression that caused me problems!!
     # When I was doing it wrong (raising numerator/denominator of Fraction to exponent seperately even when it was 1),
     # Power(Power(2, 1/2), -1) gets simplified to Prod(Power(Power(2, 1/2), -1), 1)
     # Which is the most bullshit ever.
-    expr = Power(Power(Const(2), half), -1)
-    expected = Power(Const(2), neg_half)
+    expr = Power(Power(Rat(2), half), -1)
+    expected = Power(Rat(2), neg_half)
     assert_eq_strict(expr, expected)
 
 
@@ -265,25 +271,25 @@ def test_fractional_power_beauty_standards():
 
     This keeps the repr standard consistent with Power(a, neg x) which is equal.
     """
-    f53 = Const(Fraction(5, 3))
-    f35 = Const(Fraction(3, 5))
-    half = Const(Fraction(1, 2))
-    neg_half = Const(Fraction(-1, 2))
+    f53 = Rat(Fraction(5, 3))
+    f35 = Rat(Fraction(3, 5))
+    half = Rat(Fraction(1, 2))
+    neg_half = Rat(Fraction(-1, 2))
 
     assert_eq_strict(f53 ** half, f35 ** neg_half) # [B]
     assert_eq_strict(f35 ** half, f53 ** neg_half) # [B]
 
     assert repr(Power(half, neg_half)) == "sqrt(2)" # [A]
-    assert_eq_strict(Power(half, neg_half), Power(Const(2), half)) # [A]
-    f17 = Const(Fraction(1, 7))
-    neg_f17 = Const(Fraction(-1, 7))
+    assert_eq_strict(Power(half, neg_half), Power(Rat(2), half)) # [A]
+    f17 = Rat(Fraction(1, 7))
+    neg_f17 = Rat(Fraction(-1, 7))
     assert repr(Power(half, neg_f17)) == "2^(1/7)" # [A]
     assert repr(Power(f17, neg_f17)) == "7^(1/7)" # [A]
 
     # More controversially, [C]:
     # Both of the following should be represented as 1/3^(1/7)
-    e1 = Power(Const(Fraction(1,3)), f17)
-    e2 = Power(Const(3), neg_f17)
+    e1 = Power(Rat(Fraction(1,3)), f17)
+    e2 = Power(Rat(3), neg_f17)
     assert repr(e1) == repr(e2) == "1/3^(1/7)"
     assert_eq_strict(e1, e2)
 
@@ -327,11 +333,11 @@ def test_trigfunctions_special_values_are_correct():
 def test_is_subtraction():
     assert x.is_subtraction is False
     assert (-x).is_subtraction is True
-    assert Const(0).is_subtraction is False
-    assert Const(-2).is_subtraction is True 
+    assert Rat(0).is_subtraction is False
+    assert Rat(-2).is_subtraction is True 
     assert (e ** x).is_subtraction is False
     assert (-e ** -x).is_subtraction is True
-    assert (Const(-3) ** 3).is_subtraction is True
-    assert (Const(Fraction(-3, 2)) ** Fraction(2, 3)).is_subtraction is True
-    assert (Const(Fraction(-3, 2)) ** Fraction(-2, 3)).is_subtraction is True
+    assert (Rat(-3) ** 3).is_subtraction is True
+    assert (Rat(Fraction(-3, 2)) ** Fraction(2, 3)).is_subtraction is True
+    assert (Rat(Fraction(-3, 2)) ** Fraction(-2, 3)).is_subtraction is True
 

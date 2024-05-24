@@ -6,7 +6,7 @@ import warnings
 from collections import defaultdict
 from typing import Callable, Dict, List, Literal, Tuple, Union
 
-from .expr import Const, Expr, Optional, Symbol, cast, nesting
+from .expr import Expr, Optional, Rat, Symbol, cast, nesting
 from .regex import replace, replace_factory
 from .transforms import HEURISTICS, SAFE_TRANSFORMS, Node, _check_if_solveable
 

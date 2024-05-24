@@ -8,7 +8,7 @@ Don't want to disconnect code structure from meaning too much altho it's easy to
 
 import numpy as np
 
-from src.simpy.expr import Const
+from src.simpy.expr import Rat
 from src.simpy.transforms import (CompleteTheSquare, Node, PolynomialDivision,
                                   PullConstant, to_const_polynomial)
 from test_utils import assert_eq_strict, x
@@ -25,7 +25,7 @@ def test_pullconstant():
 
 def test_to_polynomial():
     expr = 6 * x + x **2 
-    assert np.array_equal(to_const_polynomial(expr, x), np.array([Const(0), Const(6), Const(1)]))
+    assert np.array_equal(to_const_polynomial(expr, x), np.array([Rat(0), Rat(6), Rat(1)]))
 
 
 def test_polynomial_division():

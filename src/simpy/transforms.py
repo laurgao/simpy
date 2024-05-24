@@ -7,7 +7,7 @@ from typing import Callable, Dict, List, Literal, Optional, Tuple, Type, Union
 
 import numpy as np
 
-from .expr import (Const, Expr, Power, Prod, Sum, Symbol, TrigFunction, asin,
+from .expr import (Expr, Power, Prod, Rat, Sum, Symbol, TrigFunction, asin,
                    atan, cos, cot, csc, log, nesting, remove_const_factor, sec,
                    sin, sqrt, symbols, tan)
 from .linalg import invert
@@ -256,7 +256,7 @@ class PolynomialDivision(SafeTransform):
 
     def forward(self, node: Node):
         var = node.var
-        quotient = [Const(0)] * (len(self._numerator) - len(self._denominator) + 1)
+        quotient = [Rat(0)] * (len(self._numerator) - len(self._denominator) + 1)
         quotient = np.array(quotient)
 
         while self._numerator.size >= self._denominator.size:
@@ -264,7 +264,7 @@ class PolynomialDivision(SafeTransform):
             quotient_coeff = (self._numerator[-1] / self._denominator[-1])
             quotient[quotient_degree] = quotient_coeff
             self._numerator -= np.concatenate(
-                ([Const(0)] * quotient_degree, self._denominator * quotient_coeff)
+                ([Rat(0)] * quotient_degree, self._denominator * quotient_coeff)
             )
             self._numerator = rid_ending_zeros(self._numerator)
 
@@ -606,9 +606,9 @@ class LinearUSub(Transform):
                 if not is_const_multiple_of_power:
                     return None
                 coeff = (expr / xyz)
-                if coeff == Const(1):
+                if coeff == Rat(1):
                     return None
-                coeff_abs = coeff.abs() if isinstance(coeff, Const) else coeff
+                coeff_abs = coeff.abs() if isinstance(coeff, Rat) else coeff
                 inner_coeff = Power(coeff_abs, 1 / xyz.exponent)
                 return inner_coeff * node.var, lambda u: u / inner_coeff
             return None
@@ -797,7 +797,7 @@ class ProductToSum(Transform):
                 return True
 
         if isinstance(expr, Power):
-            if isinstance(expr.base, (sin, cos)) and isinstance(expr.exponent, Const) and expr.exponent % 2 == 0:
+            if isinstance(expr.base, (sin, cos)) and isinstance(expr.exponent, Rat) and expr.exponent % 2 == 0:
                 return True
 
         return False
@@ -932,7 +932,7 @@ class ByParts(Transform):
     @staticmethod
     def _get_first_factor(parent_byparts: Node, node: Node) -> Expr:
         if parent_byparts.children[1] == node:
-            return Const(1)
+            return Rat(1)
         elif isinstance(node.transform, PullConstant) and parent_byparts.children[1].child == node:
             return node.transform._constant
         raise ValueError
@@ -1003,7 +1003,7 @@ class PartialFractions(Transform):
         if not isinstance(node.expr, Prod):
             return False
         num, denom = node.expr.numerator_denominator
-        if denom == Const(1):
+        if denom == Rat(1):
             return False
         
         # and that both numerator and denominator are polynomials
@@ -1159,7 +1159,7 @@ class RewritePythagorean(Transform):
     """
     @staticmethod
     def condition(expr: Expr) -> bool:
-        return isinstance(expr, Power) and isinstance(expr.base, (sin, cos)) and isinstance(expr.exponent, Const) and expr.exponent > 1 and expr.exponent.value.denominator == 1 and expr.exponent % 2 == 1
+        return isinstance(expr, Power) and isinstance(expr.base, (sin, cos)) and isinstance(expr.exponent, Rat) and expr.exponent > 1 and expr.exponent.value.denominator == 1 and expr.exponent % 2 == 1
 
     @staticmethod
     def perform(expr: Power) -> bool:

@@ -1,7 +1,7 @@
 from typing import Iterable, List, Optional, Tuple, Type, Union
 
-from .expr import (Abs, Const, Expr, Power, Prod, Sum, Symbol, TrigFunction,
-                   cos, cot, csc, log, nesting, sec, sin, tan)
+from .expr import (Abs, Expr, Power, Prod, Rat, Sum, Symbol, TrigFunction, cos,
+                   cot, csc, log, nesting, sec, sin, tan)
 from .regex import (any_, eq, general_count, kinder_replace,
                     kinder_replace_many, replace_class, replace_factory)
 from .utils import ExprFn
@@ -71,7 +71,7 @@ def _pythagorean_perform(sum: Expr) -> Optional[Expr]:
         def is_(f):
             return isinstance(f, Power) and f.exponent == 2 and isinstance(f.base, cls)
         if is_(term):
-            return term.base.inner, Const(1)  
+            return term.base.inner, Rat(1)  
 
         if not isinstance(term, Prod):
             return None
@@ -129,13 +129,13 @@ def rewrite_as_one_fraction(sum: Expr) -> Expr:
     for term in sum.terms:
         if isinstance(term, Prod):
             num, den = term.numerator_denominator
-        elif isinstance(term, Power) and isinstance(term.exponent, Const) and term.exponent.value < 0:
-            num, den = Const(1), Power(term.base, -term.exponent)
+        elif isinstance(term, Power) and isinstance(term.exponent, Rat) and term.exponent.value < 0:
+            num, den = Rat(1), Power(term.base, -term.exponent)
         else:
-            num, den = term, Const(1)
+            num, den = term, Rat(1)
         list_of_terms.append((num, den))
 
-    common_den = Const(1)
+    common_den = Rat(1)
     for _, den in list_of_terms:
         ratio = den / common_den
         common_den *= ratio
@@ -159,7 +159,7 @@ def _reciprocate_trigs(expr: Expr) -> Optional[Expr]:
     # just having this run in the integration simplify transform makes tests .5s slower (4.5 -> 5)
     b = expr.base
     x = expr.exponent
-    if isinstance(x, Const) and x < 0 and isinstance(b, TrigFunction) and not b.is_inverse:
+    if isinstance(x, Rat) and x < 0 and isinstance(b, TrigFunction) and not b.is_inverse:
         new_b = b.reciprocal_class(b.inner)
         return Power(new_b, -x)
 

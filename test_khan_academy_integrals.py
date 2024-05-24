@@ -140,7 +140,7 @@ def test_complete_the_square_integrals():
 
 
 def test_neg_inf():
-    assert integrate(-e ** x, (-oo, 1)) == -e
+    assert integrate(-e ** x, (-inf, 1)) == -e
 
 
 def test_bigger_power_trig():
