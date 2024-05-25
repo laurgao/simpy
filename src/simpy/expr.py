@@ -274,7 +274,18 @@ class Associative:
             if len(expr.symbols()) == 0:
                 return 0
             return 1 + max(nesting(sub_expr) for sub_expr in expr.children())
-
+        
+        def _symboless_nest(expr: Expr) -> int:
+            if not expr.children():
+                return 1 if isinstance(expr, Rat) else 2
+            return 2 + max(nesting(sub_expr) for sub_expr in expr.children())
+        
+        def _symboless_compare(a: Expr, b: Expr) -> int:
+            """a and b both don't have any symbols.
+            
+            Order is first the rat and then float and then sort by nesting including
+            """
+            return _symboless_nest(a) - _symboless_nest(b)
 
         def _compare(a: Expr, b: Expr) -> int:
             """Returns -1 if a < b, 0 if a == b, 1 if a > b.
@@ -287,9 +298,15 @@ class Associative:
                     return expr.exponent
                 return Rat(1)
 
-            n = _nesting(a) - _nesting(b)
+            na = _nesting(a)
+            nb = _nesting(b)
+            if na == 0 and nb == 0:
+                return _symboless_compare(a, b)
+
+            n = na - nb
             if n != 0:
                 return n
+
             power = (
                 _deconstruct_const_power(a).value - _deconstruct_const_power(b).value
             )
@@ -387,12 +404,13 @@ class Float(Num, Expr):
     
 
 class Rat(Num, Expr):
+    """A rational number."""
     value: Fraction
 
     def __new__(cls, value, denom=None):
         assert (
             isinstance(value, (int, Fraction)) or int(value) == value
-        ), f"got value={value} not allowed Const"
+        ), f"got value={value} not allowed Rational"
         if denom is not None:
             assert not isinstance(value, Fraction)
         return super().__new__(cls)
@@ -599,6 +617,8 @@ def _accumulate_power(b: Accumulateable, x: Accumulateable) -> Optional[Expr]:
         if x.value.denominator % 2 == 0 and b < 0:
             # Cannot be simplified further.
             return
+        elif b < 0:
+            return -1 * Power(-b, x)
         
         # check if one of num^exponent or denom^exponent is integer
         n, d = abs(b.value.numerator), b.value.denominator
@@ -948,7 +968,7 @@ class Prod(Associative, Expr):
 
             return _x(numerator, b=False) + "/" + _x(denominator)
 
-        return "".join(map(_term_repr, self.terms))
+        return "*".join(map(_term_repr, self.terms))
 
     def latex(self) -> str:
         def _term_latex(term: Expr):
@@ -968,7 +988,7 @@ class Prod(Associative, Expr):
             # don't need brackets around num/denom bc the frac bar handles it.
             return "\\frac{" + numerator.latex() + "}{" + denominator.latex() + "}"
 
-        return "".join(map(_term_latex, self.terms))
+        return " \\cdot ".join(map(_term_latex, self.terms))
 
     @property
     def numerator_denominator(self) -> Tuple[Expr, Expr]:

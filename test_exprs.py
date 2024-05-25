@@ -106,28 +106,33 @@ def test_repr():
     expr = 1 - x**2
     assert expr.__repr__() == "-x^2 + 1"
     assert repr(x - 2) == "x - 2"
-    assert (2 * x).__repr__() == "2x"
-    assert (2 * (2 + x)).__repr__() == "2(x + 2)"
+    assert (2 * x).__repr__() == "2*x"
+    assert (2 * (2 + x)).__repr__() == "2*(x + 2)"
     assert (2 / (2 + x)).__repr__() == "2/(x + 2)"
     assert repr(2 * (2 + x) ** (-2)) == repr(2 / (2 + x) ** 2) == "2/(x + 2)^2"
-    assert repr(Rat(-1) ** Fraction(1, 3)) == "(-1)^(1/3)"
+    assert repr(Rat(-1) ** Fraction(1, 4)) == "(-1)^(1/4)"
     assert sqrt(3).__repr__() == "sqrt(3)"
     assert repr(1 / sqrt(1 - x**2)) == "1/sqrt(-x^2 + 1)"
     assert repr(sqrt(1/x)) == "1/sqrt(x)"
     assert repr(x ** -Fraction(1,2)) == "1/sqrt(x)"
 
     # make sure denominator is bracketed
-    assert repr(sin(x) / (2 * x)) == "sin(x)/(2x)"
+    assert repr(sin(x) / (2 * x)) == "sin(x)/(2*x)"
     # make sure products with negative consts and dividing by consts are treated better
     assert repr(x / 2) == "x/2"
     assert repr(x * Fraction(1, 2)) == "x/2"
-    assert repr(3 - 2 * x) == "-2x + 3"
-    # make sure consts show up before pi
-    assert repr(pi * 2) == "2pi"
-    assert repr(pi * -2) == "-2pi"
+    assert repr(3 - 2 * x) == "-2*x + 3"
     # make sure polynomials show up in the correct order
     poly = 3 * x ** 4 / 2 + x ** 5 + 2 * x + 3 - x ** 2
-    assert repr(poly) == "x^5 + 3x^4/2 - x^2 + 2x + 3"
+    assert repr(poly) == "x^5 + 3*x^4/2 - x^2 + 2*x + 3"
+
+    # when there are multiple symboless terms, make sure their order is logical
+    assert repr(2 + log(2)) == "ln(2) + 2"
+    assert repr(Rat(2, 3) ** Rat(2, 3) * -1) == "-(2/3)^(2/3)"
+    assert repr(Float(2.2) * Rat(3) * x) == "3*2.2*x"
+    # make sure consts show up before pi
+    assert repr(pi * 2) == "2*pi"
+    assert repr(pi * -2) == "-2*pi"
 
 
 def test_neg_power():
