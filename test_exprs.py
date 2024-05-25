@@ -322,16 +322,25 @@ def test_trigfuncs_auto_simplify_plus_2pis():
 def test_trigfuncs_auto_simplify_more_complex_negs():
     assert_eq_strict(cos(-x-2), cos(x+2))
 
-@pytest.mark.xfail
-def test_trigfunctions_special_values_are_correct():
-    # doesn't work rn because no decimals.
-    import math
 
+@pytest.mark.parametrize(["cls", "func"], [
+    [sin, math.sin],
+    [cos, math.cos],
+    [tan, math.tan],
+])
+def test_trigfunctions_special_values_are_correct(cls: Type[TrigFunction], func):
     import numpy as np
     for k in TrigFunction._SPECIAL_KEYS:
         num = Fraction(k)
-        np.testing.assert_almost_equal(sin(num*pi).value, math.sin(num*math.pi))
-        assert sin(num * pi) == math.sin(num * math.pi)
+        v1 = cls(num*pi).evalf().value
+        v2 = func(num*math.pi)
+        try:
+            np.testing.assert_almost_equal(v1, v2)
+        except AssertionError:
+            if cls == tan and (v1 == inf or v1 == -inf):
+                assert v2 > 1e10 or v2 < -1e-10
+            else:
+                raise AssertionError
 
 
 def test_is_subtraction():

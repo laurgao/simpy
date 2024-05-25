@@ -369,8 +369,6 @@ class Num(ABC):
 
 def Const(value: Union[float, Fraction, int]) -> Num:
     # wrapper ??
-    if isinstance(value, (int, Fraction)) or int(value) == value:
-        return Rat(value)
 
     if value == float('inf'):
         return Infinity()
@@ -378,6 +376,9 @@ def Const(value: Union[float, Fraction, int]) -> Num:
         return NegInfinity()
     if value == float('NaN'):
         return NaN()
+    if isinstance(value, (int, Fraction)) or int(value) == value:
+        return Rat(value)
+
     return Float(value)
 
 class Float(Num, Expr):
@@ -601,6 +602,13 @@ def _accumulate_power(b: Accumulateable, x: Accumulateable) -> Optional[Expr]:
     
     if isinstance(b, (Infinity, NegInfinity)) or isinstance(x, (Infinity, NegInfinity)):
         return Const(b.value ** x.value)
+
+    if b == 0:
+        if x > 0:
+            return Rat(0)
+        else:
+            # Division by zero.
+            return inf
 
     if isinstance(b, Rat) and isinstance(x, Rat):
         try:
@@ -1137,8 +1145,6 @@ class Power(Expr):
             return Rat(1)
         if x == 1:
             return b
-        if b == 0:
-            return Rat(0)
         if b == 1:
             return Rat(1)
         if isinstance(b, Accumulateable) and isinstance(x, Accumulateable):
