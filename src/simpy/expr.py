@@ -319,6 +319,12 @@ class Associative:
     
     def _evalf(self, subs):
         return self.__class__([term.evalf(subs) for term in self.terms])
+    
+    def __iter__(self):
+        return iter(self.terms)
+
+    def __len__(self):
+        return len(self.terms)
 
 
 class Num(ABC):
@@ -365,6 +371,9 @@ class Num(ABC):
     @property
     def is_subtraction(self):
         return self.value < 0
+    
+    def __abs__(self) -> "Rat":
+        return Rat(abs(self.value))
 
 
 def Const(value: Union[float, Fraction, int]) -> Num:
@@ -403,20 +412,23 @@ class Float(Num, Expr):
     def latex(self):
         return repr(self)
     
+    def abs(self) -> "Float":
+        return Float(abs(self.value))
 
 class Rat(Num, Expr):
     """A rational number."""
     value: Fraction
 
-    def __new__(cls, value, denom=None):
+    def __new__(cls, value, denom: int = None):
         assert (
             isinstance(value, (int, Fraction)) or int(value) == value
         ), f"got value={value} not allowed Rational"
         if denom is not None:
             assert not isinstance(value, Fraction)
+            assert isinstance(denom, int)
         return super().__new__(cls)
 
-    def __init__(self, value, denom=1):
+    def __init__(self, value, denom: int = 1):
         if not isinstance(value, Fraction):
             value = Fraction(int(value), denom)
         self.value = value
@@ -465,11 +477,8 @@ class Rat(Num, Expr):
             + "}"
         )
 
-    def abs(self) -> "Rat":
-        return Rat(abs(self.value))
-
     def reciprocal(self) -> "Rat":
-        return Rat(Fraction(self.value.denominator, self.value.numerator))
+        return Rat(self.value.denominator, self.value.numerator)
 
     @cast    
     def __mod__(self, other) -> "Rat":
@@ -632,7 +641,7 @@ def _accumulate_power(b: Accumulateable, x: Accumulateable) -> Optional[Expr]:
         n, d = abs(b.value.numerator), b.value.denominator
         if x < 0:
             n, d = d, n
-        xvalue = x.abs().value
+        xvalue = abs(x).value
         xn = n**xvalue  # exponentiated numerator
         xd = d**xvalue
         isint = lambda a: int(a) == a and a != 1
@@ -646,7 +655,7 @@ def _accumulate_power(b: Accumulateable, x: Accumulateable) -> Optional[Expr]:
             terms.append(Power(d, -xvalue)) # will this circular? no it won't it should get caught under line after `if not isint(xn) and not...`
         else:
             # isint(xd)
-            terms.append(Rat(Fraction(1, int(xd))))
+            terms.append(Rat(1, int(xd)))
             terms.append(Power(n, xvalue))
         if b.value.numerator < 0:
             terms.append(Rat(-1))
@@ -802,7 +811,7 @@ class Sum(Associative, Expr):
             if isinstance(term, Power) and isinstance(
                 term.exponent, Rat
             ):  # can't be prod bc it's simplified
-                return Rat(1), [[term.base, term.exponent.abs(), term.exponent.value > 0]]
+                return Rat(1), [[term.base, abs(term.exponent), term.exponent.value > 0]]
             if isinstance(term, Rat):
                 return term, [[term, Rat(1), True]]
             return Rat(1), [[term, Rat(1), True]]
@@ -829,12 +838,12 @@ class Sum(Associative, Expr):
                     common_factors[i] = None
 
         # Factor coeffs
-        common_coeff = coeffs[0].abs()
+        common_coeff = abs(coeffs[0])
         for c in coeffs[1:]:
             x: Rat = (c / common_coeff)
             y: Rat = (common_coeff / c)
             if x.value.denominator == 1 or y.value.denominator == 1:
-                common_coeff = min(c.abs(), common_coeff.abs())
+                common_coeff = min(abs(c), abs(common_coeff))
             else:
                 common_coeff = None
                 break
@@ -1111,7 +1120,7 @@ class Power(Expr):
             return "1/" + repr(new_power)
 
         # special case for sqrt
-        if self.exponent == Rat(Fraction(1, 2)):
+        if self.exponent == Rat(1, 2):
             return _repr(self.base, "sqrt")
 
         return f"{_term_repr(self.base)}^{_term_repr(self.exponent)}"
@@ -1123,9 +1132,9 @@ class Power(Expr):
             return term.latex()
 
         # special case for sqrt
-        if self.exponent == Rat(Fraction(1, 2)):
+        if self.exponent == Rat(1, 2):
             return "\\sqrt{" + self.base.latex() + "}"
-        if self.exponent == Rat(Fraction(-1, 2)):
+        if self.exponent == Rat(-1, 2):
             return "{\\sqrt{" + self.base.latex() + "}" + "}^{-1}"
 
         return "{" + _term_latex(self.base) + "}^{" + _term_latex(self.exponent) + "}"
@@ -1193,7 +1202,7 @@ class Power(Expr):
         return (
             isinstance(self.exponent, Rat)
             and self.exponent.value.denominator == 1
-            and self.exponent.abs() != 1
+            and abs(self.exponent) != 1
             and isinstance(self.base, Sum)
         )
 
@@ -1338,7 +1347,7 @@ class log(Expr):
 
 @cast
 def sqrt(x: Expr) -> Expr:
-    return x ** Rat(Fraction(1, 2))
+    return x ** Rat(1, 2)
 
 
 class classproperty:
@@ -1494,21 +1503,21 @@ class sin(TrigFunction):
     def special_values(cls):
         return {
             "0": Rat(0),
-            "1/6": Rat(Fraction(1,2)),
+            "1/6": Rat(1,2),
             "1/4": 1/sqrt(2),
             "1/3": sqrt(3)/2,
             "1/2": Rat(1),
             "2/3": sqrt(3)/2,
             "3/4": 1/sqrt(2),
-            "5/6": Rat(Fraction(1,2)),
+            "5/6": Rat(1,2),
             "1": Rat(0),
-            "7/6": -Rat(Fraction(1,2)),
+            "7/6": -Rat(1,2),
             "5/4": -1/sqrt(2),
             "4/3": -sqrt(3)/2,
             "3/2": -Rat(1),
             "5/3": -sqrt(3)/2,
             "7/4": -1/sqrt(2),
-            "11/6": -Rat(Fraction(1,2)),
+            "11/6": -Rat(1,2),
         }
 
     def diff(self, var) -> Expr:
@@ -1535,17 +1544,17 @@ class cos(TrigFunction):
             "0": Rat(1),
             "1/6": sqrt(3)/2,
             "1/4": 1/sqrt(2),
-            "1/3": Rat(Fraction(1,2)),
+            "1/3": Rat(1,2),
             "1/2": Rat(0),
-            "2/3": -Rat(Fraction(1,2)),
+            "2/3": -Rat(1,2),
             "3/4": -1/sqrt(2),
             "5/6": -sqrt(3)/2,
             "1": Rat(-1),
             "7/6": -sqrt(3)/2,
             "5/4": -1/sqrt(2),
-            "4/3": -Rat(Fraction(1,2)),
+            "4/3": -Rat(1,2),
             "3/2": -Rat(0),
-            "5/3": Rat(Fraction(1,2)),
+            "5/3": Rat(1,2),
             "7/4": 1/sqrt(2),
             "11/6": sqrt(3)/2,
         }
@@ -1670,19 +1679,24 @@ class Abs(SingleFunc):
 
     @cast
     def __new__(cls, inner: Expr) -> Expr:
-        if isinstance(inner, Rat):
-            return inner.abs()
+        if isinstance(inner, (E, Pi)):
+            return inner
+        if isinstance(inner, Num):
+            return Const(abs(inner.value))
         if inner.is_subtraction:
             return Abs(-inner)
         if isinstance(inner, Prod):
             for t in inner.terms:
-                if isinstance(inner, Rat):
+                if isinstance(inner, Num):
                     return Abs(inner/t) * Abs(t)
         return super().__new__(cls)
     
     def diff(self, var) -> Expr:
         warnings.warn(f"Differentiation of {self} not implemented, so returning diff of {self.inner}.")
         return self.inner.diff(var)
+    
+    def _evalf(self, subs: Dict[str, Expr]) -> Expr:
+        return Abs(self.inner._evalf(subs))
 
 
 def symbols(symbols: str) -> Union[Symbol, List[Symbol]]:

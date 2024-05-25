@@ -7,8 +7,8 @@ from typing import Callable, Dict, List, Literal, Optional, Tuple, Type, Union
 
 import numpy as np
 
-from .expr import (Expr, Power, Prod, Rat, Sum, Symbol, TrigFunction, asin,
-                   atan, cos, cot, csc, log, nesting, remove_const_factor, sec,
+from .expr import (Expr, Num, Power, Prod, Rat, Sum, Symbol, TrigFunction,
+                   asin, atan, cos, cot, csc, log, remove_const_factor, sec,
                    sin, sqrt, symbols, tan)
 from .linalg import invert
 from .polynomial import (Polynomial, is_polynomial, polynomial_to_expr,
@@ -608,7 +608,7 @@ class LinearUSub(Transform):
                 coeff = (expr / xyz)
                 if coeff == Rat(1):
                     return None
-                coeff_abs = coeff.abs() if isinstance(coeff, Rat) else coeff
+                coeff_abs = abs(coeff) if isinstance(coeff, Num) else coeff
                 inner_coeff = Power(coeff_abs, 1 / xyz.exponent)
                 return inner_coeff * node.var, lambda u: u / inner_coeff
             return None

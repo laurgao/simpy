@@ -60,11 +60,12 @@ def _pythagorean_perform(sum: Expr) -> Optional[Expr]:
         (1 - cos(any_) ** 2, lambda x: sin(x) ** 2),
     ]
     for cond, perform in identities:
-        is_eq, factor, inner = eq(sum, cond, up_to_factor=True, up_to_sum=True)
-        breakpoint()
-        if is_eq:
-            new_sum = factor * perform(inner)
-            return new_sum
+        result = eq(sum, cond, up_to_factor=True, up_to_sum=True)
+        if result["success"]:
+            factor = result["factor"]
+            inner = result["anyfind"]
+            rest = result["rest"]
+            return factor * perform(inner) + rest
 
     ##------------ Simplify sin^2(...) + cos^2(...) ------------##
     def is_thing_squared(term: Expr, cls: Union[Type[TrigFunction], Iterable[Type[TrigFunction]]]) -> Optional[Tuple[Expr, Expr]]: # returns inner, factor
@@ -175,8 +176,10 @@ def _combine_trigs(expr: Expr) -> Optional[Expr]:
         (cos(any_) * csc(any_), lambda x: cot(x)),
     ]
     for cond, perform in identities:
-        is_eq, factor, inner = eq(expr, cond, up_to_factor=True)
-        if is_eq:
+        result = eq(expr, cond, up_to_factor=True)
+        if result["success"]:
+            factor = result["factor"]
+            inner = result["anyfind"]
             new = factor * perform(inner)
             return new
 

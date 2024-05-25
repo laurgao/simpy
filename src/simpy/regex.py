@@ -4,9 +4,9 @@ Still WIP. Ideally need to do stuff like "check if somefactor * cos(sth) + somef
 """
 from collections import defaultdict
 from dataclasses import dataclass, fields
-from typing import Any, Callable, Dict, Iterable, List, Tuple, Type
+from typing import Any, Callable, Dict, Iterable, List, Literal, Tuple, Type
 
-from .expr import Expr, Power, Prod, Rat, SingleFunc, Sum, Symbol, cast
+from .expr import Expr, Power, Prod, Rat, SingleFunc, Sum, Symbol, cast, log
 from .utils import ExprFn, OptionalExprFn, random_id
 
 
@@ -34,7 +34,7 @@ class Any_(Expr):
         return False
     
     def __repr__(self) -> str:
-        return "(any_" + self.anykey + ")"
+        return "any_" + self.anykey
     
     # implementing some Expr abstract methods
     def subs(self, subs: Dict[str, "Rat"]):
@@ -58,8 +58,15 @@ class Any_(Expr):
 
 any_ = Any_()
 
+# smallTODO: make this a namedtuple
+EqResult = Dict[Literal["success", "factor", "rest", "anyfind"], Any]
+
 @cast
-def eq(expr: Expr, query: Expr, up_to_factor = False, up_to_sum=False):
+def eq(expr: Expr, query: Expr, *, up_to_factor = False, up_to_sum=False) -> EqResult:
+    if expr.has(Any_):
+        if query.has(Any_):
+            raise ValueError("Can't both arguments to eq have Any_")
+        expr, query = query, expr
     return Eq(expr, query, up_to_factor, up_to_sum=up_to_sum)()
 
 # @dataclass
@@ -122,20 +129,23 @@ def _anyfinds_eq(x: Anyfind, y: Anyfind):
             
     return True
 
-
-
-def consolidate(query_anyfinds: Dict[str, List[Anyfind]]) -> Anyfind:
+_qanyfind = Dict[str, Dict[str, Anyfind]]
+def consolidate(query_anyfinds: _qanyfind, expr: Sum) -> EqResult:
     final = defaultdict(list)
-    for query in query_anyfinds.values():
-        for set in query:
+    accounted_expr_terms = []
+    for query_term in query_anyfinds.values():
+        for expr_term, set in query_term.items():
             if all(any(_anyfinds_eq(x, set) for x in y) for y in query_anyfinds.values()):
                 join_dicts(final, set)
+                accounted_expr_terms.append(expr_term)
+
 
     assert all(all_same(v) for v in final.values())
     final = {k: v[0] for k, v in final.items()}
     assert all(any(_anyfinds_eq(x, final) for x in y) for y in query_anyfinds.values())
-    return final
-
+    
+    rest = Sum([t for t in expr.terms if repr(t) not in accounted_expr_terms])
+    return {"anyfind": final, "rest": rest, "success": True}
 
 
 class Eq:
@@ -154,16 +164,17 @@ class Eq:
 
         # Mutable:
         self._anyfind: AnyfindInProgress = defaultdict(list)
+        self._result: EqResult = defaultdict(str)
 
         if up_to_factor:
             self._anyfactor = Any_("factor_" + random_id(5))
             new_query = self._anyfactor * query
             self._query = new_query.expand() if new_query.expandable() else new_query
 
-    def __call__(self) -> Tuple[bool, ...]:
+    def __call__(self) -> EqResult:
         """Returns (is_equal, factor, anyfinds) if up_to_factor=True and (is_equal, anyfinds) otherwise.
         """
-        falsereturn = (False, None, None) if self._up_to_factor else (False, None)
+        falsereturn = {"success": False}
         if self._up_to_sum:
             # Usually, this means that self._expr is a sum and self._query is also a sum.
             # we want to check if the query.terms is a subset of expr.terms
@@ -180,27 +191,25 @@ class Eq:
             # return the anyfind of each one
             # if there is like sth in each query terms where the anyfind is the same...
 
-            def _is_sum_eq(expr: Sum, query: Sum) -> tuple:
-                query_anyfinds: Dict[str, List[Anyfind]] = defaultdict(list)
+            def _is_sum_eq(expr: Sum, query: Sum) -> EqResult:
+                query_anyfinds: _qanyfind = defaultdict(dict)
                 for query_term in query.terms:
                     for expr_term in expr.terms:
-                        is_eq, anyfinds = Eq(expr_term, query_term, decompose_singles=False)()
+                        output = Eq(expr_term, query_term, decompose_singles=False)()
+                        is_eq, anyfinds = output.get("success"), output.get("anyfind")
                         if is_eq and all(any(_anyfinds_eq(x, anyfinds) for x in y) for y in query_anyfinds.values()):
-                            query_anyfinds[repr(query_term)].append(anyfinds)
+                            query_anyfinds[repr(query_term)][repr(expr_term)] = anyfinds
 
                     if query_anyfinds[repr(query_term)] == []:
-                        breakpoint()
-                        return False, None
+                        return {"success": False}
                 
-                breakpoint()
-                final_anyfinds = consolidate(query_anyfinds)
-                return True, final_anyfinds
+                return consolidate(query_anyfinds, expr)
             
-            
-            ans, anyfinds = _is_sum_eq(self._expr, self._query)
-            if ans is False:
+            result = _is_sum_eq(self._expr, self._query)
+            if result["success"] is False:
                 return falsereturn
-            self._anyfind = anyfinds
+            self._result["rest"] = result["rest"]
+            self._anyfind = result["anyfind"]
 
         else:
             ans = self._eq(self._expr, self._query)
@@ -216,18 +225,20 @@ class Eq:
         ## AT THIS POINT:
         self._anyfind: Anyfind
 
-        factor = None 
         if self._up_to_factor:
-            factor = self._anyfind[self._anyfactor.anykey]
+            self._result["factor"] = self._anyfind[self._anyfactor.anykey]
             del self._anyfind[self._anyfactor.anykey]
 
         if self._decompose_singles and len(self._anyfind) == 1:
-            self._anyfind = list(self._anyfind.values())[0]
-        return (True, factor, self._anyfind) if factor else (True, self._anyfind)
+            self._result["anyfind"] = list(self._anyfind.values())[0]
+        else:
+            self._result["anyfind"] = self._anyfind
+        self._result["success"] = True
+        return self._result
 
     def _eq(self, expr: Any, query: Any) -> bool:
-        if isinstance(expr, Iterable):
-            if not (isinstance(query, Iterable) and len(expr) == len(query)):
+        if isinstance(expr, list):
+            if not (isinstance(query, list) and len(expr) == len(query)):
                 return False
             return all([self._eq(e, q) for e, q in zip(expr, query)])
         if expr == query:
@@ -242,10 +253,10 @@ class Eq:
         
         if not self._is_divide:
             # You don't get to divide if we already is --- prevents inf recursion.
-            one, quotient_anyfinds = anydivide(query,expr)
+            one, quotient_matches = anydivide(query,expr)
             if isinstance(one, Any_):
                 self._anyfind[one.anykey].append(Rat(1))
-                join_dicts(self._anyfind, quotient_anyfinds)
+                join_dicts2(self._anyfind, quotient_matches)
                 return True
 
             if len(one.symbols()) == 0:
@@ -255,7 +266,7 @@ class Eq:
                 if len(anys) == 1:
                     anyvalue = one / anys[0]
                     if get_anys(anyvalue) == []:
-                        join_dicts(self._anyfind, quotient_anyfinds)
+                        join_dicts(self._anyfind, quotient_matches)
                         self._anyfind[anys[0].anykey].append(anyvalue)
                         return True
 
@@ -268,7 +279,7 @@ class Eq:
         return all([self._eq(getattr(expr, field.name), getattr(query, field.name)) for field in fields(expr)])
 
 
-def anydivide(num: Expr, denom: Expr) -> Tuple[Expr, Dict[str, List[Expr]]]:
+def anydivide(num: Expr, denom: Expr) -> Tuple[Expr, AnyfindInProgress]:
     """Returns: (quotient, anyfinds)
     """
     def _make_factors_list(expr: Expr) -> List[Expr]:
@@ -300,9 +311,9 @@ def anydivide(num: Expr, denom: Expr) -> Tuple[Expr, Dict[str, List[Expr]]]:
             df = denfactors[j]
             if df is None or f is None:
                 continue
-            is_success, output = Eq(df, f, decompose_singles=False, _is_divide=True)()
-            if is_success:
-                join_dicts(anyfinds, output)
+            output = Eq(df, f, decompose_singles=False, _is_divide=True)()
+            if output["success"]:
+                join_dicts(anyfinds, output["anyfind"])
                 denfactors[j] = None
                 numfactors[i] = None
 
@@ -314,6 +325,14 @@ def join_dicts(d1: AnyfindInProgress, d2: Anyfind) -> None:
     """Mutates d1 to add the stuff in d2"""
     for k in d2.keys():
         d1[k].append(d2[k])
+
+def join_dicts2(d1: AnyfindInProgress, d2: AnyfindInProgress) -> None:
+    """Mutates d1 to add the stuff in d2"""
+    for k in d2.keys():
+        if k in d1:
+            d1[k].extend(d2[k])
+        else:
+            d1[k] = d2[k]
 
 @cast
 def count(expr: Expr, query: Expr) -> int:
@@ -365,6 +384,8 @@ def replace_factory_list(conditions: Iterable[Callable[[Expr], bool]], performs:
             return Prod([_replace(e) for e in expr.terms])
         if isinstance(expr, Power):
             return Power(base=_replace(expr.base), exponent=_replace(expr.exponent))
+        if isinstance(expr, log):
+            return log(inner=_replace(expr.inner), base=_replace(expr.base))
         # i love recursion
         if isinstance(expr, SingleFunc):
             return expr.__class__(_replace(expr.inner))
@@ -405,6 +426,8 @@ def kinder_replace_many(expr: Expr, performs: Iterable[OptionalExprFn], verbose=
             return Prod([_replace(t) for t in e.terms])
         if isinstance(e, Power):
             return Power(base=_replace(e.base), exponent=_replace(e.exponent))
+        if isinstance(e, log):
+            return log(inner=_replace(e.inner), base=_replace(e.base))
         # i love recursion
         if isinstance(e, SingleFunc):
             return e.__class__(_replace(e.inner))
@@ -442,6 +465,11 @@ def replace_class(expr: Expr, cls: List[Type[SingleFunc]], newfunc: List[Callabl
         return Power(
             base=replace_class(expr.base, cls, newfunc),
             exponent=replace_class(expr.exponent, cls, newfunc),
+        )
+    if isinstance(expr, log):
+        return log(
+            inner=replace_class(expr.inner, cls, newfunc),
+            base=replace_class(expr.base, cls, newfunc)
         )
     if isinstance(expr, SingleFunc):
         new_inner = replace_class(expr.inner, cls, newfunc)
