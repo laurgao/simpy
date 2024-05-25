@@ -27,7 +27,7 @@ class Any_(Expr):
 
     def __eq__(self, other):
         if isinstance(other, Any_):
-            return self.anykey == self.anykey
+            return self.anykey == other.anykey
         # if isinstance(other, Expr):
         #     return True
         # return NotImplemented
@@ -133,11 +133,11 @@ _qanyfind = Dict[str, Dict[str, Anyfind]]
 def consolidate(query_anyfinds: _qanyfind, expr: Sum) -> EqResult:
     final = defaultdict(list)
     accounted_expr_terms = []
-    for query_term in query_anyfinds.values():
-        for expr_term, set in query_term.items():
-            if all(any(_anyfinds_eq(x, set) for x in y) for y in query_anyfinds.values()):
-                join_dicts(final, set)
-                accounted_expr_terms.append(expr_term)
+    for query_term_repr, query_term_values in query_anyfinds.items():
+        for expr_term_repr, matches in query_term_values.items():
+            if all(any(_anyfinds_eq(matches2, matches) for matches2 in query_term_values2.values()) for query_term_values2 in query_anyfinds.values()):
+                join_dicts(final, matches)
+                accounted_expr_terms.append(expr_term_repr)
 
 
     assert all(all_same(v) for v in final.values())
@@ -266,7 +266,7 @@ class Eq:
                 if len(anys) == 1:
                     anyvalue = one / anys[0]
                     if get_anys(anyvalue) == []:
-                        join_dicts(self._anyfind, quotient_matches)
+                        join_dicts2(self._anyfind, quotient_matches)
                         self._anyfind[anys[0].anykey].append(anyvalue)
                         return True
 
@@ -296,6 +296,8 @@ def anydivide(num: Expr, denom: Expr) -> Tuple[Expr, AnyfindInProgress]:
                 anys.append(t)
             else:
                 terms.append(t)
+        if len([t for t in expr.terms if isinstance(t, Any_)]) > 1:
+            raise NotImplementedError(f"{expr} is ambiguous")
         if len(anys) > 0:
             terms.extend(anys)
         if len(anyfactors) > 0:

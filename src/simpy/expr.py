@@ -896,6 +896,9 @@ def deconstruct_power(expr: Expr) -> Tuple[Expr, Rat]:
     else:
         return (expr, Rat(1))
 
+isfractionorneg = lambda x: isinstance(x, Rat) and (x.value.denominator != 1 or x < 0)
+islongsymbol = lambda x: isinstance(x, Symbol) and len(x.name) > 1 or x.__class__.__name__ == "Any_" and len(x.anykey) > 1
+
 
 @dataclass
 class Prod(Associative, Expr):
@@ -960,7 +963,7 @@ class Prod(Associative, Expr):
 
     def __repr__(self) -> str:
         def _term_repr(term):
-            if isinstance(term, Sum):
+            if isinstance(term, Sum) or islongsymbol(term):
                 return "(" + repr(term) + ")"
             return repr(term)
 
@@ -1084,6 +1087,7 @@ class Prod(Associative, Expr):
         )
 
 
+
 def debug_repr(expr: Expr) -> str:
     """Not designed to look pretty; designed to show the structure of the expr.
     """
@@ -1106,9 +1110,8 @@ class Power(Expr):
     exponent: Expr
 
     def __repr__(self) -> str:
-        isfractionorneg = lambda x: isinstance(x, Rat) and (x.value.denominator != 1 or x < 0)
         def _term_repr(term):
-            if isinstance(term, Sum) or isinstance(term, Prod) or isfractionorneg(term):
+            if isinstance(term, Sum) or isinstance(term, Prod) or isfractionorneg(term) or islongsymbol(term):
                 return "(" + repr(term) + ")"
             return repr(term)
 
