@@ -37,7 +37,10 @@ class Any_(Expr):
         return "(any_" + self.anykey + ")"
     
     # implementing some Expr abstract methods
-    def evalf(self, subs: Dict[str, "Rat"]):
+    def subs(self, subs: Dict[str, "Rat"]):
+        raise NotImplementedError(f"Cannot evaluate {self}")
+    
+    def _evalf(self, subs):
         raise NotImplementedError(f"Cannot evaluate {self}")
     
     def children(self) -> List["Expr"]:
@@ -59,30 +62,30 @@ any_ = Any_()
 def eq(expr: Expr, query: Expr, up_to_factor = False, up_to_sum=False):
     return Eq(expr, query, up_to_factor, up_to_sum=up_to_sum)()
 
-@dataclass
-class Inverse(Expr):
-    inner: Expr # = 1
+# @dataclass
+# class Inverse(Expr):
+#     inner: Expr # = 1
 
-    def __eq__(self, other):
-        return isinstance(other, Inverse) and other.inner == self.inner
+#     def __eq__(self, other):
+#         return isinstance(other, Inverse) and other.inner == self.inner
     
-    def __repr__(self) -> str:
-        return f"Inverse({self.inner})"
+#     def __repr__(self) -> str:
+#         return f"Inverse({self.inner})"
 
-    # implementing some Expr abstract methods
-    def evalf(self, subs: Dict[str, "Rat"]):
-        raise NotImplementedError(f"Cannot evaluate {self}")
+#     # implementing some Expr abstract methods
+#     def subs(self, subs: Dict[str, "Rat"]):
+#         raise NotImplementedError(f"Cannot evaluate {self}")
     
-    def children(self) -> List["Expr"]:
-        return self.inner
+#     def children(self) -> List["Expr"]:
+#         return self.inner
 
-    def diff(self, var: "Symbol") -> "Expr":
-        raise NotImplementedError(
-            f"Cannot get the derivative of {self.__class__.__name__}"
-        )
+#     def diff(self, var: "Symbol") -> "Expr":
+#         raise NotImplementedError(
+#             f"Cannot get the derivative of {self.__class__.__name__}"
+#         )
 
-    def latex(self) -> str:
-        raise NotImplementedError(f"Cannot convert {self.__class__.__name__} to latex")
+#     def latex(self) -> str:
+#         raise NotImplementedError(f"Cannot convert {self.__class__.__name__} to latex")
 
 
 def get_anys(expr: Expr) -> List[Any_]:

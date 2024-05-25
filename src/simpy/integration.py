@@ -123,7 +123,7 @@ class Integration:
         integral = self.integrate(expr, bounds[0])
         if integral is None:
             return None
-        return (integral.evalf({x.name: b}) - integral.evalf({x.name: a})).simplify()
+        return (integral.subs({x.name: b}) - integral.subs({x.name: a})).simplify()
     
     @staticmethod
     def integrate_without_heuristics(integrand: Expr, var: Symbol) -> Optional[Expr]:

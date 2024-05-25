@@ -32,7 +32,7 @@ def test_equality():
 
 
 def test_floats():
-    assert_eq_strict(Float(3.2), Rat(16, 5))
+    assert_eq_strict(Float(3.2), Rat(16, 5).evalf())
     assert_eq_strict(Sum([Float(2.32), Float(.31)]), Float(2.63))
     assert_eq_strict(Prod([Float(2.32), Float(.31)]), Float(0.7192))
 
@@ -132,7 +132,6 @@ def test_repr():
 
 def test_neg_power():
     expr = Rat(-1) ** Fraction(5, 2) # this is i. ig it should just stay this way & not simplify.
-    breakpoint()
     assert debug_repr(expr) == "Power(-1, 5/2)"
 
 
@@ -338,6 +337,7 @@ def test_is_subtraction():
     assert (e ** x).is_subtraction is False
     assert (-e ** -x).is_subtraction is True
     assert (Rat(-3) ** 3).is_subtraction is True
-    assert (Rat(Fraction(-3, 2)) ** Fraction(2, 3)).is_subtraction is True
+    assert (Rat(Fraction(-3, 2)) ** Fraction(1, 3)).is_subtraction is True
     assert (Rat(Fraction(-3, 2)) ** Fraction(-2, 3)).is_subtraction is True
+    assert (Rat(Fraction(-3, 2)) ** Fraction(1, 2)).is_subtraction is False
 
