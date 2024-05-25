@@ -57,3 +57,11 @@ def test_up_to_sum_and_factor():
     query = 1 - sin(any_) ** 2
     ans = eq(expr, query, up_to_factor=True, up_to_sum=True)
     assert ans == {"success": True, "anyfind": x, "factor": -1, "rest": -5**cos(x)**2}
+
+def test_cofounder():
+    # This shit was causing problems
+    t, w = symbols("t w")
+    expr = -sin(t*w)**2 - cos(t*w)**2
+    query = -sin(any_) ** 2 + 1
+    out = eq(expr, query, up_to_factor=True, up_to_sum=True)
+    assert out["success"] is False

@@ -1703,6 +1703,7 @@ class Abs(SingleFunc):
 
 
 def symbols(symbols: str) -> Union[Symbol, List[Symbol]]:
+    """Creates symbols from a string of symbol names seperated by spaces."""
     symbols = [Symbol(name=s) for s in symbols.split(" ")]
     return symbols if len(symbols) > 1 else symbols[0]
 
