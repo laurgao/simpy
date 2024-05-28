@@ -789,7 +789,18 @@ class Sum(Associative, Expr):
                     new_coeff += coeff2
                     terms[j] = None
 
-            new_terms.append(Prod([new_coeff] + non_const_factors1))
+            # Yes you can replace the next few lines with Prod([new_coeff] + non_const_factors1)
+            # but by skipping checks for combine like terms, we make it significantly faster.
+            # Doing this speeds up the sum constructor by ~30% and everything by ~7%
+            if new_coeff == 0:
+                continue
+            elif new_coeff == 1:
+                if len(non_const_factors1) == 1:
+                    new_terms.append(non_const_factors1[0])
+                else:
+                    new_terms.append(Prod(non_const_factors1, skip_checks=True))
+            else:
+                new_terms.append(Prod([new_coeff] + non_const_factors1, skip_checks=True))
 
         # accumulate all constants
         const = accumulate(*[t for t in new_terms if isinstance(t, AccumulateableTuple)])
@@ -936,14 +947,22 @@ class Sum(Associative, Expr):
 def _deconstruct_prod(expr: Expr) -> Tuple[Rat, List[Expr]]:
     # 3*x^2*y -> (3, [x^2, y])
     # turns smtn into a constant and a list of other terms
-    if isinstance(expr, Prod):
-        non_const_factors = [term for term in expr.terms if not isinstance(term, Rat)]
-        const_factors = [term for term in expr.terms if isinstance(term, Rat)]
-        coeff = Prod(const_factors) if const_factors else Rat(1)
-    else:
-        non_const_factors = [expr]
-        coeff = Rat(1)
-    return (coeff, non_const_factors)
+
+    if hasattr(expr, "_deconstruct_prod_cache"):
+        return expr._deconstruct_prod_cache
+
+    def _dp(expr: Expr):
+        if isinstance(expr, Prod):
+            non_const_factors = [term for term in expr.terms if not isinstance(term, Rat)]
+            const_factors = [term for term in expr.terms if isinstance(term, Rat)]
+            coeff = Prod(const_factors) if const_factors else Rat(1)
+        else:
+            non_const_factors = [expr]
+            coeff = Rat(1)
+        return (coeff, non_const_factors)
+
+    expr._deconstruct_prod_cache = _dp(expr)
+    return expr._deconstruct_prod_cache
 
 
 def deconstruct_power(expr: Expr) -> Tuple[Expr, Rat]:
@@ -1006,7 +1025,12 @@ class Prod(Associative, Expr):
     _fields_already_casted = True
 
     @cast
-    def __new__(cls, terms: List[Expr]) -> "Expr":
+    def __new__(cls, terms: List[Expr], skip_checks=False) -> "Expr":
+        if skip_checks:
+            instance = super().__new__(cls)
+            instance.terms = terms
+            return instance
+
         # We need to flatten BEFORE we accumulate like terms
         # ex: Prod(x, Prod(Power(x, -1), y))
         initial_terms = cls._flatten_terms(terms)
@@ -1032,7 +1056,7 @@ class Prod(Associative, Expr):
         instance.terms = new_terms
         return instance
 
-    def __init__(self, terms: List[Expr]):
+    def __init__(self, terms: List[Expr], skip_checks=False):
         # terms are already set in __new__
         super().__post_init__()
 
