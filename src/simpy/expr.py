@@ -493,6 +493,30 @@ class Rat(Num, Expr):
             return Rat(other.value - self.value)
         return super().__rsub__(other)
 
+    @cast
+    def __mul__(self, other) -> "Expr":
+        if isinstance(other, Rat):
+            return Rat(self.value * other.value)
+        return super().__mul__(other)
+
+    @cast
+    def __rmul__(self, other) -> "Expr":
+        if isinstance(other, Rat):
+            return Rat(other.value * self.value)
+        return super().__rmul__(other)
+
+    @cast
+    def __truediv__(self, other) -> "Expr":
+        if isinstance(other, Rat) and other.value != 0:
+            return Rat(self.value / other.value)
+        return super().__truediv__(other)
+
+    @cast
+    def __rtruediv__(self, other) -> "Expr":
+        if isinstance(other, Rat) and self.value != 0:
+            return Rat(other.value / self.value)
+        return super().__rtruediv__(other)
+
     def __neg__(self):
         return Rat(-self.value)
 
