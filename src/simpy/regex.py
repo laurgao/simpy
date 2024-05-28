@@ -13,11 +13,14 @@ from .utils import ExprFn, OptionalExprFn, random_id
 
 
 class Any_(Expr):
+    _fields_already_casted = True
+
     def __init__(self, key=None, *, is_multiple_terms=False):
         if not key:
             key = random_id(10)
         self._key = key
         self._is_multiple_terms = is_multiple_terms
+        super().__post_init__()
 
     @property
     def key(self) -> str:

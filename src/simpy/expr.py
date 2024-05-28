@@ -37,55 +37,64 @@ def nesting(expr: "Expr", var: Optional["Symbol"] = None) -> int:
     >>> nesting(x * (1 / y**2 * 3), x)
     2
     """
+    stri = var.name if var else ""
+    if stri not in expr._nesting_cache:
+        expr._nesting_cache[stri] = _nesting(expr, var)
+    return expr._nesting_cache[stri]
 
+
+def _nesting(expr: "Expr", var: "Symbol") -> int:
     if var is not None and not expr.contains(var):
         return 0
 
     # special case
     if isinstance(expr, Prod) and expr.terms[0] == Rat(-1) and len(expr.terms) == 2:
-        return nesting(expr.terms[1], var)
+        return __nesting(expr.terms[1], var)
     if isinstance(expr, Prod):
-        return 1 + max(_nesting(sub_expr, var) for sub_expr in expr.children())
+        return 1 + max(__nesting(sub_expr, var) for sub_expr in expr.children())
 
     if isinstance(expr, Symbol) and (var is None or expr.name == var.name):
         return 1
     elif len(expr.children()) == 0:
         return 0
     else:
-        return 1 + max(nesting(sub_expr, var) for sub_expr in expr.children())
+        return 1 + max(__nesting(sub_expr, var) for sub_expr in expr.children())
 
 
-def _nesting(e, v) -> int:
+def __nesting(e, v) -> int:
     if isinstance(e, Power) and e.exponent == -1:
-        return nesting(e.base, v)
-    return nesting(e, v)
+        return _nesting(e.base, v)
+    return _nesting(e, v)
 
 
 def _cast(x):
-    if x is None or x is True or x is False:
-        # let it slide because it's probably intentional
+    # Check simple cases first and return immediately if possible
+    if x is None or x is True or x is False or isinstance(x, Expr):
         return x
 
-    if inspect.isclass(x) and issubclass(x, Expr):
-        return x
-
+    # Check for numerical types, reuse constant instances if possible
     if isinstance(x, (Fraction, float, int)):
         return Const(x)
-    elif isinstance(x, Expr):
-        return x
-    elif isinstance(x, dict):
+
+    # Handling collections with a recursive approach
+    if isinstance(x, dict):
+        # Consider using a loop or helper function if performance is still an issue
         return {k: _cast(v) for k, v in x.items()}
     elif isinstance(x, tuple):
         return tuple(_cast(v) for v in x)
     elif isinstance(x, list):
         return [_cast(v) for v in x]
-    else:
-        raise NotImplementedError(f"Cannot cast {x} to Expr")
+
+    # Class-based checks last since they are least likely and most expensive
+    if inspect.isclass(x) and issubclass(x, Expr):
+        return x
+
+    raise NotImplementedError(f"Cannot cast {x} to Expr")
 
 
 def cast(func):
     def wrapper(*args, **kwargs) -> "Expr":
-        return func(*[_cast(a) for a in args], **{k: _cast(v) for k, v in kwargs.items()})
+        return func(*map(_cast, args), **{k: _cast(v) for k, v in kwargs.items()})
 
     return wrapper
 
@@ -93,11 +102,20 @@ def cast(func):
 class Expr(ABC):
     """Base class for all expressions."""
 
+    _fields_already_casted = False  # class attribute
+
+    # These should never change per instance.
+    _symbols_cache = None
+    _nesting_cache: Dict[str, int] = None
+
     def __post_init__(self):
         # if any field is an Expr, cast it
-        for field in fields(self):
-            if field.type is Expr or field.type is List[Expr]:
-                setattr(self, field.name, _cast(getattr(self, field.name)))
+        if not self._fields_already_casted:
+            for field in fields(self):
+                if field.type is Expr:
+                    setattr(self, field.name, _cast(getattr(self, field.name)))
+
+        self._nesting_cache = {}
 
     def simplify(self) -> "Expr":
         from .simplify import simplify
@@ -203,10 +221,14 @@ class Expr(ABC):
     def diff(self, var: "Symbol") -> "Expr":
         raise NotImplementedError(f"Cannot get the derivative of {self.__class__.__name__}")
 
-    def symbols(self) -> List["Symbol"]:
-        # I hate this syntax
-        str_set = set([symbol.name for e in self.children() for symbol in e.symbols()])
+    def _symbols(self) -> List["Symbol"]:
+        str_set = {symbol.name for e in self.children() for symbol in e.symbols()}
         return [Symbol(name=s) for s in str_set]
+
+    def symbols(self) -> List["Symbol"]:
+        if self._symbols_cache is None:
+            self._symbols_cache = self._symbols()
+        return self._symbols_cache
 
     @abstractmethod
     def __repr__(self) -> str:
@@ -275,12 +297,12 @@ class Associative:
                 return 1
             if len(expr.symbols()) == 0:
                 return 0
-            return 1 + max(nesting(sub_expr) for sub_expr in expr.children())
+            return 1 + max(_nesting(sub_expr) for sub_expr in expr.children())
 
         def _symboless_nest(expr: Expr) -> int:
             if not expr.children():
                 return 1 if isinstance(expr, Rat) else 2
-            return 2 + max(nesting(sub_expr) for sub_expr in expr.children())
+            return 2 + max(_symboless_nest(sub_expr) for sub_expr in expr.children())
 
         def _symboless_compare(a: Expr, b: Expr) -> int:
             """a and b both don't have any symbols.
@@ -331,6 +353,10 @@ class Num(ABC):
     """all subclasses must implement value"""
 
     value = None
+    _fields_already_casted = True
+
+    def __post_init__(self):
+        super().__post_init__()
 
     def diff(self, var) -> "Rat":
         return Rat(0)
@@ -378,15 +404,8 @@ class Num(ABC):
 
 
 def Const(value: Union[float, Fraction, int]) -> Num:
-    # wrapper ??
-
-    if value == float("inf"):
-        return Infinity()
-    if value == float("-inf"):
-        return NegInfinity()
-    if value == float("NaN"):
-        return NaN()
-    if isinstance(value, (int, Fraction)) or int(value) == value:
+    """Wrapper to create a Num object from a value."""
+    if isinstance(value, (int, Fraction)):
         return Rat(value)
 
     return Float(value)
@@ -398,7 +417,6 @@ class Float(Num, Expr):
     def __new__(cls, value):
         assert isinstance(value, float)
 
-        # a bit repetitive but prevents errors :)
         if value == float("inf"):
             return Infinity()
         if value == float("-inf"):
@@ -417,6 +435,9 @@ class Float(Num, Expr):
     def abs(self) -> "Float":
         return Float(abs(self.value))
 
+    def __neg__(self) -> "Float":
+        return Float(-self.value)
+
 
 class Rat(Num, Expr):
     """A rational number."""
@@ -434,6 +455,7 @@ class Rat(Num, Expr):
         if not isinstance(value, Fraction):
             value = Fraction(int(value), denom)
         self.value = value
+        super().__post_init__()
 
     def __repr__(self) -> str:
         return str(self.value)
@@ -668,6 +690,10 @@ def _accumulate_power(b: Accumulateable, x: Accumulateable) -> Optional[Expr]:
 class Symbol(Expr):
     name: str
 
+    def __post_init__(self):
+        super().__post_init__()
+        assert len(self.name) > 0, "Symbol name cannot be empty"
+
     def __repr__(self) -> str:
         return self.name
 
@@ -697,6 +723,8 @@ class Symbol(Expr):
 @dataclass
 class Sum(Associative, Expr):
     """A sum expression."""
+
+    _fields_already_casted = True
 
     @cast
     def __new__(cls, terms: List[Expr]) -> "Expr":
@@ -751,8 +779,7 @@ class Sum(Associative, Expr):
     def __init__(self, terms: List[Expr]):
         # Overrides the shit that does self.terms = terms because i've already set terms
         # in __new__.
-        # also, no need to super().__post_init__ because we already casted stuff in __new__.
-        pass
+        super().__post_init__()
 
     @classmethod
     def _sort_terms(cls, terms):
@@ -904,6 +931,9 @@ islongsymbol = lambda x: isinstance(x, Symbol) and len(x.name) > 1 or x.__class_
 class Prod(Associative, Expr):
     """A product expression."""
 
+    _numerator_denominator_cache = None
+    _fields_already_casted = True
+
     @cast
     def __new__(cls, terms: List[Expr]) -> "Expr":
         # We need to flatten BEFORE we accumulate like terms
@@ -961,7 +991,7 @@ class Prod(Associative, Expr):
 
     def __init__(self, terms: List[Expr]):
         # terms are already set in __new__
-        pass
+        super().__post_init__()
 
     def __repr__(self) -> str:
         def _term_repr(term):
@@ -1012,7 +1042,7 @@ class Prod(Associative, Expr):
         return " \\cdot ".join(map(_term_latex, self.terms))
 
     @property
-    def numerator_denominator(self) -> Tuple[Expr, Expr]:
+    def _numerator_denominator(self) -> Tuple[Expr, Expr]:
         denominator = []
         numerator = []
         for term in self.terms:
@@ -1033,6 +1063,12 @@ class Prod(Associative, Expr):
         num_expr = Prod(numerator) if len(numerator) > 0 else Rat(1)
         denom_expr = Prod(denominator) if len(denominator) > 0 else Rat(1)
         return [num_expr, denom_expr]
+
+    @property
+    def numerator_denominator(self) -> Tuple[Expr, Expr]:
+        if self._numerator_denominator_cache is None:
+            self._numerator_denominator_cache = self._numerator_denominator
+        return self._numerator_denominator_cache
 
     @property
     def is_subtraction(self):
@@ -1101,6 +1137,8 @@ def debug_repr(expr: Expr) -> str:
 class Power(Expr):
     base: Expr
     exponent: Expr
+
+    _fields_already_casted = True
 
     def __repr__(self) -> str:
         def _term_repr(term):
@@ -1196,7 +1234,7 @@ class Power(Expr):
         return default_return
 
     def __init__(self, base: Expr, exponent: Expr):
-        pass
+        self.__post_init__()
 
     def _power_expandable(self) -> bool:
         return (
@@ -1583,7 +1621,7 @@ class cos(TrigFunction):
         return -sin(self.inner) * self.inner.diff(var)
 
     def __init__(self, inner):
-        pass
+        super().__post_init__()
 
     @cast
     def __new__(cls, inner: Expr) -> "Expr":
