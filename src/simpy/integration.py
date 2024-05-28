@@ -29,9 +29,7 @@ def _get_best_leaf(root: Node) -> Node:
     if len(root.unfinished_children) == 0:
         return root  # base case ???
 
-    is_2nd_lowest_parent = all(
-        [not child.unfinished_children for child in root.unfinished_children]
-    )
+    is_2nd_lowest_parent = all([not child.unfinished_children for child in root.unfinished_children])
     fn = min if root.type == "OR" else max
     if is_2nd_lowest_parent:
         return _get_node_with_best_nesting(root.unfinished_children, fn)
@@ -40,9 +38,7 @@ def _get_best_leaf(root: Node) -> Node:
     return _get_node_with_best_nesting(childrens_best_nodes, fn)
 
 
-def _get_node_with_best_nesting(
-    nodes: List[Node], fn: Callable[[List[Node]], Node]
-) -> Node:
+def _get_node_with_best_nesting(nodes: List[Node], fn: Callable[[List[Node]], Node]) -> Node:
     results = [nesting(node.expr, node.var) for node in nodes]
     best_value = fn(results)
     return nodes[results.index(best_value)]
@@ -52,7 +48,7 @@ def _get_node_with_best_nesting(
 def integrate(
     expr: Expr,
     bounds: Optional[Union[Symbol, Tuple[Expr, Expr], Tuple[Symbol, Expr, Expr]]] = None,
-    **kwargs
+    **kwargs,
 ) -> Optional[Expr]:
     """
     Integrates an expression.
@@ -74,7 +70,7 @@ def integrate(
             integrate(x*y, x)
             integrate(3*x + Tan(x), (2, pi))
             integrate(x*y+3*x, (x, 3, 4))
-    
+
     Returns:
         The solution to the integral.
         None if the integral cannot be solved.
@@ -91,7 +87,6 @@ def integrate(
             raise ValueError(f"Please specify the variable of integration for {expr}")
         bounds = (vars[0], bounds[0], bounds[1])
 
-
     integration = Integration(**kwargs)
     if isinstance(bounds, Symbol):
         return integration.integrate(expr, bounds)
@@ -105,30 +100,27 @@ class Integration:
     """
     Keeps track of integration work as we go
     """
-    # tweakable params
-    DEPTH_FIRST_MAX_NESTING = 7 # chosen somewhat-arbitarily: on may 10th, it lead to lowest time spent on my tests.
 
-    def __init__(self, *, debug: bool = False, debug_hardcore: bool = False, breadth_first = False):
+    # tweakable params
+    DEPTH_FIRST_MAX_NESTING = 7  # chosen somewhat-arbitarily: on may 10th, it lead to lowest time spent on my tests.
+
+    def __init__(self, *, debug: bool = False, debug_hardcore: bool = False, breadth_first=False):
         self._debug = debug
         self._debug_hardcore = debug_hardcore
         self._breadth_first = breadth_first
-        self._timeout = 2 # seconds
-    
-    def integrate_bounds(
-        self, expr: Expr, bounds: Tuple[Symbol, Expr, Expr]
-    ) -> Optional[Expr]:
-        """Performs definite integral.
-        """
+        self._timeout = 2  # seconds
+
+    def integrate_bounds(self, expr: Expr, bounds: Tuple[Symbol, Expr, Expr]) -> Optional[Expr]:
+        """Performs definite integral."""
         x, a, b = bounds
         integral = self.integrate(expr, bounds[0])
         if integral is None:
             return None
         return (integral.subs({x.name: b}) - integral.subs({x.name: a})).simplify()
-    
+
     @staticmethod
     def integrate_without_heuristics(integrand: Expr, var: Symbol) -> Optional[Expr]:
-        """Performs indefinite integral. used for byparts checking if dv is integrateable.
-        """
+        """Performs indefinite integral. used for byparts checking if dv is integrateable."""
         root = Node(integrand, var)
         _integrate_safely(root)
         for leaf in root.unfinished_leaves:
@@ -140,7 +132,7 @@ class Integration:
             return None
         Integration._go_backwards(root)
         return root.solution.simplify()
-    
+
     def _cycle(self, node: Node) -> Optional[Union[Node, Literal["SOLVED"]]]:
         # 1. APPLY ALL SAFE TRANSFORMS
         # _integrate_safely(node)
@@ -160,25 +152,24 @@ class Integration:
         # 4. FIND BEST NEXT NODE BASED ON NESTING
         return self._get_next_node_post_heuristic(next_node)
 
-        
     def _get_next_node_post_heuristic(self, node: Node) -> Node:
         if self._breadth_first:
             return self._get_next_node_post_heuristic_breadth_first(node)
         else:
             return self._get_next_node_post_heuristic_depth_first(node)
-    
+
     def _get_next_node_post_heuristic_breadth_first(self, node: Node) -> Node:
         root = node.root
         if root.unfinished_leaves == 0:
             if root.is_failed:
                 return None
             return "SOLVED"
-        
+
         if len(root.unfinished_leaves) == 1:
             return root.unfinished_leaves[0]
-        
+
         return _get_best_leaf(root)
-    
+
     def _get_next_node_post_heuristic_depth_first(self, node: Node) -> Node:
         if len(node.unfinished_leaves) == 0:
             if node.is_failed:
@@ -208,26 +199,29 @@ class Integration:
         if self._check_if_depth_first_bad(ans):
             return self._get_next_node_post_heuristic_breadth_first(ans)
         return ans
-    
+
     def _check_if_depth_first_bad(self, ans: Node) -> bool:
-            # setting this alone makes csc^2 get solved when depth first!!
+        # setting this alone makes csc^2 get solved when depth first!!
         # if nesting is greater than 5 i honestly don't see how it can get solved super easily??
         # byparts should not be depth first.
 
         if nesting(ans.expr) >= self.DEPTH_FIRST_MAX_NESTING:
             return True
-        from .transforms import (Additivity, ByParts, Expand, PullConstant,
-                                 _get_last_heuristic_transform)
+        from .transforms import (
+            Additivity,
+            ByParts,
+            Expand,
+            PullConstant,
+            _get_last_heuristic_transform,
+        )
+
         t = _get_last_heuristic_transform(ans, (Expand, PullConstant, Additivity))
         if isinstance(t, ByParts):
             return True
         return False
 
-    def integrate(
-        self, integrand: Expr, var: Symbol 
-    ) -> Optional[Expr]:
-        """Performs indefinite integral.
-        """
+    def integrate(self, integrand: Expr, var: Symbol) -> Optional[Expr]:
+        """Performs indefinite integral."""
         root = Node(integrand.simplify(), var)
         _integrate_safely(root)
         curr_node = root
@@ -263,7 +257,7 @@ class Integration:
             _print_success_tree(root)
             breakpoint()
         return root.solution.simplify()
-    
+
     @staticmethod
     def _go_backwards(root: Node):
         """Mutates the tree in place/returns nothing.
@@ -320,8 +314,7 @@ def _integrate_heuristically(node: Node):
         _integrate_safely(child)
 
 
-
-def _print_tree(root: Node, show_stale=True, show_failures=True, show_solution = False, _vardict = None) -> None:
+def _print_tree(root: Node, show_stale=True, show_failures=True, show_solution=False, _vardict=None) -> None:
     if _vardict is None:
         _vardict = defaultdict(str)
 
@@ -329,7 +322,7 @@ def _print_tree(root: Node, show_stale=True, show_failures=True, show_solution =
         return
     if (not show_failures) and root.is_failed:
         return
-    
+
     def _exprify(expr: Expr):
         if root.var.name.startswith("u_"):
             if not _vardict[root.var.name]:
@@ -345,21 +338,32 @@ def _print_tree(root: Node, show_stale=True, show_failures=True, show_solution =
     else:
         expr = _exprify(root.expr)
         repr_expr = repr(expr)
-        
 
-    x = "" if (not root.children and (root.is_solved or root.is_failed)) else " (solved)" if root.is_solved else ' (failed)' if root.is_failed else ' (stale)' if root.is_stale else ''
-    varchange = '' if not hasattr(root.transform, "_variable_change") else " (" + _vardict[root.var.name].name + "=" + repr(_replaceall(root.transform._variable_change, _vardict)) + ")"
-    ending = " (" + root.type + ")" if not root.children else ''
-    n = '{' + str(nesting(root.expr)) + '}'
+    x = (
+        ""
+        if (not root.children and (root.is_solved or root.is_failed))
+        else (" (solved)" if root.is_solved else " (failed)" if root.is_failed else " (stale)" if root.is_stale else "")
+    )
+    varchange = (
+        ""
+        if not hasattr(root.transform, "_variable_change")
+        else " ("
+        + _vardict[root.var.name].name
+        + "="
+        + repr(_replaceall(root.transform._variable_change, _vardict))
+        + ")"
+    )
+    ending = " (" + root.type + ")" if not root.children else ""
+    n = "{" + str(nesting(root.expr)) + "}"
 
     def _wrap(string: str, num: int) -> str:
         if len(string) > num:
-            string = string[:num-3] + "..."
+            string = string[: num - 3] + "..."
             spaces = ""
         else:
             spaces = " " * (num - len(string))
         return string + spaces
-    
+
     repr_expr = _wrap(repr_expr, 50)
     solution = _wrap(repr(_exprify(root.solution)), 50) if (show_solution and root.is_solved) else ""
     distance = _wrap(f"[{root.distance_from_root}]", 4)
@@ -375,10 +379,12 @@ def _print_tree(root: Node, show_stale=True, show_failures=True, show_solution =
 def _replaceall(expr: Expr, vardict: Dict[str, Symbol]) -> Expr:
     def condition(expr):
         return isinstance(expr, Symbol)
+
     def perform(expr):
         return vardict[expr.name]
+
     return replace_factory(condition, perform)(expr)
-    
+
 
 def _print_success_tree(root: Node) -> None:
     _print_tree(root, False, False)

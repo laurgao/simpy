@@ -10,11 +10,11 @@ from test_utils import assert_eq_strict, unhashable_set_eq, x, y
 
 def test_equality():
     assert x == x
-    assert x == Symbol("x") # seperately created symbols with the same name should be the same
+    assert x == Symbol("x")  # seperately created symbols with the same name should be the same
     assert not x == y
     assert x != y
     assert not x == 2 * x
-    assert (x + 2) == (x + 2) # seperately created sums should be the same
+    assert (x + 2) == (x + 2)  # seperately created sums should be the same
     assert (x + 2) == (2 + x)
     assert x + 2 == Symbol("x") + 2
     assert x * y == y * x
@@ -33,8 +33,8 @@ def test_equality():
 
 def test_floats():
     assert_eq_strict(Float(3.2), Rat(16, 5).evalf())
-    assert_eq_strict(Sum([Float(2.32), Float(.31)]), Float(2.63))
-    assert_eq_strict(Prod([Float(2.32), Float(.31)]), Float(0.7192))
+    assert_eq_strict(Sum([Float(2.32), Float(0.31)]), Float(2.63))
+    assert_eq_strict(Prod([Float(2.32), Float(0.31)]), Float(0.7192))
 
 
 def test_defaults():
@@ -47,19 +47,21 @@ def test_defaults():
     assert_eq_strict(x * 2 - 2 * x, 0)
     assert_eq_strict(((x + 1) ** 2 - (x + 1) * (x + 1)), 0)
 
+
 def test_sum_combines_like_terms():
     assert_eq_strict(x + x, 2 * x)
     assert_eq_strict(x + x + x, 3 * x)
-    assert_eq_strict(3 * (x + 2) + 2 * (x + 2), 5 * (x + 2)) # like terms that is a sum
-    assert_eq_strict(3 * (x + 2) + 2 * (2 + x), 5 * (x + 2)) # like terms that is a sum
-    
+    assert_eq_strict(3 * (x + 2) + 2 * (x + 2), 5 * (x + 2))  # like terms that is a sum
+    assert_eq_strict(3 * (x + 2) + 2 * (2 + x), 5 * (x + 2))  # like terms that is a sum
+
+
 def test_prod_combines_like_terms_prod():
     assert_eq_strict(x**2, x * x)
     assert_eq_strict(x**3, x * x * x)
 
     # More complicated example
     # this wasn't working when the denominator "power" wasn't flattening in simplification.
-    expr = (2*sin(x)*cos(x)**2)/(sin(x)*cos(x)**2)
+    expr = (2 * sin(x) * cos(x) ** 2) / (sin(x) * cos(x) ** 2)
     assert expr == 2, f"expected 2, got {expr} // debug repr: {debug_repr(expr)}"
 
 
@@ -69,31 +71,35 @@ def test_basic_power_simplification():
     assert_eq_strict(Rat(2) ** 2, 4)
     assert_eq_strict(sqrt(4), 2)
     assert_eq_strict(sqrt(x**2), x)
-    assert_eq_strict(2/sqrt(2), sqrt(2))
+    assert_eq_strict(2 / sqrt(2), sqrt(2))
 
 
 def test_expand_prod():
     # make sure an expandable denominator gets expanded
-    assert_eq_strict((1 / (x * (x + 6))).expand(), 1 / (x**2 + x * 6)) # this can be converted to a power
+    assert_eq_strict((1 / (x * (x + 6))).expand(), 1 / (x**2 + x * 6))  # this can be converted to a power
     assert_eq_strict((y / (x * (x + 6))).expand(), y / (x**2 + x * 6))
     # make sure that a numberator with a single sum gets expanded
     assert_eq_strict(((2 + x) / sin(x)).expand(), (2 / sin(x) + x / sin(x)))
 
+
 def test_expand_neg_power():
-    expr = (cos(2*x) + 1)**2 - 8/(3*(cos(2*x) + 1)**3) + 2/(cos(2*x) + 1)**-4
+    expr = (cos(2 * x) + 1) ** 2 - 8 / (3 * (cos(2 * x) + 1) ** 3) + 2 / (cos(2 * x) + 1) ** -4
     assert expr.expandable()
+
 
 def test_flatten():
     assert_eq_strict(x + (2 + y), x + 2 + y)
 
     # Test nested flatten
-    expr = x ** 5 + ((3 + x) + 2 * y)
-    expected_terms = [x **5, 3, x, 2 * y]
+    expr = x**5 + ((3 + x) + 2 * y)
+    expected_terms = [x**5, 3, x, 2 * y]
     assert unhashable_set_eq(expr.terms, expected_terms)
+
 
 def test_regex():
     assert count(2, x) == 0
     assert count(tan(x + 1) ** 2 - 2 * x, x) == 2
+
 
 def test_nesting():
     assert nesting(x**2, x) == 2
@@ -113,8 +119,8 @@ def test_repr():
     assert repr(Rat(-1) ** Fraction(1, 4)) == "(-1)^(1/4)"
     assert sqrt(3).__repr__() == "sqrt(3)"
     assert repr(1 / sqrt(1 - x**2)) == "1/sqrt(-x^2 + 1)"
-    assert repr(sqrt(1/x)) == "1/sqrt(x)"
-    assert repr(x ** -Fraction(1,2)) == "1/sqrt(x)"
+    assert repr(sqrt(1 / x)) == "1/sqrt(x)"
+    assert repr(x ** -Fraction(1, 2)) == "1/sqrt(x)"
 
     # make sure denominator is bracketed
     assert repr(sin(x) / (2 * x)) == "sin(x)/(2*x)"
@@ -123,7 +129,7 @@ def test_repr():
     assert repr(x * Fraction(1, 2)) == "x/2"
     assert repr(3 - 2 * x) == "-2*x + 3"
     # make sure polynomials show up in the correct order
-    poly = 3 * x ** 4 / 2 + x ** 5 + 2 * x + 3 - x ** 2
+    poly = 3 * x**4 / 2 + x**5 + 2 * x + 3 - x**2
     assert repr(poly) == "x^5 + 3*x^4/2 - x^2 + 2*x + 3"
 
     # when there are multiple symboless terms, make sure their order is logical
@@ -136,7 +142,7 @@ def test_repr():
 
 
 def test_neg_power():
-    expr = Rat(-1) ** Fraction(5, 2) # this is i. ig it should just stay this way & not simplify.
+    expr = Rat(-1) ** Fraction(5, 2)  # this is i. ig it should just stay this way & not simplify.
     assert debug_repr(expr) == "Power(-1, 5/2)"
 
 
@@ -144,16 +150,16 @@ def test_neg_power():
 def test_circular_repr():
     expr = Rat(-1) ** Fraction(5, 2) * -2
     repr(expr)
-    expr = Prod([-Fraction(4, 5), Rat(-1)**Fraction(5, 2)])
+    expr = Prod([-Fraction(4, 5), Rat(-1) ** Fraction(5, 2)])
     repr(expr)
-    expr = Prod([-Fraction(4, 5), Rat(-1)**Fraction(5, 2)*x**Fraction(5,2)])
+    expr = Prod([-Fraction(4, 5), Rat(-1) ** Fraction(5, 2) * x ** Fraction(5, 2)])
     repr(expr)
 
 
 def test_factor():
     # Simple example
     x = symbols("x")
-    expr = 6 * x + x **2 
+    expr = 6 * x + x**2
     expected = x * (x + 6)
     assert expr.factor() == expected
 
@@ -166,11 +172,7 @@ def test_factor():
         - c4 * r4 / (sqrt(a) * b ** Fraction(3 / 2))
     )
     factored = em_hw_expr.factor()
-    expected_factored = (
-        1
-        / (sqrt(a) * sqrt(b))
-        * (c3 * r3 - c3**2 * r3**2 / (c4 * r4 * a) - c4 * r4 / b)
-    )
+    expected_factored = 1 / (sqrt(a) * sqrt(b)) * (c3 * r3 - c3**2 * r3**2 / (c4 * r4 * a) - c4 * r4 / b)
     assert_eq_strict(factored, expected_factored)
 
 
@@ -189,15 +191,15 @@ def test_some_constructor_simplification():
     i_0 = v / z_eq
     pload = Fraction(1, 2) * r_l * i_0**2
 
-    assert_eq_strict(
-        pload, v**2 / (8 * r1)
-    )  # the power dissipated through the load when z_l = conjugate(z_s)
+    assert_eq_strict(pload, v**2 / (8 * r1))  # the power dissipated through the load when z_l = conjugate(z_s)
+
 
 def test_factor_const():
     expr = 2 - 2 * x
     factored = expr.factor()
     expected = 2 * (1 - x)
     assert_eq_strict(expected, factored)
+
 
 def test_strict_const_power_simplification():
     """TBH I feel like I made this overly complicated LOL but whatever we live with this."""
@@ -227,13 +229,12 @@ def test_strict_const_power_simplification():
     assert_eq_strict(expr, expected)
 
     # but it can cube root
-    expr = Power(Rat(Fraction(-8, 3)), Fraction(1,3))
-    expected = Prod([Rat(-2), Power(3, Fraction(-1,3))])
+    expr = Power(Rat(Fraction(-8, 3)), Fraction(1, 3))
+    expected = Prod([Rat(-2), Power(3, Fraction(-1, 3))])
     assert_eq_strict(expr, expected)
-    expr = Power(Rat(Fraction(-8, 3)), Fraction(-1,3))
-    expected = Prod([neg_half, Power(3, Fraction(1,3))])
+    expr = Power(Rat(Fraction(-8, 3)), Fraction(-1, 3))
+    expected = Prod([neg_half, Power(3, Fraction(1, 3))])
     assert_eq_strict(expr, expected)
-
 
     # All permutations of (36)^(1/2)
     expr = Power(Rat(Fraction(1, 36)), neg_half)
@@ -280,60 +281,66 @@ def test_fractional_power_beauty_standards():
     half = Rat(Fraction(1, 2))
     neg_half = Rat(Fraction(-1, 2))
 
-    assert_eq_strict(f53 ** half, f35 ** neg_half) # [B]
-    assert_eq_strict(f35 ** half, f53 ** neg_half) # [B]
+    assert_eq_strict(f53**half, f35**neg_half)  # [B]
+    assert_eq_strict(f35**half, f53**neg_half)  # [B]
 
-    assert repr(Power(half, neg_half)) == "sqrt(2)" # [A]
-    assert_eq_strict(Power(half, neg_half), Power(Rat(2), half)) # [A]
+    assert repr(Power(half, neg_half)) == "sqrt(2)"  # [A]
+    assert_eq_strict(Power(half, neg_half), Power(Rat(2), half))  # [A]
     f17 = Rat(Fraction(1, 7))
     neg_f17 = Rat(Fraction(-1, 7))
-    assert repr(Power(half, neg_f17)) == "2^(1/7)" # [A]
-    assert repr(Power(f17, neg_f17)) == "7^(1/7)" # [A]
+    assert repr(Power(half, neg_f17)) == "2^(1/7)"  # [A]
+    assert repr(Power(f17, neg_f17)) == "7^(1/7)"  # [A]
 
     # More controversially, [C]:
     # Both of the following should be represented as 1/3^(1/7)
-    e1 = Power(Rat(Fraction(1,3)), f17)
+    e1 = Power(Rat(Fraction(1, 3)), f17)
     e2 = Power(Rat(3), neg_f17)
     assert repr(e1) == repr(e2) == "1/3^(1/7)"
     assert_eq_strict(e1, e2)
 
+
 def test_singlefuncs_auto_simplify_special_values():
     assert_eq_strict(log(1), 0)
     assert_eq_strict(log(e**x), x)
-    assert_eq_strict(sin(3*pi), 0)
-    assert_eq_strict(cos(5*pi), -1)
-    assert_eq_strict(csc(pi/2), 1)
-    assert_eq_strict(cot(pi/4), 1)
+    assert_eq_strict(sin(3 * pi), 0)
+    assert_eq_strict(cos(5 * pi), -1)
+    assert_eq_strict(csc(pi / 2), 1)
+    assert_eq_strict(cot(pi / 4), 1)
     assert_eq_strict(cos(-x), cos(x))
     assert_eq_strict(sin(-x), -sin(x))
     assert_eq_strict(tan(-x), -tan(x))
-    assert_eq_strict(sin(acos(x+y)), sqrt(1 - (x+y)**2))
-    assert_eq_strict(csc(acos(x+y)), 1/sqrt(1 - (x+y)**2))
-    assert_eq_strict(sec(acos(x+y)), 1/(x+y))
-    assert_eq_strict(atan(cot(3*x+2)), 1/(3*x+2))
+    assert_eq_strict(sin(acos(x + y)), sqrt(1 - (x + y) ** 2))
+    assert_eq_strict(csc(acos(x + y)), 1 / sqrt(1 - (x + y) ** 2))
+    assert_eq_strict(sec(acos(x + y)), 1 / (x + y))
+    assert_eq_strict(atan(cot(3 * x + 2)), 1 / (3 * x + 2))
 
 
 @pytest.mark.xfail
 def test_trigfuncs_auto_simplify_plus_2pis():
-    assert_eq_strict(cos(x + 2*pi), cos(x))
-    assert_eq_strict(sin(x + e ** y + 4*pi), sin(x + e ** y))
-    assert_eq_strict(asin(x + 2*pi), asin(x + 2*pi))
+    assert_eq_strict(cos(x + 2 * pi), cos(x))
+    assert_eq_strict(sin(x + e**y + 4 * pi), sin(x + e**y))
+    assert_eq_strict(asin(x + 2 * pi), asin(x + 2 * pi))
+
 
 def test_trigfuncs_auto_simplify_more_complex_negs():
-    assert_eq_strict(cos(-x-2), cos(x+2))
+    assert_eq_strict(cos(-x - 2), cos(x + 2))
 
 
-@pytest.mark.parametrize(["cls", "func"], [
-    [sin, math.sin],
-    [cos, math.cos],
-    [tan, math.tan],
-])
+@pytest.mark.parametrize(
+    ["cls", "func"],
+    [
+        [sin, math.sin],
+        [cos, math.cos],
+        [tan, math.tan],
+    ],
+)
 def test_trigfunctions_special_values_are_correct(cls: Type[TrigFunction], func):
     import numpy as np
+
     for k in TrigFunction._SPECIAL_KEYS:
         num = Fraction(k)
-        v1 = cls(num*pi).evalf().value
-        v2 = func(num*math.pi)
+        v1 = cls(num * pi).evalf().value
+        v2 = func(num * math.pi)
         try:
             np.testing.assert_almost_equal(v1, v2)
         except AssertionError:
@@ -347,11 +354,10 @@ def test_is_subtraction():
     assert x.is_subtraction is False
     assert (-x).is_subtraction is True
     assert Rat(0).is_subtraction is False
-    assert Rat(-2).is_subtraction is True 
-    assert (e ** x).is_subtraction is False
-    assert (-e ** -x).is_subtraction is True
+    assert Rat(-2).is_subtraction is True
+    assert (e**x).is_subtraction is False
+    assert (-(e**-x)).is_subtraction is True
     assert (Rat(-3) ** 3).is_subtraction is True
     assert (Rat(Fraction(-3, 2)) ** Fraction(1, 3)).is_subtraction is True
     assert (Rat(Fraction(-3, 2)) ** Fraction(-2, 3)).is_subtraction is True
     assert (Rat(Fraction(-3, 2)) ** Fraction(1, 2)).is_subtraction is False
-

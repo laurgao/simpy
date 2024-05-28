@@ -65,7 +65,7 @@ def _cast(x):
     if x is None or x is True or x is False:
         # let it slide because it's probably intentional
         return x
-    
+
     if inspect.isclass(x) and issubclass(x, Expr):
         return x
 
@@ -85,7 +85,9 @@ def _cast(x):
 
 def cast(func):
     def wrapper(*args, **kwargs) -> "Expr":
-        return func(*[_cast(a) for a in args], **{k: _cast(v) for k, v in kwargs.items()})
+        return func(
+            *[_cast(a) for a in args], **{k: _cast(v) for k, v in kwargs.items()}
+        )
 
     return wrapper
 
@@ -99,8 +101,9 @@ class Expr(ABC):
 
     def simplify(self) -> "Expr":
         from .simplify import simplify
+
         return simplify(self)
-    
+
     @cast
     def __add__(self, other) -> "Expr":
         return Sum([self, other])
@@ -151,7 +154,7 @@ class Expr(ABC):
 
     def __neg__(self) -> "Expr":
         return -1 * self
-    
+
     def __abs__(self) -> "Expr":
         return Abs(self)
 
@@ -163,8 +166,7 @@ class Expr(ABC):
 
     # overload if necessary
     def expand(self) -> "Expr":
-        """Subclasses: this function should raise AssertionError if self.expandable() is false.
-        """
+        """Subclasses: this function should raise AssertionError if self.expandable() is false."""
         if self.expandable():
             raise NotImplementedError(f"Expansion of {self} not implemented")
         raise AssertionError(f"Cannot expand {self}")
@@ -173,11 +175,11 @@ class Expr(ABC):
     @abstractmethod
     def subs(self, subs: Dict[str, "Expr"]) -> "Expr":
         pass
-    
+
     @abstractmethod
     def _evalf(self, subs: Dict[str, "Expr"]) -> "Expr":
         return self.subs(subs)
-    
+
     @cast
     def evalf(self, subs: Optional[Dict[str, "Expr"]] = None) -> "Expr":
         if subs is None:
@@ -191,9 +193,10 @@ class Expr(ABC):
     def contains(self: "Expr", var: "Symbol") -> bool:
         is_var = isinstance(self, Symbol) and self.name == var.name
         return is_var or any(e.contains(var) for e in self.children())
-    
+
     def has(self, cls: Type["Expr"]) -> bool:
         from .regex import contains_cls
+
         return contains_cls(self, cls)
 
     @abstractmethod
@@ -215,10 +218,10 @@ class Expr(ABC):
     def latex(self) -> str:
         raise NotImplementedError(f"Cannot convert {self.__class__.__name__} to latex")
 
-    @cast    
+    @cast
     def __mod__(self, other) -> "Rat":
-        return NotImplemented 
-    
+        return NotImplemented
+
     @property
     def is_subtraction(self) -> bool:
         return False
@@ -239,8 +242,7 @@ class Associative:
 
     @classmethod
     def _flatten_terms(cls, terms: List[Expr]):
-        """Utility function for flattening a list.
-        """
+        """Utility function for flattening a list."""
         new_terms = []
         for t in terms:
             if isinstance(t, cls):
@@ -249,7 +251,6 @@ class Associative:
             else:
                 new_terms += [t]
         return new_terms
-
 
     def _flatten(self) -> None:
         """Put any sub-products/sub-sums into the parent
@@ -265,7 +266,7 @@ class Associative:
     def _sort(self) -> None:
         def _nesting(expr: "Expr") -> int:
             """Like the public nesting except constant multipliers don't count
-            to prevent fucky reprs for things like 
+            to prevent fucky reprs for things like
             1 + x^3 + 3*x^2
             """
             expr = remove_const_factor(expr)
@@ -274,15 +275,15 @@ class Associative:
             if len(expr.symbols()) == 0:
                 return 0
             return 1 + max(nesting(sub_expr) for sub_expr in expr.children())
-        
+
         def _symboless_nest(expr: Expr) -> int:
             if not expr.children():
                 return 1 if isinstance(expr, Rat) else 2
             return 2 + max(nesting(sub_expr) for sub_expr in expr.children())
-        
+
         def _symboless_compare(a: Expr, b: Expr) -> int:
             """a and b both don't have any symbols.
-            
+
             Order is first the rat and then float and then sort by nesting including
             """
             return _symboless_nest(a) - _symboless_nest(b)
@@ -316,10 +317,10 @@ class Associative:
 
         key = cmp_to_key(_compare)
         self.terms = sorted(self.terms, key=key)
-    
+
     def _evalf(self, subs):
         return self.__class__([term.evalf(subs) for term in self.terms])
-    
+
     def __iter__(self):
         return iter(self.terms)
 
@@ -329,6 +330,7 @@ class Associative:
 
 class Num(ABC):
     """all subclasses must implement value"""
+
     value = None
 
     def diff(self, var) -> "Rat":
@@ -340,10 +342,10 @@ class Num(ABC):
     @cast
     def subs(self, subs: Dict[str, Expr]):
         return self
-   
+
     def _evalf(self, subs: Dict[str, Expr]):
         return Float(float(self.value))
-    
+
     def __repr__(self):
         # default, override if necessary.
         return repr(self.value)
@@ -367,11 +369,11 @@ class Num(ABC):
     @cast
     def __lt__(self, other):
         return isinstance(other, Num) and self.value < other.value
-    
+
     @property
     def is_subtraction(self):
         return self.value < 0
-    
+
     def __abs__(self) -> "Rat":
         return Rat(abs(self.value))
 
@@ -379,16 +381,17 @@ class Num(ABC):
 def Const(value: Union[float, Fraction, int]) -> Num:
     # wrapper ??
 
-    if value == float('inf'):
+    if value == float("inf"):
         return Infinity()
-    if value == float('-inf'):
+    if value == float("-inf"):
         return NegInfinity()
-    if value == float('NaN'):
+    if value == float("NaN"):
         return NaN()
     if isinstance(value, (int, Fraction)) or int(value) == value:
         return Rat(value)
 
     return Float(value)
+
 
 class Float(Num, Expr):
     value: float
@@ -397,11 +400,11 @@ class Float(Num, Expr):
         assert isinstance(value, float)
 
         # a bit repetitive but prevents errors :)
-        if value == float('inf'):
+        if value == float("inf"):
             return Infinity()
-        if value == float('-inf'):
+        if value == float("-inf"):
             return NegInfinity()
-        if value == float('NaN'):
+        if value == float("NaN"):
             return NaN()
 
         return super().__new__(cls)
@@ -411,12 +414,14 @@ class Float(Num, Expr):
 
     def latex(self):
         return repr(self)
-    
+
     def abs(self) -> "Float":
         return Float(abs(self.value))
 
+
 class Rat(Num, Expr):
     """A rational number."""
+
     value: Fraction
 
     def __new__(cls, value, denom: int = None):
@@ -443,7 +448,7 @@ class Rat(Num, Expr):
         if isinstance(other, Rat):
             return Rat(self.value + other.value)
         return super().__add__(other)
-    
+
     @cast
     def __radd__(self, other) -> "Expr":
         if isinstance(other, Rat):
@@ -455,7 +460,7 @@ class Rat(Num, Expr):
         if isinstance(other, Rat):
             return Rat(self.value - other.value)
         return super().__sub__(other)
-    
+
     @cast
     def __rsub__(self, other) -> "Expr":
         if isinstance(other, Rat):
@@ -464,6 +469,7 @@ class Rat(Num, Expr):
 
     def __neg__(self):
         return Rat(-self.value)
+
     ###
 
     def latex(self) -> str:
@@ -480,13 +486,13 @@ class Rat(Num, Expr):
     def reciprocal(self) -> "Rat":
         return Rat(self.value.denominator, self.value.numerator)
 
-    @cast    
+    @cast
     def __mod__(self, other) -> "Rat":
-        if isinstance(other, Rat):  
+        if isinstance(other, Rat):
             return Rat(self.value % other.value)
         else:
             return NotImplemented
-        
+
     @property
     def is_int(self) -> bool:
         return self.value.denominator == 1
@@ -515,7 +521,7 @@ class E(Num, Expr):
 
     def __eq__(self, other) -> bool:
         return isinstance(other, E)
-    
+
 
 class Infinity(Num, Expr):
     value = float("inf")
@@ -525,13 +531,13 @@ class Infinity(Num, Expr):
 
     def latex(self) -> str:
         return "\\infty"
-    
+
     def __abs__(self) -> "Infinity":
         return self
 
     def reciprocal(self) -> "Rat":
         return Rat(0)
-    
+
     def __neg__(self):
         return NegInfinity()
 
@@ -544,13 +550,13 @@ class NegInfinity(Num, Expr):
 
     def latex(self) -> str:
         return "-\\infty"
-    
+
     def __abs__(self) -> "Infinity":
         return inf
 
     def reciprocal(self) -> "Rat":
         return Rat(0)
-    
+
     def __neg__(self):
         return inf
 
@@ -567,15 +573,19 @@ class NaN(Num, Expr):
 
 pi = Pi()
 e = E()
-inf = Infinity() # should division by zero be inf or be zero divisionerror or? // sympy makes it zoo
+inf = (
+    Infinity()
+)  # should division by zero be inf or be zero divisionerror or? // sympy makes it zoo
 # not gonna export this yet bc it's expiremental?
 
 
 Accumulateable = Union[Rat, Infinity, NegInfinity, Float]
 
 
-def accumulate(*consts: List[Accumulateable], type_: Literal["sum", "prod"]="sum") -> List[Expr]:
-    func = sum if type_ == "sum" else lambda terms: reduce(lambda x, y: x * y, terms, 1) 
+def accumulate(
+    *consts: List[Accumulateable], type_: Literal["sum", "prod"] = "sum"
+) -> List[Expr]:
+    func = sum if type_ == "sum" else lambda terms: reduce(lambda x, y: x * y, terms, 1)
     if any(isinstance(c, (Infinity, NegInfinity)) for c in consts):
         return [Const(func(c.value for c in consts))]
     frac = Rat(func(c.value for c in consts if isinstance(c, Rat)))
@@ -589,7 +599,7 @@ def accumulate(*consts: List[Accumulateable], type_: Literal["sum", "prod"]="sum
         if float_ != 0:
             return [float_]
         return []
-    
+
     if type_ == "prod":
         if frac == 0 or float_ == 0:
             return [Rat(0)]
@@ -601,16 +611,15 @@ def accumulate(*consts: List[Accumulateable], type_: Literal["sum", "prod"]="sum
         if float_ != 1:
             return [float_]
         return []
-    
-    
+
+
 def _accumulate_power(b: Accumulateable, x: Accumulateable) -> Optional[Expr]:
-    """If returns None, means it cannot be simplified.
-    """
+    """If returns None, means it cannot be simplified."""
     if isinstance(b, Float) and isinstance(x, Float):
-        return Float(b.value ** x.value)
-    
+        return Float(b.value**x.value)
+
     if isinstance(b, (Infinity, NegInfinity)) or isinstance(x, (Infinity, NegInfinity)):
-        return Const(b.value ** x.value)
+        return Const(b.value**x.value)
 
     if b == 0:
         if x > 0:
@@ -624,19 +633,19 @@ def _accumulate_power(b: Accumulateable, x: Accumulateable) -> Optional[Expr]:
             return Rat(b.value**x.value)
         except:
             pass
-        
+
         # Rewriting for consistency between same values.
         if b.value.numerator == 1:
             return Power(b.reciprocal(), -x)
         elif b.value.denominator != 1 and x < 0:
             return Power(b.reciprocal(), -x)
-        
+
         if x.value.denominator % 2 == 0 and b < 0:
             # Cannot be simplified further.
             return
         elif b < 0:
             return -1 * Power(-b, x)
-        
+
         # check if one of num^exponent or denom^exponent is integer
         n, d = abs(b.value.numerator), b.value.denominator
         if x < 0:
@@ -645,23 +654,24 @@ def _accumulate_power(b: Accumulateable, x: Accumulateable) -> Optional[Expr]:
         xn = n**xvalue  # exponentiated numerator
         xd = d**xvalue
         isint = lambda a: int(a) == a and a != 1
-        if not isint(xn) and not isint(xd): # Cannot be simplified further
+        if not isint(xn) and not isint(xd):  # Cannot be simplified further
             return
 
         # the answer will be a product
         terms = []
         if isint(xn):
             terms.append(Rat(xn))
-            terms.append(Power(d, -xvalue)) # will this circular? no it won't it should get caught under line after `if not isint(xn) and not...`
+            terms.append(
+                Power(d, -xvalue)
+            )  # will this circular? no it won't it should get caught under line after `if not isint(xn) and not...`
         else:
             # isint(xd)
             terms.append(Rat(1, int(xd)))
             terms.append(Power(n, xvalue))
         if b.value.numerator < 0:
             terms.append(Rat(-1))
-        
-        return Prod(terms)
 
+        return Prod(terms)
 
 
 @dataclass
@@ -674,7 +684,7 @@ class Symbol(Expr):
     @cast
     def subs(self, subs: Dict[str, "Rat"]):
         return subs.get(self.name, self)
-    
+
     def _evalf(self, subs):
         return super()._evalf()
 
@@ -699,7 +709,7 @@ class Sum(Associative, Expr):
     @cast
     def __new__(cls, terms: List[Expr]) -> "Expr":
         """When a sum is initiated:
-        - terms are converted to expr 
+        - terms are converted to expr
         - flatten
         - accumulate like terms & constants
         - sort
@@ -743,7 +753,7 @@ class Sum(Associative, Expr):
         instance = super().__new__(cls)
         instance.terms = final_terms
         return instance
-    
+
     def __init__(self, terms: List[Expr]):
         # Overrides the shit that does self.terms = terms because i've already set terms
         # in __new__.
@@ -811,7 +821,9 @@ class Sum(Associative, Expr):
             if isinstance(term, Power) and isinstance(
                 term.exponent, Rat
             ):  # can't be prod bc it's simplified
-                return Rat(1), [[term.base, abs(term.exponent), term.exponent.value > 0]]
+                return Rat(1), [
+                    [term.base, abs(term.exponent), term.exponent.value > 0]
+                ]
             if isinstance(term, Rat):
                 return term, [[term, Rat(1), True]]
             return Rat(1), [[term, Rat(1), True]]
@@ -840,8 +852,8 @@ class Sum(Associative, Expr):
         # Factor coeffs
         common_coeff = abs(coeffs[0])
         for c in coeffs[1:]:
-            x: Rat = (c / common_coeff)
-            y: Rat = (common_coeff / c)
+            x: Rat = c / common_coeff
+            y: Rat = common_coeff / c
             if x.value.denominator == 1 or y.value.denominator == 1:
                 common_coeff = min(abs(c), abs(common_coeff))
             else:
@@ -869,8 +881,8 @@ class Sum(Associative, Expr):
         for term in self.terms:
             new_terms.append(term / common_expr)
 
-        return (common_expr * Sum(new_terms))
-    
+        return common_expr * Sum(new_terms)
+
     @property
     def is_subtraction(self):
         return all([t.is_subtraction for t in self.terms])
@@ -896,8 +908,14 @@ def deconstruct_power(expr: Expr) -> Tuple[Expr, Rat]:
     else:
         return (expr, Rat(1))
 
+
 isfractionorneg = lambda x: isinstance(x, Rat) and (x.value.denominator != 1 or x < 0)
-islongsymbol = lambda x: isinstance(x, Symbol) and len(x.name) > 1 or x.__class__.__name__ == "Any_" and len(x.anykey) > 1
+islongsymbol = (
+    lambda x: isinstance(x, Symbol)
+    and len(x.name) > 1
+    or x.__class__.__name__ == "Any_"
+    and len(x.anykey) > 1
+)
 
 
 @dataclass
@@ -925,35 +943,41 @@ class Prod(Associative, Expr):
                 if base2 == base:
                     expo += expo2
                     initial_terms[j] = None
-            
+
             # Decision: if exponent here is 0, we don't include it.
             # We don't wait for simplify to remove it.
             if expo == 0:
                 continue
             new_terms.append(Power(base, expo) if expo != 1 else base)
-        
+
         # accumulate constants to the front
-        const = accumulate(*[t for t in new_terms if isinstance(t, Accumulateable)], type_="prod")
+        const = accumulate(
+            *[t for t in new_terms if isinstance(t, Accumulateable)], type_="prod"
+        )
         if const == [0]:
             return Rat(0)
 
         non_constant_terms = [t for t in new_terms if not isinstance(t, Accumulateable)]
         new_terms = const + non_constant_terms
-        
+
         if len(new_terms) == 0:
             return Rat(1)
         if len(new_terms) == 1:
             return new_terms[0]
-        
+
         # should sort here.
-        
-        if len(new_terms) == 2 and new_terms[0] == Rat(-1) and isinstance(new_terms[1], Sum):
+
+        if (
+            len(new_terms) == 2
+            and new_terms[0] == Rat(-1)
+            and isinstance(new_terms[1], Sum)
+        ):
             # do not let allow this to exist as a Prod because it causes a fucky repr
             # ex -1 * (x + y) will get displayed as -x + y the way that repr is currently done.
             # this is innaccurate and dangerous.
             return -new_terms[1]
 
-        instance = super().__new__(cls) 
+        instance = super().__new__(cls)
         instance.terms = new_terms
         return instance
 
@@ -980,8 +1004,7 @@ class Prod(Associative, Expr):
         if denominator != Rat(1):
 
             def _x(expr: Expr, b=True):
-                """b: bracketize multiple terms (boolean)
-                """
+                """b: bracketize multiple terms (boolean)"""
                 if not isinstance(expr, Prod):
                     return _term_repr(expr)
                 return "(" + repr(expr) + ")" if b else repr(expr)
@@ -1030,7 +1053,7 @@ class Prod(Associative, Expr):
                 numerator.append(term)
 
         num_expr = Prod(numerator) if len(numerator) > 0 else Rat(1)
-        denom_expr = Prod(denominator) if len(denominator) > 0  else Rat(1)
+        denom_expr = Prod(denominator) if len(denominator) > 0 else Rat(1)
         return [num_expr, denom_expr]
 
     @property
@@ -1043,11 +1066,18 @@ class Prod(Associative, Expr):
         # OR if it contains sums in the denominator AND the denominator has another term other than the sum
         # (so, a singular sum in a numerator is expandable but a single sum in the denominator isn't.)
         num, denom = self.numerator_denominator
-        num_expandable = any(isinstance(t, Sum) for t in num.terms) if isinstance(num, Prod) else isinstance(num, Sum)
-        denom_expandable = any(isinstance(t, Sum) for t in denom.terms) if isinstance(denom, Prod) else False
+        num_expandable = (
+            any(isinstance(t, Sum) for t in num.terms)
+            if isinstance(num, Prod)
+            else isinstance(num, Sum)
+        )
+        denom_expandable = (
+            any(isinstance(t, Sum) for t in denom.terms)
+            if isinstance(denom, Prod)
+            else False
+        )
         has_sub_expandable = any(t.expandable() for t in self.terms)
         return num_expandable or denom_expandable or has_sub_expandable
-
 
     def expand(self):
         assert self.expandable(), f"Cannot expand {self}"
@@ -1055,7 +1085,7 @@ class Prod(Associative, Expr):
         num, denom = self.numerator_denominator
         if denom.expandable():
             denom = denom.expand()
-            
+
         # now we assume denom is good and we move on with life as usual
         if not isinstance(num, Prod):
             expanded_terms = [num.expand() if num.expandable() else num]
@@ -1064,14 +1094,14 @@ class Prod(Associative, Expr):
         sums = [t for t in expanded_terms if isinstance(t, Sum)]
         other = [t for t in expanded_terms if not isinstance(t, Sum)]
         if not sums:
-            return (Prod(expanded_terms) / denom)
+            return Prod(expanded_terms) / denom
 
         # for every combination of terms in the sums, multiply them and add
         # (using itertools)
         final_sum_terms = []
         for terms in itertools.product(*[s.terms for s in sums]):
             final_sum_terms.append(Prod(other + list(terms)) / denom)
-        
+
         return Sum(final_sum_terms)
 
     @cast
@@ -1087,12 +1117,10 @@ class Prod(Associative, Expr):
         )
 
 
-
 def debug_repr(expr: Expr) -> str:
-    """Not designed to look pretty; designed to show the structure of the expr.
-    """
+    """Not designed to look pretty; designed to show the structure of the expr."""
     if isinstance(expr, Power):
-        return f'Power({debug_repr(expr.base)}, {debug_repr(expr.exponent)})'
+        return f"Power({debug_repr(expr.base)}, {debug_repr(expr.exponent)})"
         # return f'({debug_repr(expr.base)})^{debug_repr(expr.exponent)}'
     if isinstance(expr, Prod):
         return "Prod(" + ", ".join([debug_repr(t) for t in expr.terms]) + ")"
@@ -1111,7 +1139,12 @@ class Power(Expr):
 
     def __repr__(self) -> str:
         def _term_repr(term):
-            if isinstance(term, Sum) or isinstance(term, Prod) or isfractionorneg(term) or islongsymbol(term):
+            if (
+                isinstance(term, Sum)
+                or isinstance(term, Prod)
+                or isfractionorneg(term)
+                or islongsymbol(term)
+            ):
                 return "(" + repr(term) + ")"
             return repr(term)
 
@@ -1180,8 +1213,10 @@ class Power(Expr):
         if isinstance(x, Prod):
             for i, t in enumerate(x.terms):
                 if isinstance(t, log) and t.base == b:
-                    rest = Prod(x.terms[:i] + x.terms[i+1:])
-                    return Power(t.inner, rest) # Just in case this needs to be simplified, we will pass this through the constructor
+                    rest = Prod(x.terms[:i] + x.terms[i + 1 :])
+                    return Power(
+                        t.inner, rest
+                    )  # Just in case this needs to be simplified, we will pass this through the constructor
                     # return Power(Power(b, t), rest)
                     # Power(b, t) will be simplified to t.inner
         if b.is_subtraction and isinstance(x, Rat) and x.value.denominator == 1:
@@ -1190,17 +1225,21 @@ class Power(Expr):
             else:
                 return -Power(-b, x)
         # not fully exhaustive.
-        if (isinstance(b, Num) or isinstance(b, Prod) and all(isinstance(t, Num) for t in b.terms)) and not b.is_subtraction:
+        if (
+            isinstance(b, Num)
+            or isinstance(b, Prod)
+            and all(isinstance(t, Num) for t in b.terms)
+        ) and not b.is_subtraction:
             if x == inf:
                 return inf
             if x == -inf:
                 return Rat(0)
 
         return default_return
-    
+
     def __init__(self, base: Expr, exponent: Expr):
         self.__post_init__()
-    
+
     def _power_expandable(self) -> bool:
         return (
             isinstance(self.exponent, Rat)
@@ -1210,7 +1249,11 @@ class Power(Expr):
         )
 
     def expandable(self) -> bool:
-        return self._power_expandable() or self.base.expandable() or self.exponent.expandable()
+        return (
+            self._power_expandable()
+            or self.base.expandable()
+            or self.exponent.expandable()
+        )
 
     def expand(self) -> Expr:
         assert self.expandable(), f"Cannot expand {self}"
@@ -1242,17 +1285,20 @@ class Power(Expr):
 
     def diff(self, var) -> Expr:
         if not self.exponent.contains(var):
-            return self.exponent * self.base ** (self.exponent - 1) * self.base.diff(var)
+            return (
+                self.exponent * self.base ** (self.exponent - 1) * self.base.diff(var)
+            )
         if not self.base.contains(var):
             return log(self.base) * self * self.exponent.diff(var)
         raise NotImplementedError(
             "Power.diff not implemented for functions with var in both base and exponent."
         )
-    
+
     @property
     def is_subtraction(self) -> bool:
         # if base is negative and the -1 can be factored out, we would have factored it out in new.
         return False
+
 
 @dataclass
 class SingleFunc(Expr):
@@ -1276,7 +1322,7 @@ class SingleFunc(Expr):
     def subs(self, subs: Dict[str, "Expr"]):
         inner = self.inner.subs(subs)
         return self.__class__(inner)
-    
+
     def expand(self) -> Expr:
         assert self.inner.expandable(), f"Cannot expand {self}"
         return self.__class__(self.inner.expand())
@@ -1302,20 +1348,20 @@ class log(Expr):
             return "log" + self.base
         else:
             return f"log[base={self.base}]"
-        
+
     def __repr__(self) -> str:
         return _repr(self.inner, self._label)
-        
+
     @cast
     def subs(self, subs: Dict[str, "Expr"]):
         inner = self.inner.subs(subs)
         base = self.base.subs(subs)
         return log(inner, base)
-    
+
     def expand(self) -> Expr:
         assert self.inner.expandable(), f"Cannot expand {self}"
         return self.__class__(self.inner.expand())
-    
+
     def children(self) -> List[Expr]:
         return [self.inner, self.base]
 
@@ -1324,7 +1370,13 @@ class log(Expr):
         if self.base == e:
             return "\\ln\\left( " + self.inner.latex() + " \\right)"
         else:
-            return "\\log_{" + self.base.latex() + "}\\left( " + self.inner.latex() + " \\right)"
+            return (
+                "\\log_{"
+                + self.base.latex()
+                + "}\\left( "
+                + self.inner.latex()
+                + " \\right)"
+            )
 
     @cast
     def __new__(cls, inner: Expr, base: Expr = e):
@@ -1336,16 +1388,20 @@ class log(Expr):
             return inner.exponent
         if isinstance(inner, Float) and isinstance(base, (Float, E)):
             return Float(math.log(inner.value))
-        
+
         return super().__new__(cls)
-    
+
     def diff(self, var) -> Expr:
         return self.inner.diff(var) / self.inner
-    
+
     def _evalf(self, subs: Dict[str, "Expr"]):
         inner = self.inner._evalf(subs)
         base = self.base._evalf(subs)
-        return Const(math.log(inner.value)) if isinstance(inner, Num) and isinstance(base, Num) else log(inner, base)
+        return (
+            Const(math.log(inner.value))
+            if isinstance(inner, Num) and isinstance(base, Num)
+            else log(inner, base)
+        )
 
 
 @cast
@@ -1360,6 +1416,7 @@ class classproperty:
 
     so we make our own :)
     """
+
     def __init__(self, func):
         self.func = func
 
@@ -1372,6 +1429,7 @@ class staticproperty:
     @staticmethod
     @property
     """
+
     def __init__(self, func):
         self.func = func
 
@@ -1381,8 +1439,26 @@ class staticproperty:
 
 TrigStr = Literal["sin", "cos", "tan", "sec", "csc", "cot"]
 
+
 class TrigFunction(SingleFunc, ABC):
-    _SPECIAL_KEYS = ["0", "1/6", "1/4", "1/3", "1/2", "2/3", "3/4", "5/6", "1", "7/6", "5/4", "4/3", "3/2", "5/3", "7/4", "11/6"]
+    _SPECIAL_KEYS = [
+        "0",
+        "1/6",
+        "1/4",
+        "1/3",
+        "1/2",
+        "2/3",
+        "3/4",
+        "5/6",
+        "1",
+        "7/6",
+        "5/4",
+        "4/3",
+        "3/2",
+        "5/3",
+        "7/4",
+        "11/6",
+    ]
 
     @abstractmethod
     @classproperty
@@ -1405,7 +1481,8 @@ class TrigFunction(SingleFunc, ABC):
             "tan asin": lambda x: x / sqrt(1 - x**2),
             "tan acos": lambda x: sqrt(1 - x**2) / x,
             # Arcsecant
-            "sin asec": lambda x: sqrt(x**2 - 1) / x,  # Since sin(asec(x)) = sqrt(x^2 - 1) / x
+            "sin asec": lambda x: sqrt(x**2 - 1)
+            / x,  # Since sin(asec(x)) = sqrt(x^2 - 1) / x
             "tan asec": lambda x: sqrt(x**2 - 1),  # tan(asec(x)) = sqrt(x^2 - 1)
             # Arccosecant
             "cos acsc": lambda x: sqrt(1 - 1 / x**2),  # cos(acsc(x)) = sqrt(1 - 1/x^2)
@@ -1418,9 +1495,13 @@ class TrigFunction(SingleFunc, ABC):
     @classproperty
     def reciprocal_class(cls) -> Type["TrigFunction"]:
         if cls.is_inverse:
-            raise ValueError(f"Inverse trig function {cls.__name__} does not have a reciprocal")
+            raise ValueError(
+                f"Inverse trig function {cls.__name__} does not have a reciprocal"
+            )
         else:
-            raise NotImplementedError(f"reciprocal_class not implemented for {cls.__name__}")
+            raise NotImplementedError(
+                f"reciprocal_class not implemented for {cls.__name__}"
+            )
 
     @classproperty
     @abstractmethod
@@ -1454,7 +1535,7 @@ class TrigFunction(SingleFunc, ABC):
                         coeff = t / pi
                         if isinstance(coeff, Rat) and coeff % 2 == 0:
                             return cls(inner - t)
-        
+
         # 2. Check if inner is trigfunction
         # things like sin(cos(x)) cannot be more simplified.
         if isinstance(inner, TrigFunction) and inner.is_inverse != cls.is_inverse:
@@ -1463,8 +1544,13 @@ class TrigFunction(SingleFunc, ABC):
                 return inner.inner
 
             # sin(acsc(x)) -> 1/x
-            if inner.is_inverse and inner.func == cls.reciprocal_class.func or not inner.is_inverse and inner.reciprocal_class.func == cls.func:
-                return (1 / inner.inner)
+            if (
+                inner.is_inverse
+                and inner.func == cls.reciprocal_class.func
+                or not inner.is_inverse
+                and inner.reciprocal_class.func == cls.func
+            ):
+                return 1 / inner.inner
 
             if not cls.is_inverse:
                 if cls.func in ["sin", "cos", "tan"]:
@@ -1477,10 +1563,10 @@ class TrigFunction(SingleFunc, ABC):
                     callable_ = cls._double_simplification_dict[
                         f"{cls.reciprocal_class.__name__} {inner._label}"
                     ]
-                    return (1 / callable_(inner.inner))
+                    return 1 / callable_(inner.inner)
 
             # not supporting stuff like asin(cos(x)) sorry.
-        
+
         # 3. Evaluate floats immediately
         if isinstance(inner, Float):
             return Float(cls._func(inner.value))
@@ -1502,30 +1588,30 @@ class sin(TrigFunction):
     def reciprocal_class(cls):
         return csc
 
-    @classproperty    
+    @classproperty
     def special_values(cls):
         return {
             "0": Rat(0),
-            "1/6": Rat(1,2),
-            "1/4": 1/sqrt(2),
-            "1/3": sqrt(3)/2,
+            "1/6": Rat(1, 2),
+            "1/4": 1 / sqrt(2),
+            "1/3": sqrt(3) / 2,
             "1/2": Rat(1),
-            "2/3": sqrt(3)/2,
-            "3/4": 1/sqrt(2),
-            "5/6": Rat(1,2),
+            "2/3": sqrt(3) / 2,
+            "3/4": 1 / sqrt(2),
+            "5/6": Rat(1, 2),
             "1": Rat(0),
-            "7/6": -Rat(1,2),
-            "5/4": -1/sqrt(2),
-            "4/3": -sqrt(3)/2,
+            "7/6": -Rat(1, 2),
+            "5/4": -1 / sqrt(2),
+            "4/3": -sqrt(3) / 2,
             "3/2": -Rat(1),
-            "5/3": -sqrt(3)/2,
-            "7/4": -1/sqrt(2),
-            "11/6": -Rat(1,2),
+            "5/3": -sqrt(3) / 2,
+            "7/4": -1 / sqrt(2),
+            "11/6": -Rat(1, 2),
         }
 
     def diff(self, var) -> Expr:
         return cos(self.inner) * self.inner.diff(var)
-    
+
     @cast
     def __new__(cls, inner: Expr) -> Expr:
         if inner.is_subtraction:
@@ -1540,34 +1626,34 @@ class cos(TrigFunction):
     @classproperty
     def reciprocal_class(cls):
         return sec
-    
+
     @classproperty
     def special_values(cls):
         return {
             "0": Rat(1),
-            "1/6": sqrt(3)/2,
-            "1/4": 1/sqrt(2),
-            "1/3": Rat(1,2),
+            "1/6": sqrt(3) / 2,
+            "1/4": 1 / sqrt(2),
+            "1/3": Rat(1, 2),
             "1/2": Rat(0),
-            "2/3": -Rat(1,2),
-            "3/4": -1/sqrt(2),
-            "5/6": -sqrt(3)/2,
+            "2/3": -Rat(1, 2),
+            "3/4": -1 / sqrt(2),
+            "5/6": -sqrt(3) / 2,
             "1": Rat(-1),
-            "7/6": -sqrt(3)/2,
-            "5/4": -1/sqrt(2),
-            "4/3": -Rat(1,2),
+            "7/6": -sqrt(3) / 2,
+            "5/4": -1 / sqrt(2),
+            "4/3": -Rat(1, 2),
             "3/2": -Rat(0),
-            "5/3": Rat(1,2),
-            "7/4": 1/sqrt(2),
-            "11/6": sqrt(3)/2,
+            "5/3": Rat(1, 2),
+            "7/4": 1 / sqrt(2),
+            "11/6": sqrt(3) / 2,
         }
 
     def diff(self, var: Symbol) -> Expr:
         return -sin(self.inner) * self.inner.diff(var)
-    
+
     def __init__(self, inner):
         pass
-    
+
     @cast
     def __new__(cls, inner: Expr) -> "Expr":
         # bruh this is so complicated because doing cos(new, -inner) just sets inner as the original inner because of passing
@@ -1588,7 +1674,7 @@ class tan(TrigFunction):
     @classproperty
     def reciprocal_class(cls):
         return cot
-    
+
     @cast
     def __new__(cls, inner: Expr) -> Expr:
         if inner.is_subtraction:
@@ -1597,7 +1683,9 @@ class tan(TrigFunction):
 
     @classproperty
     def special_values(cls):
-        return {k: sin.special_values[k] / cos.special_values[k] for k in cls._SPECIAL_KEYS}
+        return {
+            k: sin.special_values[k] / cos.special_values[k] for k in cls._SPECIAL_KEYS
+        }
 
     def diff(self, var) -> Expr:
         return sec(self.inner) ** 2 * self.inner.diff(var)
@@ -1636,7 +1724,9 @@ class cot(TrigFunction):
 
     @classproperty
     def special_values(cls):
-        return {k: cos.special_values[k] / sin.special_values[k] for k in cls._SPECIAL_KEYS}
+        return {
+            k: cos.special_values[k] / sin.special_values[k] for k in cls._SPECIAL_KEYS
+        }
 
     def diff(self, var) -> Expr:
         return (1 / tan(self.inner)).diff(var)
@@ -1672,11 +1762,11 @@ class atan(TrigFunction):
 class Abs(SingleFunc):
     def __repr__(self) -> str:
         return "|" + repr(self.inner) + "|"
-    
+
     @classproperty
     def _label(self) -> str:
         return "abs"
-    
+
     def latex(self) -> str:
         return "\\left|" + self.inner.latex() + "\\right|"
 
@@ -1691,13 +1781,15 @@ class Abs(SingleFunc):
         if isinstance(inner, Prod):
             for t in inner.terms:
                 if isinstance(inner, Num):
-                    return Abs(inner/t) * Abs(t)
+                    return Abs(inner / t) * Abs(t)
         return super().__new__(cls)
-    
+
     def diff(self, var) -> Expr:
-        warnings.warn(f"Differentiation of {self} not implemented, so returning diff of {self.inner}.")
+        warnings.warn(
+            f"Differentiation of {self} not implemented, so returning diff of {self.inner}."
+        )
         return self.inner.diff(var)
-    
+
     def _evalf(self, subs: Dict[str, Expr]) -> Expr:
         return Abs(self.inner._evalf(subs))
 
@@ -1710,8 +1802,7 @@ def symbols(symbols: str) -> Union[Symbol, List[Symbol]]:
 
 @cast
 def diff(expr: Expr, var: Optional[Symbol]) -> Expr:
-    """Takes the derivative of expr relative to var. If expr has only one symbol in it, var doesn't need to be specified.
-    """
+    """Takes the derivative of expr relative to var. If expr has only one symbol in it, var doesn't need to be specified."""
     if not hasattr(expr, "diff"):
         raise NotImplementedError(f"Differentiation of {expr} not implemented")
 
@@ -1720,7 +1811,7 @@ def diff(expr: Expr, var: Optional[Symbol]) -> Expr:
         if len(symbols) != 1:
             return ValueError(f"Must provide variable of differentiation for {var}")
         var = symbols[0]
-    
+
     return expr.diff(var)
 
 

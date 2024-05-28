@@ -51,9 +51,7 @@ class Any_(Expr):
         return []
 
     def diff(self, var: "Symbol") -> "Expr":
-        raise NotImplementedError(
-            f"Cannot get the derivative of {self.__class__.__name__}"
-        )
+        raise NotImplementedError(f"Cannot get the derivative of {self.__class__.__name__}")
 
     def latex(self) -> str:
         raise NotImplementedError(f"Cannot convert {self.__class__.__name__} to latex")
@@ -145,10 +143,7 @@ def consolidate(query_anyfinds: _qanyfind, expr: Sum) -> EqResult:
     for query_term_repr, query_term_values in query_anyfinds.items():
         for expr_term_repr, matches in query_term_values.items():
             if all(
-                any(
-                    _anyfinds_eq(matches2, matches)
-                    for matches2 in query_term_values2.values()
-                )
+                any(_anyfinds_eq(matches2, matches) for matches2 in query_term_values2.values())
                 for query_term_values2 in query_anyfinds.values()
             ):
                 join_dicts(final, matches)
@@ -156,9 +151,7 @@ def consolidate(query_anyfinds: _qanyfind, expr: Sum) -> EqResult:
 
     assert all(all_same(v) for v in final.values())
     final = {k: v[0] for k, v in final.items()}
-    assert all(
-        any(_anyfinds_eq(x, final) for x in y.values()) for y in query_anyfinds.values()
-    )
+    assert all(any(_anyfinds_eq(x, final) for x in y.values()) for y in query_anyfinds.values())
 
     rest = Sum([t for t in expr.terms if repr(t) not in accounted_expr_terms])
     return {"anyfind": final, "rest": rest, "success": True}
@@ -220,10 +213,7 @@ class Eq:
                     for expr_term in expr.terms:
                         output = Eq(expr_term, query_term, decompose_singles=False)()
                         is_eq, anyfinds = output.get("success"), output.get("anyfind")
-                        if is_eq and all(
-                            any(_anyfinds_eq(x, anyfinds) for x in y)
-                            for y in query_anyfinds.values()
-                        ):
+                        if is_eq and all(any(_anyfinds_eq(x, anyfinds) for x in y) for y in query_anyfinds.values()):
                             query_anyfinds[repr(query_term)][repr(expr_term)] = anyfinds
 
                     if len(query_anyfinds[repr(query_term)]) == 0:
@@ -266,9 +256,7 @@ class Eq:
         if isinstance(expr, list):
             if not (isinstance(query, list) and len(expr) == len(query)):
                 return False
-            return len(expr) == len(query) and all(
-                [self._eq(e, q) for e, q in zip(expr, query)]
-            )
+            return len(expr) == len(query) and all([self._eq(e, q) for e, q in zip(expr, query)])
         if expr == query:
             return True
         if not isinstance(expr, Expr) or not isinstance(query, Expr):
@@ -304,12 +292,7 @@ class Eq:
 
         if not expr.__class__ == query.__class__:
             return False
-        return all(
-            [
-                self._eq(getattr(expr, field.name), getattr(query, field.name))
-                for field in fields(expr)
-            ]
-        )
+        return all([self._eq(getattr(expr, field.name), getattr(query, field.name)) for field in fields(expr)])
 
 
 def anydivide(num: Expr, denom: Expr) -> Tuple[Expr, AnyfindInProgress]:
@@ -400,9 +383,7 @@ def replace_factory(condition, perform) -> ExprFn:
     return replace_factory_list([condition], [perform])
 
 
-def replace_factory_list(
-    conditions: Iterable[Callable[[Expr], bool]], performs: Iterable[ExprFn]
-) -> ExprFn:
+def replace_factory_list(conditions: Iterable[Callable[[Expr], bool]], performs: Iterable[ExprFn]) -> ExprFn:
     """
     list of iterable conditions should be ... mutually exclusive or sth
 
@@ -433,9 +414,7 @@ def replace_factory_list(
         if len(expr.children()) == 0:  # Number, Symbol
             return expr
 
-        raise NotImplementedError(
-            f"replace not implemented for {expr.__class__.__name__}"
-        )
+        raise NotImplementedError(f"replace not implemented for {expr.__class__.__name__}")
 
     return _replace
 
@@ -444,9 +423,7 @@ def kinder_replace(expr: Expr, perform: OptionalExprFn, **kwargs) -> Expr:
     return kinder_replace_many(expr, [perform], **kwargs)
 
 
-def kinder_replace_many(
-    expr: Expr, performs: Iterable[OptionalExprFn], verbose=False, _d=False
-) -> Expr:
+def kinder_replace_many(expr: Expr, performs: Iterable[OptionalExprFn], verbose=False, _d=False) -> Expr:
     """
     kinder, bc some queries dont have a clean condition.
     ex: checking multiple any_ matches.
@@ -496,9 +473,7 @@ def replace(expr: Expr, old: Expr, new: Expr) -> Expr:
 
 
 # cls here has to be a subclass of singlefunc
-def replace_class(
-    expr: Expr, cls: List[Type[SingleFunc]], newfunc: List[Callable[[Expr], Expr]]
-) -> Expr:
+def replace_class(expr: Expr, cls: List[Type[SingleFunc]], newfunc: List[Callable[[Expr], Expr]]) -> Expr:
     # legacy // can be rewritten with replace_factory and put directly into transform RewriteTrig
     # bc it's not used anywhere else.
     # however it doesn't matter super much rn that everything is structured in :sparkles: prestine condition :sparkles:
@@ -527,6 +502,4 @@ def replace_class(
     if len(expr.children()) == 0:  # Number, Symbol
         return expr
 
-    raise NotImplementedError(
-        f"replace_class not implemented for {expr.__class__.__name__}"
-    )
+    raise NotImplementedError(f"replace_class not implemented for {expr.__class__.__name__}")

@@ -7,6 +7,7 @@ from .expr import Expr
 ExprFn = Callable[[Expr], Expr]
 OptionalExprFn = Callable[[Expr], Optional[Expr]]
 
+
 def random_id(length):
     # Define the pool of characters you can choose from
     characters = string.ascii_letters + string.digits

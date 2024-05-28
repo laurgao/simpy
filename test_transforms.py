@@ -5,12 +5,16 @@ Ex doesn't rlly make sense to put test_complete_the_square not next to test_inte
 Don't want to disconnect code structure from meaning too much altho it's easy to get caught up in code structure :)
 """
 
-
 import numpy as np
 
 from src.simpy.expr import Rat
-from src.simpy.transforms import (CompleteTheSquare, Node, PolynomialDivision,
-                                  PullConstant, to_const_polynomial)
+from src.simpy.transforms import (
+    CompleteTheSquare,
+    Node,
+    PolynomialDivision,
+    PullConstant,
+    to_const_polynomial,
+)
 from test_utils import assert_eq_strict, x
 
 
@@ -24,7 +28,7 @@ def test_pullconstant():
 
 
 def test_to_polynomial():
-    expr = 6 * x + x **2 
+    expr = 6 * x + x**2
     assert np.array_equal(to_const_polynomial(expr, x), np.array([Rat(0), Rat(6), Rat(1)]))
 
 
@@ -48,11 +52,12 @@ def test_polynomial_division():
     tr.forward(test_node)
     ans = test_node.children[0].expr
 
+
 def test_complete_the_square():
-    quadratic = - x ** 2 + 10 * x + 11
+    quadratic = -(x**2) + 10 * x + 11
     test_node = Node(quadratic, x)
     tr = CompleteTheSquare()
     tr.forward(test_node)
     ans = test_node.child.expr
-    expected = 36 * (-(x - 5) ** 2  / 36 + 1)
+    expected = 36 * (-((x - 5) ** 2) / 36 + 1)
     assert_eq_strict(ans, expected)

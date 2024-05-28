@@ -1,14 +1,38 @@
 from typing import Iterable, List, Optional, Tuple, Type, Union
 
-from .expr import (Abs, Expr, Power, Prod, Rat, Sum, Symbol, TrigFunction, cos,
-                   cot, csc, log, nesting, sec, sin, tan)
-from .regex import (any_, eq, general_count, kinder_replace,
-                    kinder_replace_many, replace_class, replace_factory)
+from .expr import (
+    Abs,
+    Expr,
+    Power,
+    Prod,
+    Rat,
+    Sum,
+    Symbol,
+    TrigFunction,
+    cos,
+    cot,
+    csc,
+    log,
+    nesting,
+    sec,
+    sin,
+    tan,
+)
+from .regex import (
+    any_,
+    eq,
+    general_count,
+    kinder_replace,
+    kinder_replace_many,
+    replace_class,
+    replace_factory,
+)
 from .utils import ExprFn
 
 
 def expand_logs(expr: Expr, **kwargs) -> Expr:
     return kinder_replace(expr, _log_perform, **kwargs)
+
 
 def _log_perform(expr: Expr) -> Optional[Expr]:
     if not isinstance(expr, log):
@@ -17,25 +41,25 @@ def _log_perform(expr: Expr) -> Optional[Expr]:
     # IDK if this should be in simplify or if it should be like expand, in a diff function
     # like you can move stuff together or move stuff apart
     if isinstance(inner, Power):
-        return (log(inner.base) * inner.exponent)
+        return log(inner.base) * inner.exponent
     if isinstance(inner, Prod):
         return Sum([log(t) for t in inner.terms])
     if isinstance(inner, Sum) and isinstance(inner.factor(), Prod):
         return Sum([log(t) for t in inner.factor().terms])
-    
+
     # let's agree on some standards
     # i dont love this, can change
     if isinstance(inner, (sec, csc, cot)):
         return -1 * log(inner.reciprocal_class(inner.inner))
-    
+
     # ugly patch lmfao. need better overall philosophy for this stuff.
     if isinstance(inner, Abs) and isinstance(inner.inner, Power):
-        return (log(abs(inner.inner.base)) * inner.inner.exponent)
+        return log(abs(inner.inner.base)) * inner.inner.exponent
     if isinstance(inner, Abs) and isinstance(inner.inner, Prod):
         return Sum([log(abs(term)) for term in inner.inner.terms])
     if isinstance(inner, Abs) and isinstance(inner.inner, Sum) and isinstance(inner.inner.factor(), Prod):
         return Sum([log(abs(term)) for term in inner.inner.factor().terms])
-    
+
     return log(inner)
 
 
@@ -44,6 +68,7 @@ def pythagorean_simplification(expr: Expr, **kwargs) -> Expr:
     if not expr.has(TrigFunction):
         return expr if not verbose else expr, False
     return kinder_replace(expr, _pythagorean_perform, **kwargs)
+
 
 def _pythagorean_perform(sum: Expr) -> Optional[Expr]:
     if not isinstance(sum, Sum):
@@ -68,17 +93,20 @@ def _pythagorean_perform(sum: Expr) -> Optional[Expr]:
             return factor * perform(inner) + rest
 
     ##------------ Simplify sin^2(...) + cos^2(...) ------------##
-    def is_thing_squared(term: Expr, cls: Union[Type[TrigFunction], Iterable[Type[TrigFunction]]]) -> Optional[Tuple[Expr, Expr]]: # returns inner, factor
+    def is_thing_squared(
+        term: Expr, cls: Union[Type[TrigFunction], Iterable[Type[TrigFunction]]]
+    ) -> Optional[Tuple[Expr, Expr]]:  # returns inner, factor
         def is_(f):
             return isinstance(f, Power) and f.exponent == 2 and isinstance(f.base, cls)
+
         if is_(term):
-            return term.base.inner, Rat(1)  
+            return term.base.inner, Rat(1)
 
         if not isinstance(term, Prod):
             return None
         for f in term.terms:
             if is_(f):
-                return f.base.inner, term/f
+                return f.base.inner, term / f
         return None
 
     def sin_cos_condition(expr: Sum):
@@ -86,8 +114,8 @@ def _pythagorean_perform(sum: Expr) -> Optional[Expr]:
         # with an optional factor that may or may not be there of a
         s = [is_thing_squared(term, sin) for term in expr.terms]
         c = [is_thing_squared(term, cos) for term in expr.terms]
-        return [el for el in s if el is not None and el in c] 
-    
+        return [el for el in s if el is not None and el in c]
+
     both_inners = sin_cos_condition(sum)
     if len(both_inners) > 0:
         new_terms = [t for t in sum.terms if not is_thing_squared(t, (sin, cos)) in both_inners]
@@ -97,7 +125,7 @@ def _pythagorean_perform(sum: Expr) -> Optional[Expr]:
     # other_table = [
     #     (r"^sec\((.+)\)\^2$", r"^-tan\((.+)\)\^2$", Const(1)),
     # ]
-                        
+
 
 def _pythagorean_complex_perform(sum: Expr) -> Optional[Expr]:
     if not isinstance(sum, Sum):
@@ -121,7 +149,7 @@ def _pythagorean_complex_perform(sum: Expr) -> Optional[Expr]:
         # assume we're doing this in the ctx of the larger simplification
         return reciprocate_trigs(new_sum)
 
-    
+
 def rewrite_as_one_fraction(sum: Expr) -> Expr:
     """Rewrites with common denominator"""
     if not isinstance(sum, Sum):
@@ -140,15 +168,18 @@ def rewrite_as_one_fraction(sum: Expr) -> Expr:
     for _, den in list_of_terms:
         ratio = den / common_den
         common_den *= ratio
-    
+
     new_nums = [num * common_den / den for num, den in list_of_terms]
     return Sum(new_nums) / common_den
 
+
 def is_simpler(a, b):
     """return if a is simpler than b"""
+
     def count(e):
         # counts the number of symbols
         return general_count(e, lambda x: isinstance(x, Symbol))
+
     return count(a) < count(b)
 
 
@@ -190,13 +221,13 @@ def reciprocate_trigs(expr: Expr, **kwargs) -> Expr:
         [
             _reciprocate_trigs,
         ],
-        **kwargs
+        **kwargs,
     )
 
 
 def simplify(expr: Expr) -> Expr:
     """Simplifies an expression.
-    
+
     This is the general one that does all heuristics & is for aesthetics (& comparisons).
     Use more specific simplification functions in integration please.
     """

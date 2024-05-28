@@ -4,6 +4,7 @@ from .expr import *
 
 Polynomial = np.ndarray  # has to be 1-D array
 
+
 def is_polynomial(expr: Expr, var: Symbol) -> bool:
     try:
         to_const_polynomial(expr, var)
@@ -11,12 +12,15 @@ def is_polynomial(expr: Expr, var: Symbol) -> bool:
     except AssertionError:
         return False
 
-def _to_const_polynomial(expr: Expr, var: Symbol, answer: List[Rat] = None, multiplier:Rat=Rat(1)) -> List[Rat]:
+
+def _to_const_polynomial(expr: Expr, var: Symbol, answer: List[Rat] = None, multiplier: Rat = Rat(1)) -> List[Rat]:
     if answer is None:
         answer: List[Rat] = []
-    
-    def _add_answer(const: Rat, idx: int, answer: List[Rat]=answer, multiplier: Rat=multiplier):
-        new_const = (const * multiplier).simplify() # you really shouldn't need simplify here. combine like terms should happen in init.
+
+    def _add_answer(const: Rat, idx: int, answer: List[Rat] = answer, multiplier: Rat = multiplier):
+        new_const = (
+            const * multiplier
+        ).simplify()  # you really shouldn't need simplify here. combine like terms should happen in init.
         if idx < len(answer):
             answer[idx] += new_const
         elif idx == len(answer):
@@ -25,7 +29,6 @@ def _to_const_polynomial(expr: Expr, var: Symbol, answer: List[Rat] = None, mult
             answer += [Rat(0)] * (idx - len(answer))
             answer.append(new_const)
 
-    
     if not expr.contains(var):
         _add_answer(expr, 0)
 
@@ -41,16 +44,20 @@ def _to_const_polynomial(expr: Expr, var: Symbol, answer: List[Rat] = None, mult
         _to_const_polynomial(other, var, answer, multiplier=const)
     elif isinstance(expr, Power):
         assert expr.base == var
-        assert isinstance(expr.exponent, Rat) and expr.exponent.value == int(expr.exponent.value) and expr.exponent.value >= 1
+        assert (
+            isinstance(expr.exponent, Rat)
+            and expr.exponent.value == int(expr.exponent.value)
+            and expr.exponent.value >= 1
+        )
         _add_answer(1, int(expr.exponent.value))
     elif isinstance(expr, Symbol):
         assert expr == var
         _add_answer(Rat(1), 1)
     else:
         raise AssertionError(f"Not allowed expr for polynomial: {expr}")
-    
+
     return answer
-        
+
 
 def to_const_polynomial(expr: Expr, var: Symbol) -> Polynomial:
     expr = expr.expand() if expr.expandable() else expr
@@ -72,5 +79,5 @@ def rid_ending_zeros(arr: Polynomial) -> Polynomial:
             num_zeros += 1
         else:
             break
-    new_list = lis[:len(lis) - num_zeros]
+    new_list = lis[: len(lis) - num_zeros]
     return np.array(new_list)

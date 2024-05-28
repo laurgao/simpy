@@ -1,25 +1,40 @@
 from typing import Optional, Tuple, Type
 
-from src.simpy.expr import (Expr, Power, Rat, SingleFunc, Symbol, TrigFunction,
-                            cast, cos, debug_repr, sec, symbols, tan)
+from src.simpy.expr import (
+    Expr,
+    Power,
+    Rat,
+    SingleFunc,
+    Symbol,
+    TrigFunction,
+    cast,
+    cos,
+    debug_repr,
+    sec,
+    symbols,
+    tan,
+)
 from src.simpy.integration import integrate
 from src.simpy.regex import replace_class, replace_factory
 
 x, y = symbols("x y")
+
 
 @cast
 def assert_integral(integrand: Expr, expected: Expr, var: Optional[Symbol] = None, **kwargs):
     assert_eq_plusc(integrate(integrand, var, **kwargs), expected)
     # assert_eq_value(diff(expected, var), integrand) # this might be nice; idk. catch some potential diff errors.
 
+
 @cast
 def assert_definite_integral(integrand: Expr, bounds: tuple, expected: Expr):
     assert_eq_strict(integrate(integrand, bounds), expected)
 
+
 @cast
 def assert_eq_plusc(a: Expr, b: Expr, *vars):
     """Assert a and b are equal up to a constant, relative to vars.
-    If no vars are given, then 
+    If no vars are given, then
     """
     a, b = sectan(a, b)
     diff = a - b
@@ -28,9 +43,16 @@ def assert_eq_plusc(a: Expr, b: Expr, *vars):
         assert len(diff.symbols()) == 0, f"diff = {diff}"
     else:
         assert all(var not in diff.symbols() for var in vars), f"diff = {diff}"
-        
+
+
 def is_cls_squared(expr, cls) -> bool:
-    return isinstance(expr, Power) and isinstance(expr.base, cls) and isinstance(expr.exponent, Rat) and expr.exponent % 2 == 0
+    return (
+        isinstance(expr, Power)
+        and isinstance(expr.base, cls)
+        and isinstance(expr.exponent, Rat)
+        and expr.exponent % 2 == 0
+    )
+
 
 def only_contains_class_squared(expr: Expr, cls: Type[SingleFunc]) -> bool:
     """Return if it's a function of cls squared.
@@ -48,6 +70,7 @@ def only_contains_class_squared(expr: Expr, cls: Type[SingleFunc]) -> bool:
 
     return _func(expr)
 
+
 def sectan(a: Expr, b: Expr) -> Tuple[Expr, Expr]:
     if not a.has(TrigFunction) or not b.has(TrigFunction):
         return a, b
@@ -56,10 +79,11 @@ def sectan(a: Expr, b: Expr) -> Tuple[Expr, Expr]:
         # a is sec and b is tan
         # convert a to b
         condition = lambda x: is_cls_squared(x, sec)
+
         def perform(e: Power):
             n = e.exponent
             return (1 + tan(e.base.inner) ** 2) ** (n / 2)
-        
+
         a = replace_factory(condition, perform)(a)
         a = a.expand() if a.expandable() else a
         return a, b
@@ -71,7 +95,7 @@ def sectan(a: Expr, b: Expr) -> Tuple[Expr, Expr]:
 
     if only_contains_class_squared(b, sec) and only_contains_class_squared(a, tan):
         return _sectan(b, a)
-    
+
     return a, b
 
 
@@ -85,12 +109,13 @@ def _eq_value(a: Expr, b: Expr) -> Tuple[Expr, Expr]:
         b = b.expand()
     return a, b
 
+
 @cast
 def assert_eq_value(a: Expr, b: Expr):
-    """Tests that the values of a & b are the same in spirit, regardless of how they are represented with the Expr data structures.
-    """
+    """Tests that the values of a & b are the same in spirit, regardless of how they are represented with the Expr data structures."""
     a, b = _eq_value(a, b)
     assert a == b, f"a != b, {a} != {b}"
+
 
 @cast
 def assert_eq_strict(a: Expr, b: Expr):
@@ -101,8 +126,7 @@ def assert_eq_strict(a: Expr, b: Expr):
 
 
 def unhashable_set_eq(a: list, b: list) -> bool:
-    """Does equivalent of set(a) == set(b) but for lists containing unhashable types
-    """
+    """Does equivalent of set(a) == set(b) but for lists containing unhashable types"""
     for el in a:
         if el not in b:
             return False

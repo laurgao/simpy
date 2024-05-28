@@ -7,14 +7,37 @@ from typing import Callable, Dict, List, Literal, Optional, Tuple, Type, Union
 
 import numpy as np
 
-from .expr import (Expr, Num, Power, Prod, Rat, Sum, Symbol, TrigFunction,
-                   asin, atan, cos, cot, csc, log, remove_const_factor, sec,
-                   sin, sqrt, symbols, tan)
+from .expr import (
+    Expr,
+    Num,
+    Power,
+    Prod,
+    Rat,
+    Sum,
+    Symbol,
+    TrigFunction,
+    asin,
+    atan,
+    cos,
+    cot,
+    csc,
+    log,
+    remove_const_factor,
+    sec,
+    sin,
+    sqrt,
+    symbols,
+    tan,
+)
 from .linalg import invert
-from .polynomial import (Polynomial, is_polynomial, polynomial_to_expr,
-                         rid_ending_zeros, to_const_polynomial)
-from .regex import (count, general_count, replace, replace_class,
-                    replace_factory)
+from .polynomial import (
+    Polynomial,
+    is_polynomial,
+    polynomial_to_expr,
+    rid_ending_zeros,
+    to_const_polynomial,
+)
+from .regex import count, general_count, replace, replace_class, replace_factory
 from .simplify import pythagorean_simplification
 from .utils import ExprFn, random_id
 
@@ -28,6 +51,7 @@ class Node:
     `_children` is private. do not modify it directly; only use the `add_child` or `add_children` methods. you can read from the
     `children` property.
     """
+
     expr: Expr
     var: Symbol  # variable that THIS EXPR is integrated by.
     transform: Optional["Transform"] = None  # the transform that led to this node
@@ -36,11 +60,13 @@ class Node:
     solution: Optional[Expr] = (
         None  # only for SOLUTION nodes (& their parents when we go backwards)
     )
-    is_filler: bool = False # fillers are ones where the expr is like; not real / a copy of the parents. the node exists to store info other than the expr. eventually i wanna just set expr to none.
+    is_filler: bool = (
+        False  # fillers are ones where the expr is like; not real / a copy of the parents. the node exists to store info other than the expr. eventually i wanna just set expr to none.
+    )
     _children: Optional[List["Node"]] = (
         None  # smtn smtn setting it to [] by default causes errors
     )
-    
+
     # failure = can't proceed forward.
 
     def __post_init__(self):
@@ -48,11 +74,11 @@ class Node:
             self._children = []
         else:
             raise ValueError
-        
+
     @property
     def children(self) -> List["Node"]:
         return self._children
-    
+
     def add_child(self, child: "Node") -> None:
         if not child.is_filler:
             parents = _parents(self)
@@ -94,11 +120,13 @@ class Node:
         if not self.parent:
             return 0
         return 1 + self.parent.distance_from_root
-    
+
     @property
     def is_stale(self) -> bool:
         """Stale = unfinished node that is no longer needed"""
-        return not self.is_finished and any(parent.is_finished for parent in _parents(self))
+        return not self.is_finished and any(
+            parent.is_finished for parent in _parents(self)
+        )
 
     @property
     def is_solved(self) -> bool:
@@ -149,7 +177,7 @@ class Node:
         if not self.children:
             return None
         return self.children[0]
-    
+
 
 class Transform(ABC):
     "An integral transform -- base class"
@@ -184,7 +212,6 @@ class Transform(ABC):
         return True
 
 
-
 class SafeTransform(Transform, ABC):
     pass
 
@@ -205,9 +232,7 @@ class PullConstant(SafeTransform):
             for i, term in enumerate(expr.terms):
                 if var not in term.symbols():
                     self._constant = term
-                    self._non_constant_part = Prod(
-                        expr.terms[:i] + expr.terms[i + 1 :]
-                    )
+                    self._non_constant_part = Prod(expr.terms[:i] + expr.terms[i + 1 :])
                     return True
 
         return False
@@ -217,7 +242,7 @@ class PullConstant(SafeTransform):
 
     def backward(self, node: Node) -> None:
         super().backward(node)
-        node.parent.solution = (self._constant * node.solution)
+        node.parent.solution = self._constant * node.solution
 
 
 class PolynomialDivision(SafeTransform):
@@ -261,7 +286,7 @@ class PolynomialDivision(SafeTransform):
 
         while self._numerator.size >= self._denominator.size:
             quotient_degree = len(self._numerator) - len(self._denominator)
-            quotient_coeff = (self._numerator[-1] / self._denominator[-1])
+            quotient_coeff = self._numerator[-1] / self._denominator[-1]
             quotient[quotient_degree] = quotient_coeff
             self._numerator -= np.concatenate(
                 ([Rat(0)] * quotient_degree, self._denominator * quotient_coeff)
@@ -272,7 +297,7 @@ class PolynomialDivision(SafeTransform):
             self._denominator, var
         )
         quotient_expr = polynomial_to_expr(quotient, var)
-        answer = (quotient_expr + remainder)
+        answer = quotient_expr + remainder
         node.add_child(Node(answer, var, self, node))
 
     def backward(self, node: Node) -> None:
@@ -319,12 +344,10 @@ class Additivity(SafeTransform):
         if not all([child.solution for child in node.parent.children]):
             raise ValueError(f"Additivity backward for {node} failed")
 
-        node.parent.solution = Sum(
-            [child.solution for child in node.parent.children]
-        )
+        node.parent.solution = Sum([child.solution for child in node.parent.children])
 
 
-def _get_last_heuristic_transform(node: Node, tup = (PullConstant, Additivity)):
+def _get_last_heuristic_transform(node: Node, tup=(PullConstant, Additivity)):
     if isinstance(node.transform, tup):
         # We'll let polynomial division go because it changes things sufficiently that
         # we actually sorta make progress towards the integral.
@@ -394,9 +417,7 @@ class TrigUSub2(Transform):
 
     def backward(self, node: Node) -> None:
         super().backward(node)
-        node.parent.solution = replace(
-            node.solution, node.var, self._variable_change
-        )
+        node.parent.solution = replace(node.solution, node.var, self._variable_change)
 
 
 class RewriteTrig(Transform):
@@ -436,7 +457,13 @@ class RewriteTrig(Transform):
         )
 
         new_exprs = [r1, r2, r3]
-        node.add_children([Node(option, node.var, self, node) for option in new_exprs if option != expr])
+        node.add_children(
+            [
+                Node(option, node.var, self, node)
+                for option in new_exprs
+                if option != expr
+            ]
+        )
         node.type = "OR"
 
     def check(self, node: Node) -> bool:
@@ -459,22 +486,22 @@ class RewriteTrig(Transform):
 
 
 class InverseTrigUSub(Transform):
-    """Does the sub of u = asin(x), u = atan(x)
-    """
+    """Does the sub of u = asin(x), u = atan(x)"""
+
     _key = None
     _variable_change = None
 
     # {label: class, search query, dy_dx, variable_change}
     _table: Dict[str, Tuple[ExprFn, Callable[[str], str], ExprFn, ExprFn]] = {
-        "sin": (sin, lambda symbol: 1 - symbol ** 2, lambda var: cos(var), asin),
-        "tan": (tan, lambda symbol: 1 + symbol ** 2, lambda var: sec(var) ** 2, atan),
+        "sin": (sin, lambda symbol: 1 - symbol**2, lambda var: cos(var), asin),
+        "tan": (tan, lambda symbol: 1 + symbol**2, lambda var: sec(var) ** 2, atan),
     }
 
     def forward(self, node: Node):
         intermediate = generate_intermediate_var()
         cls, q, dy_dx, var_change = self._table[self._key]
         dy_dx = dy_dx(intermediate)
-        new_thing = (replace(node.expr, node.var, cls(intermediate)) * dy_dx)
+        new_thing = replace(node.expr, node.var, cls(intermediate)) * dy_dx
         node.add_child(Node(new_thing, intermediate, self, node))
 
         self._variable_change = var_change(node.var)
@@ -499,9 +526,7 @@ class InverseTrigUSub(Transform):
 
     def backward(self, node: Node) -> None:
         super().backward(node)
-        node.parent.solution = replace(
-            node.solution, node.var, self._variable_change
-        )
+        node.parent.solution = replace(node.solution, node.var, self._variable_change)
 
 
 class PolynomialUSub(Transform):
@@ -530,7 +555,7 @@ class PolynomialUSub(Transform):
                 and term.base == node.var
                 and not term.exponent.contains(node.var)
             ):
-                n = (term.exponent + 1)
+                n = term.exponent + 1
                 rest = Prod(node.expr.terms[:i] + node.expr.terms[i + 1 :])
                 break
 
@@ -558,9 +583,7 @@ class PolynomialUSub(Transform):
 
     def backward(self, node: Node) -> None:
         super().backward(node)
-        node.parent.solution = replace(
-            node.solution, node.var, self._variable_change
-        )
+        node.parent.solution = replace(node.solution, node.var, self._variable_change)
 
 
 class LinearUSub(Transform):
@@ -570,19 +593,22 @@ class LinearUSub(Transform):
     \int f(ax+b) dx = 1/a \int f(u) du
     """
 
-    _variable_change: Expr = None # writes u in terms of x
-    _inverse_var_change: ExprFn = None # this will write x in terms of u
+    _variable_change: Expr = None  # writes u in terms of x
+    _inverse_var_change: ExprFn = None  # this will write x in terms of u
 
     def check(self, node: Node) -> bool:
         if super().check(node) is False:
             return False
 
-        if count(node.expr, node.var) < 1: # just to cover our bases bc the later thing assume it appears >=1 
+        if (
+            count(node.expr, node.var) < 1
+        ):  # just to cover our bases bc the later thing assume it appears >=1
             return False
 
-        def _is_a_linear_sum_or_prod(expr: Expr) -> Optional[Tuple[Expr, Optional[ExprFn]]]:
-            """Returns what u should be in terms of x. & None if it's not.
-            """
+        def _is_a_linear_sum_or_prod(
+            expr: Expr,
+        ) -> Optional[Tuple[Expr, Optional[ExprFn]]]:
+            """Returns what u should be in terms of x. & None if it's not."""
             if isinstance(expr, Sum):
                 if all(
                     [
@@ -600,12 +626,16 @@ class LinearUSub(Transform):
                 # ex: if we have x**2/36, we want to rewrite it as (x/6)**2 and sub u=x/6
                 # if we have sth like (x+3)**2/36 we will just let the sum catch it and do 2 linearusubs in sequence :shrug:
                 if expr.is_subtraction:
-                    expr = (-expr)
+                    expr = -expr
                 xyz = remove_const_factor(expr)
-                is_const_multiple_of_power = isinstance(xyz, Power) and xyz.base == node.var and not xyz.exponent.contains(node.var)
+                is_const_multiple_of_power = (
+                    isinstance(xyz, Power)
+                    and xyz.base == node.var
+                    and not xyz.exponent.contains(node.var)
+                )
                 if not is_const_multiple_of_power:
                     return None
-                coeff = (expr / xyz)
+                coeff = expr / xyz
                 if coeff == Rat(1):
                     return None
                 coeff_abs = abs(coeff) if isinstance(coeff, Num) else coeff
@@ -655,9 +685,7 @@ class LinearUSub(Transform):
 
     def backward(self, node: Node) -> None:
         super().backward(node)
-        node.parent.solution = replace(
-            node.solution, node.var, self._variable_change
-        )
+        node.parent.solution = replace(node.solution, node.var, self._variable_change)
 
 
 class CompoundAngle(Transform):
@@ -776,9 +804,7 @@ class SinUSub(Transform):
 
     def backward(self, node: Node) -> None:
         super().backward(node)
-        node.parent.solution = replace(
-            node.solution, node.var, self._variable_change
-        )
+        node.parent.solution = replace(node.solution, node.var, self._variable_change)
 
 
 class ProductToSum(Transform):
@@ -797,11 +823,15 @@ class ProductToSum(Transform):
                 return True
 
         if isinstance(expr, Power):
-            if isinstance(expr.base, (sin, cos)) and isinstance(expr.exponent, Rat) and expr.exponent % 2 == 0:
+            if (
+                isinstance(expr.base, (sin, cos))
+                and isinstance(expr.exponent, Rat)
+                and expr.exponent % 2 == 0
+            ):
                 return True
 
         return False
-    
+
     @staticmethod
     def perform(expr: Union[Prod, Power]) -> Expr:
         nexpr = remove_const_factor(expr)
@@ -809,7 +839,9 @@ class ProductToSum(Transform):
         if isinstance(nexpr, Prod):
             return const * ProductToSum._perform_on_terms(*nexpr.terms)
 
-        return const * ProductToSum._perform_on_terms(nexpr.base, nexpr.base) ** (nexpr.exponent / 2)
+        return const * ProductToSum._perform_on_terms(nexpr.base, nexpr.base) ** (
+            nexpr.exponent / 2
+        )
 
     @staticmethod
     def _perform_on_terms(a: Union[sin, cos], b: Union[sin, cos]) -> Expr:
@@ -825,7 +857,7 @@ class ProductToSum(Transform):
             temp = cos(a.inner + b.inner) + cos(a.inner - b.inner)
         elif isinstance(a, sin) and isinstance(b, sin):
             temp = cos(a.inner - b.inner) - cos(a.inner + b.inner)
-        
+
         return temp / 2
 
     def check(self, node: Node) -> bool:
@@ -833,7 +865,6 @@ class ProductToSum(Transform):
             return False
 
         return general_count(node.expr, self.condition) > 0
-
 
     def forward(self, node: Node) -> None:
         new_integrand = replace_factory(self.condition, self.perform)(node.expr)
@@ -859,12 +890,13 @@ class ByParts(Transform):
     @staticmethod
     def _integrate_dv_check(dv, var) -> Optional[Expr]:
         from .integration import Integration
+
         return Integration.integrate_without_heuristics(dv, var)
-    
+
     @staticmethod
     def _get_all_byparts_parents(node: Node) -> List[Node]:
         return [p for p in _parents(node) if isinstance(p.transform, ByParts)]
-    
+
     @staticmethod
     def _get_last_byparts_parent(node: Node) -> Optional[Node]:
         # no heuristics have been applied yet
@@ -873,24 +905,24 @@ class ByParts(Transform):
                 return p
             if not isinstance(p.transform, (PullConstant, Additivity)):
                 return
-        return 
-    
+        return
+
     @staticmethod
     def _parents_exprs_check(node: Node, du: Expr, v: Expr) -> bool:
-            # if -u'v = node.expr, it means means you get 0 * integral(node.expr) = uv
-            # which is invalid
-            integrand2 = (du * v * -1)
-            factor = (integrand2 / node.expr)
-            if factor == 1:
-                return False
-            
-            # check for more layers above -- if any of the integrands is the same, factor = 1 and it's a nogo.
-            # honestly this is a bit sad; why don't we just always check that a node doesn't appear in its parents?
-            byparts_parents = ByParts._get_all_byparts_parents(node)
-            old_byparts_integrands = [node.expr for node in byparts_parents]
-            if integrand2 in old_byparts_integrands:
-                return False
-            return True
+        # if -u'v = node.expr, it means means you get 0 * integral(node.expr) = uv
+        # which is invalid
+        integrand2 = du * v * -1
+        factor = integrand2 / node.expr
+        if factor == 1:
+            return False
+
+        # check for more layers above -- if any of the integrands is the same, factor = 1 and it's a nogo.
+        # honestly this is a bit sad; why don't we just always check that a node doesn't appear in its parents?
+        byparts_parents = ByParts._get_all_byparts_parents(node)
+        old_byparts_integrands = [node.expr for node in byparts_parents]
+        if integrand2 in old_byparts_integrands:
+            return False
+        return True
 
     def __init__(self):
         self._stuff = []
@@ -900,7 +932,11 @@ class ByParts(Transform):
             return False
 
         if not isinstance(node.expr, Prod):
-            if (isinstance(node.expr, log) or isinstance(node.expr, TrigFunction) and node.expr.is_inverse) and node.expr.inner == node.var: # Special case for Log, ArcSin, etc.
+            if (
+                isinstance(node.expr, log)
+                or isinstance(node.expr, TrigFunction)
+                and node.expr.is_inverse
+            ) and node.expr.inner == node.var:  # Special case for Log, ArcSin, etc.
                 # TODO universalize it more?? how to make it more universal without making inf loops?
                 dv = 1
                 v = node.var
@@ -919,7 +955,7 @@ class ByParts(Transform):
             v = self._integrate_dv_check(dv, node.var)
             if v is None:
                 return False
-            
+
             if not self._parents_exprs_check(node, du, v):
                 return False
 
@@ -928,12 +964,15 @@ class ByParts(Transform):
 
         a, b = node.expr.terms
         return _check(a, b) or _check(b, a)
-    
+
     @staticmethod
     def _get_first_factor(parent_byparts: Node, node: Node) -> Expr:
         if parent_byparts.children[1] == node:
             return Rat(1)
-        elif isinstance(node.transform, PullConstant) and parent_byparts.children[1].child == node:
+        elif (
+            isinstance(node.transform, PullConstant)
+            and parent_byparts.children[1].child == node
+        ):
             return node.transform._constant
         raise ValueError
 
@@ -951,41 +990,65 @@ class ByParts(Transform):
             factor = integrand2 / node.expr
             if not factor.contains(node.var):
                 solution = child1 / (1 - factor)
-                node.add_child(Node(node.expr, node.var, tr, node, type="SOLUTION", solution=solution, is_filler=True))
+                node.add_child(
+                    Node(
+                        node.expr,
+                        node.var,
+                        tr,
+                        node,
+                        type="SOLUTION",
+                        solution=solution,
+                        is_filler=True,
+                    )
+                )
                 node.type = "OR"
                 return
-            ### 
+            ###
 
             ### special case: when parent is same as you 2 layers above
             # this isnt the most elegant but it works lol
             parent_byparts = self._get_last_byparts_parent(node)
             if parent_byparts:
-                second_factor = (integrand2 / parent_byparts.expr)
+                second_factor = integrand2 / parent_byparts.expr
                 if not second_factor.contains(node.var):
                     first_factor = self._get_first_factor(parent_byparts, node)
                     factor = first_factor * second_factor
                     other_uv = parent_byparts.child
-                    other_uv.solution /= (1 - factor) # mutating is sus
-                    solution = child1 / (1 - factor) # going back will mul it w second factor by default.
-                    node.add_child(Node(node.expr, node.var, tr, node, type="SOLUTION", solution=solution, is_filler=True))
+                    other_uv.solution /= 1 - factor  # mutating is sus
+                    solution = child1 / (
+                        1 - factor
+                    )  # going back will mul it w second factor by default.
+                    node.add_child(
+                        Node(
+                            node.expr,
+                            node.var,
+                            tr,
+                            node,
+                            type="SOLUTION",
+                            solution=solution,
+                            is_filler=True,
+                        )
+                    )
                     node.type = "OR"
                     assert parent_byparts.is_solved
                     return
             ###
 
             funky_node = Node(node.expr, node.var, tr, node, type="AND", is_filler=True)
-            funky_node.add_children([
-                Node(
-                    node.expr,
-                    node.var,
-                    Additivity(),
-                    funky_node,
-                    type="SOLUTION",
-                    solution=child1,
-                    is_filler=True
-                ),
-                Node(integrand2, node.var, Additivity(), funky_node),
-            ])
+            funky_node.add_children(
+                [
+                    Node(
+                        node.expr,
+                        node.var,
+                        Additivity(),
+                        funky_node,
+                        type="SOLUTION",
+                        solution=child1,
+                        is_filler=True,
+                    ),
+                    Node(integrand2, node.var, Additivity(), funky_node),
+                ]
+            )
             node.add_child(funky_node)
 
     def backward(self, node: Node) -> None:
@@ -995,6 +1058,7 @@ class ByParts(Transform):
 
 class PartialFractions(Transform):
     _new_integrand: Expr = None
+
     def check(self, node: Node) -> bool:
         if super().check(node) is False:
             return False
@@ -1005,18 +1069,18 @@ class PartialFractions(Transform):
         num, denom = node.expr.numerator_denominator
         if denom == Rat(1):
             return False
-        
+
         # and that both numerator and denominator are polynomials
         try:
             numerator_list = to_const_polynomial(num, node.var)
             denominator_list = to_const_polynomial(denom, node.var)
         except AssertionError:
             return False
-        
+
         # numerator has to be a smaller order than the denom
         if len(numerator_list) >= len(denominator_list):
             return False
-        
+
         # The denominator has to be a product
         if not isinstance(denom, (Prod, Sum)):
             return False
@@ -1030,7 +1094,7 @@ class PartialFractions(Transform):
         # shouldnt be hard to generalize
         if len(denom.terms) != 2:
             return False
-        
+
         d1, d2 = denom.terms
 
         # Make sure that it's not the case that one of the denominator factors is just a constant.
@@ -1049,17 +1113,19 @@ class PartialFractions(Transform):
         ans = inv @ numerator_list
         self._new_integrand = ans[0] / d1 + ans[1] / d2
         return True
-    
+
     def forward(self, node: Node) -> None:
         node.add_child(Node(self._new_integrand, node.var, self, node))
-    
+
     def backward(self, node: Node) -> None:
         super().backward(node)
         node.parent.solution = node.solution
 
+
 class GenericUSub(Transform):
     _u: Expr = None
     _variable_change: Expr = None
+
     def check(self, node: Node) -> bool:
         if super().check(node) is False:
             return False
@@ -1073,25 +1139,25 @@ class GenericUSub(Transform):
             integral = remove_const_factor(integral)
             # assume term appears only once in integrand
             # because node.expr is simplified
-            rest = Prod(node.expr.terms[:i] + node.expr.terms[i+1:])
-            if count(rest, integral) == count(rest, node.var) / count(integral, node.var):
+            rest = Prod(node.expr.terms[:i] + node.expr.terms[i + 1 :])
+            if count(rest, integral) == count(rest, node.var) / count(
+                integral, node.var
+            ):
                 self._u = integral
                 return True
-            
+
         return False
-    
+
     def forward(self, node: Node) -> None:
         intermediate = generate_intermediate_var()
         du_dx = self._u.diff(node.var)
-        new_integrand = replace((node.expr/du_dx), self._u, intermediate)
+        new_integrand = replace((node.expr / du_dx), self._u, intermediate)
         node.add_child(Node(new_integrand, intermediate, self, node))
         self._variable_change = self._u
 
     def backward(self, node: Node) -> None:
         super().backward(node)
-        node.parent.solution = replace(
-            node.solution, node.var, self._variable_change
-        )
+        node.parent.solution = replace(node.solution, node.var, self._variable_change)
 
 
 class CompleteTheSquare(Transform):
@@ -1107,22 +1173,21 @@ class CompleteTheSquare(Transform):
             # 1 / xyz should be epxressed as a power so i omit prod check
             if not isinstance(expr, Power):
                 return False
-            if expr.exponent != Fraction(-1,2) and expr.exponent != -1:
+            if expr.exponent != Fraction(-1, 2) and expr.exponent != -1:
                 return False
             try:
                 poly = to_const_polynomial(expr.base, node.var)
             except AssertionError:
                 return False
-            
+
             # hmm completing the square could work on non-quadratics in some cases no?
             # but I'll just limit it to quadratics for now
             return poly.size == 3 and poly[1] != 0
             # poly[1] = 0 implies that there's no bx term
             # which means that there's no square to complete.
             # the result will just be the same as the original.
-    
-        return general_count(node.expr, condition) > 0
 
+        return general_count(node.expr, condition) > 0
 
     def forward(self, node: Node) -> None:
         # replace all quadratics with their completed-the-square form
@@ -1132,43 +1197,50 @@ class CompleteTheSquare(Transform):
             except AssertionError:
                 return False
             return poly.size == 3
-        
+
         def perform(expr: Expr) -> Expr:
             poly = to_const_polynomial(expr, node.var)
             norm_factor = poly[-1]
             normalized = poly / norm_factor
             const = normalized[1] / 2
-            diff = normalized[0] - const ** 2
+            diff = normalized[0] - const**2
             new_expr = (((node.var + const) / sqrt(diff)) ** 2 + 1) * diff * norm_factor
 
             return new_expr
-        
+
         new_expr = replace_factory(condition, perform)(node.expr)
         node.add_child(Node(new_expr, node.var, self, node))
-
 
     def backward(self, node: Node) -> None:
         super().backward(node)
         node.parent.solution = node.solution
 
+
 class RewritePythagorean(Transform):
     """
     sin(x)^(2n+1) -> sin(x) (1-cos^2(x))^n
-    
+
     ykw idk if this transform has ever helped anyone when it's not performed at the outer level of nesting.
     """
+
     @staticmethod
     def condition(expr: Expr) -> bool:
-        return isinstance(expr, Power) and isinstance(expr.base, (sin, cos)) and isinstance(expr.exponent, Rat) and expr.exponent > 1 and expr.exponent.value.denominator == 1 and expr.exponent % 2 == 1
+        return (
+            isinstance(expr, Power)
+            and isinstance(expr.base, (sin, cos))
+            and isinstance(expr.exponent, Rat)
+            and expr.exponent > 1
+            and expr.exponent.value.denominator == 1
+            and expr.exponent % 2 == 1
+        )
 
     @staticmethod
     def perform(expr: Power) -> bool:
         assert RewritePythagorean.condition(expr)
         b, x = expr.base, expr.exponent
-        n = (x-1) / 2
+        n = (x - 1) / 2
         d = {"sin": cos, "cos": sin}
         return (1 - d[b.func](b.inner) ** 2) ** n * b.__class__(b.inner)
-
 
     def check(self, node: Node) -> bool:
         if super().check(node) is False:
@@ -1176,7 +1248,7 @@ class RewritePythagorean(Transform):
 
         # this is a complete waste of resources.
         return general_count(node.expr, self.condition) > 0
-    
+
     def forward(self, node: Node) -> bool:
         def _replace_factory(c, p, e):
             # chill replace factory that only checks outer layer of nesting.
@@ -1187,6 +1259,7 @@ class RewritePythagorean(Transform):
                     return Prod([_replace(term) for term in e.terms])
                 else:
                     return e
+
             return _replace(e)
 
         new_expr = _replace_factory(self.condition, self.perform, node.expr)
@@ -1203,19 +1276,20 @@ class Simplify(Transform):
     def check(self, node: Node) -> bool:
         if super().check(node) is False:
             return False
-        
+
         t = _get_last_heuristic_transform(node)
         # The point of these 2 transforms is to rewrite the expr in a not necessarily 'simpler' form.
         if isinstance(t, (RewritePythagorean, RewriteTrig)):
             return False
         return pythagorean_simplification(node.expr, verbose=True)[1]
+
     def forward(self, node: Node) -> None:
         new = pythagorean_simplification(node.expr)
         node.add_child(Node(new, node.var, self, node))
+
     def backward(self, node: Node) -> None:
         super().backward(node)
         node.parent.solution = node.solution
-        
 
 
 # Leave RewriteTrig, InverseTrigUSub near the end bc they are deprioritized
@@ -1232,12 +1306,14 @@ HEURISTICS: List[Type[Transform]] = [
     RewritePythagorean,
     InverseTrigUSub,
     CompleteTheSquare,
-    GenericUSub
+    GenericUSub,
 ]
 SAFE_TRANSFORMS: List[Type[Transform]] = [
-    Additivity, PullConstant, PartialFractions, 
+    Additivity,
+    PullConstant,
+    PartialFractions,
     PolynomialDivision,
-    Expand, # expanding a fraction is not safe bc it destroys partialfractions. but if you put it after polynomial division & partial fractions, it doesn't cause any issues. more robust solution is to refactor & put expanding a fraction seperately as a heuristic transform, but idt this is necessary right now.
+    Expand,  # expanding a fraction is not safe bc it destroys partialfractions. but if you put it after polynomial division & partial fractions, it doesn't cause any issues. more robust solution is to refactor & put expanding a fraction seperately as a heuristic transform, but idt this is necessary right now.
     LinearUSub,
 ]
 
@@ -1246,13 +1322,15 @@ def generate_intermediate_var() -> Symbol:
     return symbols(f"u_{random_id(10)}")
 
 
-
 STANDARD_TRIG_INTEGRALS: Dict[str, ExprFn] = {
     "sin(x)": lambda x: -cos(x),
     "cos(x)": sin,
-    "sec(x)^2": tan, # Integration calculator says this is a standard integral. + i haven't encountered any transform that can solve this.
-    "sec(x)": lambda x: log(tan(x) + sec(x)) # not a standard integral but it's fucked so im leaving it (unless?)
+    "sec(x)^2": tan,  # Integration calculator says this is a standard integral. + i haven't encountered any transform that can solve this.
+    "sec(x)": lambda x: log(
+        tan(x) + sec(x)
+    ),  # not a standard integral but it's fucked so im leaving it (unless?)
 }
+
 
 def _check_if_solveable(integrand: Expr, var: Symbol) -> Optional[Expr]:
     if not integrand.contains(var):
@@ -1260,13 +1338,17 @@ def _check_if_solveable(integrand: Expr, var: Symbol) -> Optional[Expr]:
     if isinstance(integrand, Power):
         if integrand.base == var and not integrand.exponent.contains(var):
             n = integrand.exponent
-            return (1 / (n + 1)) * Power(var, n + 1) if n != -1 else log(abs(integrand.base))
+            return (
+                (1 / (n + 1)) * Power(var, n + 1)
+                if n != -1
+                else log(abs(integrand.base))
+            )
         if integrand.exponent == var and not integrand.base.contains(var):
             return 1 / log(integrand.base) * integrand
     if isinstance(integrand, Symbol) and integrand == var:
         return Fraction(1 / 2) * Power(var, 2)
 
-    silly_key = repr(replace(integrand, var, Symbol("x"))) # jank but does the job
+    silly_key = repr(replace(integrand, var, Symbol("x")))  # jank but does the job
     if silly_key in STANDARD_TRIG_INTEGRALS:
         return STANDARD_TRIG_INTEGRALS[silly_key](var)
 
