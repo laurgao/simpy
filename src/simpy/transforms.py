@@ -89,7 +89,7 @@ class Node:
                 if len(c1) != len(c2):
                     return False
                 return all(_recursive_call(x, y) for x, y in zip(c1, c2))
-            
+
             return _recursive_call(a_expr, b_expr)
 
         if not child.is_filler:
@@ -148,10 +148,10 @@ class Node:
 
         if self.type == "AND" or self.type == "UNSET":
             # UNSET should only have one child.
-            return all([child.is_solved for child in self.children])
+            return all(child.is_solved for child in self.children)
 
         if self.type == "OR":
-            return any([child.is_solved for child in self.children])
+            return any(child.is_solved for child in self.children)
 
     @property
     def is_failed(self) -> bool:
@@ -165,9 +165,9 @@ class Node:
             return False
 
         if self.type == "OR":
-            return all([child.is_failed for child in self.children])
+            return all(child.is_failed for child in self.children)
 
-        return any([child.is_failed for child in self.children])
+        return any(child.is_failed for child in self.children)
 
     @property
     def is_finished(self) -> bool:
@@ -345,7 +345,7 @@ class Additivity(SafeTransform):
         super().backward(node)
 
         # For this to work, we must have a solution for each sibling.
-        if not all([child.solution for child in node.parent.children]):
+        if not all(child.solution for child in node.parent.children):
             raise ValueError(f"Additivity backward for {node} failed")
 
         node.parent.solution = Sum([child.solution for child in node.parent.children])
@@ -602,7 +602,7 @@ class LinearUSub(Transform):
         ) -> Optional[Tuple[Expr, Optional[ExprFn]]]:
             """Returns what u should be in terms of x. & None if it's not."""
             if isinstance(expr, Sum):
-                if all([not c.contains(node.var) or not (c / node.var).contains(node.var) for c in expr.terms]):
+                if all(not c.contains(node.var) or not (c / node.var).contains(node.var) for c in expr.terms):
                     return expr, None
             if isinstance(expr, Prod):
                 # Is a constant multiple of var
@@ -648,7 +648,7 @@ class LinearUSub(Transform):
                 # have to do this because all([]) = True. Covering my bases.
                 return False
             else:
-                return all([_check(child) for child in e.children()])
+                return all(_check(child) for child in e.children())
 
         return _check(node.expr)
 
@@ -687,7 +687,7 @@ class CompoundAngle(Transform):
             ):
                 return True
             else:
-                return any([_check(child) for child in e.children()])
+                return any(_check(child) for child in e.children())
 
         return _check(node.expr)
 

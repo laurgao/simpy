@@ -248,7 +248,7 @@ class Eq:
         if isinstance(expr, list):
             if not (isinstance(query, list) and len(expr) == len(query)):
                 return False
-            return len(expr) == len(query) and all([self._eq(e, q) for e, q in zip(expr, query)])
+            return len(expr) == len(query) and all(self._eq(e, q) for e, q in zip(expr, query))
         if expr == query:
             return True
         if not isinstance(expr, Expr) or not isinstance(query, Expr):
@@ -280,7 +280,7 @@ class Eq:
 
         if not expr.__class__ == query.__class__:
             return False
-        return all([self._eq(getattr(expr, field.name), getattr(query, field.name)) for field in fields(expr)])
+        return all(self._eq(getattr(expr, field.name), getattr(query, field.name)) for field in fields(expr))
 
 
 def divide_anys(num: Expr, denom: Expr) -> Tuple[Expr, MatchesInProgress]:
@@ -358,7 +358,7 @@ def contains_cls(expr: Expr, cls: Type[Expr]) -> bool:
     if isinstance(expr, cls):
         return True
 
-    return any([contains_cls(e, cls) for e in expr.children()])
+    return any(contains_cls(e, cls) for e in expr.children())
 
 
 def general_count(expr: Expr, condition: Callable[[Expr], bool]) -> int:

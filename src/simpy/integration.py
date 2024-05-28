@@ -29,7 +29,7 @@ def _get_best_leaf(root: Node) -> Node:
     if len(root.unfinished_children) == 0:
         return root  # base case ???
 
-    is_2nd_lowest_parent = all([not child.unfinished_children for child in root.unfinished_children])
+    is_2nd_lowest_parent = all(not child.unfinished_children for child in root.unfinished_children)
     fn = min if root.type == "OR" else max
     if is_2nd_lowest_parent:
         return _get_node_with_best_nesting(root.unfinished_children, fn)

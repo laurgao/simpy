@@ -180,7 +180,7 @@ class Expr(ABC):
     def expandable(self) -> bool:
         if not self.children():
             return False
-        return any([c.expandable() for c in self.children()])
+        return any(c.expandable() for c in self.children())
 
     # overload if necessary
     def expand(self) -> "Expr":
@@ -906,7 +906,7 @@ class Sum(Associative, Expr):
 
     @property
     def is_subtraction(self):
-        return all([t.is_subtraction for t in self.terms])
+        return all(t.is_subtraction for t in self.terms)
 
 
 def _deconstruct_prod(expr: Expr) -> Tuple[Rat, List[Expr]]:
