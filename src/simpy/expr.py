@@ -573,32 +573,34 @@ AccumulateableTuple = (Rat, Infinity, NegInfinity, Float)  # because can't use U
 
 
 def accumulate(*consts: List[Accumulateable], type_: Literal["sum", "prod"] = "sum") -> List[Expr]:
-    func = sum if type_ == "sum" else lambda terms: reduce(lambda x, y: x * y, terms, 1)
-    if any(isinstance(c, (Infinity, NegInfinity)) for c in consts):
-        return [Const(func(c.value for c in consts))]
-    frac = Rat(func(c.value for c in consts if isinstance(c, Rat)))
-    float_ = Const(func(c.value for c in consts if isinstance(c, Float)))
-
     if type_ == "sum":
-        if frac != 0 and float_ != 0:
-            return [frac, float_]
-        if frac != 0:
-            return [frac]
-        if float_ != 0:
-            return [float_]
-        return []
+        operation = sum
+    elif type_ == "prod":
+        operation = lambda terms: reduce(lambda x, y: x * y, terms, 1)
 
-    if type_ == "prod":
-        if frac == 0 or float_ == 0:
+    rats = []
+    floats = []
+    for c in consts:
+        if type_ == "prod" and c == 0:
             return [Rat(0)]
+        if isinstance(c, (Infinity, NegInfinity)):
+            return [Const(operation(c.value for c in consts))]
+        elif isinstance(c, Rat):
+            rats.append(c.value)
+        else:
+            floats.append(c.value)
 
-        if frac != 1 and float_ != 1:
-            return [frac, float_]
-        if frac != 1:
-            return [frac]
-        if float_ != 1:
-            return [float_]
-        return []
+    result = []
+    if rats:
+        rat_result = operation(rats)
+        if rat_result != 0 and (type_ == "sum" or rat_result != 1):
+            result.append(Rat(rat_result))
+    if floats:
+        float_result = operation(floats)
+        if float_result != 0 and (type_ == "sum" or float_result != 1):
+            result.append(Const(float_result))
+
+    return result
 
 
 def _accumulate_power(b: Accumulateable, x: Accumulateable) -> Optional[Expr]:
