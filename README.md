@@ -46,7 +46,7 @@ Run `make style` to format accordingly. And `make check-style` to check your edi
 
 If you use vscode, you can add this to `settings.json` to automatically format when you save.
 
-```
+```json
     "[python]": {
         "editor.defaultFormatter": "ms-python.black-formatter",
         "editor.formatOnSave": true,
