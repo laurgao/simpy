@@ -207,13 +207,7 @@ class Integration:
 
         if nesting(ans.expr) >= self.DEPTH_FIRST_MAX_NESTING:
             return True
-        from .transforms import (
-            Additivity,
-            ByParts,
-            Expand,
-            PullConstant,
-            _get_last_heuristic_transform,
-        )
+        from .transforms import Additivity, ByParts, Expand, PullConstant, _get_last_heuristic_transform
 
         t = _get_last_heuristic_transform(ans, (Expand, PullConstant, Additivity))
         if isinstance(t, ByParts):

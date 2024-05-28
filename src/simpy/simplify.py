@@ -1,32 +1,7 @@
 from typing import Iterable, List, Optional, Tuple, Type, Union
 
-from .expr import (
-    Abs,
-    Expr,
-    Power,
-    Prod,
-    Rat,
-    Sum,
-    Symbol,
-    TrigFunction,
-    cos,
-    cot,
-    csc,
-    log,
-    nesting,
-    sec,
-    sin,
-    tan,
-)
-from .regex import (
-    any_,
-    eq,
-    general_count,
-    kinder_replace,
-    kinder_replace_many,
-    replace_class,
-    replace_factory,
-)
+from .expr import Abs, Expr, Power, Prod, Rat, Sum, Symbol, TrigFunction, cos, cot, csc, log, nesting, sec, sin, tan
+from .regex import any_, eq, general_count, kinder_replace, kinder_replace_many, replace_class, replace_factory
 from .utils import ExprFn
 
 

@@ -30,13 +30,7 @@ from .expr import (
     tan,
 )
 from .linalg import invert
-from .polynomial import (
-    Polynomial,
-    is_polynomial,
-    polynomial_to_expr,
-    rid_ending_zeros,
-    to_const_polynomial,
-)
+from .polynomial import Polynomial, is_polynomial, polynomial_to_expr, rid_ending_zeros, to_const_polynomial
 from .regex import count, general_count, replace, replace_class, replace_factory
 from .simplify import pythagorean_simplification
 from .utils import ExprFn, random_id
@@ -57,15 +51,11 @@ class Node:
     transform: Optional["Transform"] = None  # the transform that led to this node
     parent: Optional["Node"] = None  # None for root node only
     type: Literal["AND", "OR", "UNSET", "SOLUTION", "FAILURE"] = "UNSET"
-    solution: Optional[Expr] = (
-        None  # only for SOLUTION nodes (& their parents when we go backwards)
-    )
+    solution: Optional[Expr] = None  # only for SOLUTION nodes (& their parents when we go backwards)
     is_filler: bool = (
         False  # fillers are ones where the expr is like; not real / a copy of the parents. the node exists to store info other than the expr. eventually i wanna just set expr to none.
     )
-    _children: Optional[List["Node"]] = (
-        None  # smtn smtn setting it to [] by default causes errors
-    )
+    _children: Optional[List["Node"]] = None  # smtn smtn setting it to [] by default causes errors
 
     # failure = can't proceed forward.
 
@@ -124,9 +114,7 @@ class Node:
     @property
     def is_stale(self) -> bool:
         """Stale = unfinished node that is no longer needed"""
-        return not self.is_finished and any(
-            parent.is_finished for parent in _parents(self)
-        )
+        return not self.is_finished and any(parent.is_finished for parent in _parents(self))
 
     @property
     def is_solved(self) -> bool:
@@ -288,14 +276,10 @@ class PolynomialDivision(SafeTransform):
             quotient_degree = len(self._numerator) - len(self._denominator)
             quotient_coeff = self._numerator[-1] / self._denominator[-1]
             quotient[quotient_degree] = quotient_coeff
-            self._numerator -= np.concatenate(
-                ([Rat(0)] * quotient_degree, self._denominator * quotient_coeff)
-            )
+            self._numerator -= np.concatenate(([Rat(0)] * quotient_degree, self._denominator * quotient_coeff))
             self._numerator = rid_ending_zeros(self._numerator)
 
-        remainder = polynomial_to_expr(self._numerator, var) / polynomial_to_expr(
-            self._denominator, var
-        )
+        remainder = polynomial_to_expr(self._numerator, var) / polynomial_to_expr(self._denominator, var)
         quotient_expr = polynomial_to_expr(quotient, var)
         answer = quotient_expr + remainder
         node.add_child(Node(answer, var, self, node))
@@ -457,13 +441,7 @@ class RewriteTrig(Transform):
         )
 
         new_exprs = [r1, r2, r3]
-        node.add_children(
-            [
-                Node(option, node.var, self, node)
-                for option in new_exprs
-                if option != expr
-            ]
-        )
+        node.add_children([Node(option, node.var, self, node) for option in new_exprs if option != expr])
         node.type = "OR"
 
     def check(self, node: Node) -> bool:
@@ -550,11 +528,7 @@ class PolynomialUSub(Transform):
             # yes you can assume it's an expanded simplified product. so no terms
             # are Prod or Sum.
             # so x^n-1 must be exactly a term with no fluff. :)
-            if (
-                isinstance(term, Power)
-                and term.base == node.var
-                and not term.exponent.contains(node.var)
-            ):
+            if isinstance(term, Power) and term.base == node.var and not term.exponent.contains(node.var):
                 n = term.exponent + 1
                 rest = Prod(node.expr.terms[:i] + node.expr.terms[i + 1 :])
                 break
@@ -600,9 +574,7 @@ class LinearUSub(Transform):
         if super().check(node) is False:
             return False
 
-        if (
-            count(node.expr, node.var) < 1
-        ):  # just to cover our bases bc the later thing assume it appears >=1
+        if count(node.expr, node.var) < 1:  # just to cover our bases bc the later thing assume it appears >=1
             return False
 
         def _is_a_linear_sum_or_prod(
@@ -610,13 +582,7 @@ class LinearUSub(Transform):
         ) -> Optional[Tuple[Expr, Optional[ExprFn]]]:
             """Returns what u should be in terms of x. & None if it's not."""
             if isinstance(expr, Sum):
-                if all(
-                    [
-                        not c.contains(node.var)
-                        or not (c / node.var).contains(node.var)
-                        for c in expr.terms
-                    ]
-                ):
+                if all([not c.contains(node.var) or not (c / node.var).contains(node.var) for c in expr.terms]):
                     return expr, None
             if isinstance(expr, Prod):
                 # Is a constant multiple of var
@@ -629,9 +595,7 @@ class LinearUSub(Transform):
                     expr = -expr
                 xyz = remove_const_factor(expr)
                 is_const_multiple_of_power = (
-                    isinstance(xyz, Power)
-                    and xyz.base == node.var
-                    and not xyz.exponent.contains(node.var)
+                    isinstance(xyz, Power) and xyz.base == node.var and not xyz.exponent.contains(node.var)
                 )
                 if not is_const_multiple_of_power:
                     return None
@@ -709,9 +673,7 @@ class CompoundAngle(Transform):
 
     def forward(self, node: Node) -> None:
         condition = (
-            lambda expr: isinstance(expr, (sin, cos))
-            and isinstance(expr.inner, Sum)
-            and len(expr.inner.terms) == 2
+            lambda expr: isinstance(expr, (sin, cos)) and isinstance(expr.inner, Sum) and len(expr.inner.terms) == 2
         )
 
         def _perform(expr: Union[sin, cos]) -> Expr:
@@ -817,17 +779,11 @@ class ProductToSum(Transform):
     def condition(expr: Expr) -> bool:
         expr = remove_const_factor(expr)
         if isinstance(expr, Prod):
-            if len(expr.terms) == 2 and all(
-                isinstance(term, (sin, cos)) for term in expr.terms
-            ):
+            if len(expr.terms) == 2 and all(isinstance(term, (sin, cos)) for term in expr.terms):
                 return True
 
         if isinstance(expr, Power):
-            if (
-                isinstance(expr.base, (sin, cos))
-                and isinstance(expr.exponent, Rat)
-                and expr.exponent % 2 == 0
-            ):
+            if isinstance(expr.base, (sin, cos)) and isinstance(expr.exponent, Rat) and expr.exponent % 2 == 0:
                 return True
 
         return False
@@ -839,9 +795,7 @@ class ProductToSum(Transform):
         if isinstance(nexpr, Prod):
             return const * ProductToSum._perform_on_terms(*nexpr.terms)
 
-        return const * ProductToSum._perform_on_terms(nexpr.base, nexpr.base) ** (
-            nexpr.exponent / 2
-        )
+        return const * ProductToSum._perform_on_terms(nexpr.base, nexpr.base) ** (nexpr.exponent / 2)
 
     @staticmethod
     def _perform_on_terms(a: Union[sin, cos], b: Union[sin, cos]) -> Expr:
@@ -933,9 +887,7 @@ class ByParts(Transform):
 
         if not isinstance(node.expr, Prod):
             if (
-                isinstance(node.expr, log)
-                or isinstance(node.expr, TrigFunction)
-                and node.expr.is_inverse
+                isinstance(node.expr, log) or isinstance(node.expr, TrigFunction) and node.expr.is_inverse
             ) and node.expr.inner == node.var:  # Special case for Log, ArcSin, etc.
                 # TODO universalize it more?? how to make it more universal without making inf loops?
                 dv = 1
@@ -969,10 +921,7 @@ class ByParts(Transform):
     def _get_first_factor(parent_byparts: Node, node: Node) -> Expr:
         if parent_byparts.children[1] == node:
             return Rat(1)
-        elif (
-            isinstance(node.transform, PullConstant)
-            and parent_byparts.children[1].child == node
-        ):
+        elif isinstance(node.transform, PullConstant) and parent_byparts.children[1].child == node:
             return node.transform._constant
         raise ValueError
 
@@ -1015,9 +964,7 @@ class ByParts(Transform):
                     factor = first_factor * second_factor
                     other_uv = parent_byparts.child
                     other_uv.solution /= 1 - factor  # mutating is sus
-                    solution = child1 / (
-                        1 - factor
-                    )  # going back will mul it w second factor by default.
+                    solution = child1 / (1 - factor)  # going back will mul it w second factor by default.
                     node.add_child(
                         Node(
                             node.expr,
@@ -1140,9 +1087,7 @@ class GenericUSub(Transform):
             # assume term appears only once in integrand
             # because node.expr is simplified
             rest = Prod(node.expr.terms[:i] + node.expr.terms[i + 1 :])
-            if count(rest, integral) == count(rest, node.var) / count(
-                integral, node.var
-            ):
+            if count(rest, integral) == count(rest, node.var) / count(integral, node.var):
                 self._u = integral
                 return True
 
@@ -1326,9 +1271,7 @@ STANDARD_TRIG_INTEGRALS: Dict[str, ExprFn] = {
     "sin(x)": lambda x: -cos(x),
     "cos(x)": sin,
     "sec(x)^2": tan,  # Integration calculator says this is a standard integral. + i haven't encountered any transform that can solve this.
-    "sec(x)": lambda x: log(
-        tan(x) + sec(x)
-    ),  # not a standard integral but it's fucked so im leaving it (unless?)
+    "sec(x)": lambda x: log(tan(x) + sec(x)),  # not a standard integral but it's fucked so im leaving it (unless?)
 }
 
 
@@ -1338,11 +1281,7 @@ def _check_if_solveable(integrand: Expr, var: Symbol) -> Optional[Expr]:
     if isinstance(integrand, Power):
         if integrand.base == var and not integrand.exponent.contains(var):
             n = integrand.exponent
-            return (
-                (1 / (n + 1)) * Power(var, n + 1)
-                if n != -1
-                else log(abs(integrand.base))
-            )
+            return (1 / (n + 1)) * Power(var, n + 1) if n != -1 else log(abs(integrand.base))
         if integrand.exponent == var and not integrand.base.contains(var):
             return 1 / log(integrand.base) * integrand
     if isinstance(integrand, Symbol) and integrand == var:

@@ -37,3 +37,25 @@ Note: we don't support floats right now so please use fractions!
 ## Please make issues!
 
 This project is actively undergoing development; please let me know about any bugs you encounter by making a github issue! If there's an integral that we currently can't solve, create an issue and tag "new integral."
+
+# Code style
+
+This project uses black and isort with line width of 120.
+
+Run `make style` to format accordingly. And `make check-style` to check your edits meet the formatting guidelines.
+
+If you use vscode, you can add this to `settings.json` to automatically format when you save.
+
+```
+    "[python]": {
+        "editor.defaultFormatter": "ms-python.black-formatter",
+        "editor.formatOnSave": true,
+        "editor.codeActionsOnSave": {
+            "source.organizeImports": "always",
+            "source.fixAll": "always"
+        },
+        "editor.rulers": [120],
+    },
+    "black-formatter.args": ["--line-length", "120"],
+    "isort.args": ["--profile", "black", "--line-length", "120"],
+```
