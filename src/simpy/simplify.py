@@ -1,7 +1,7 @@
 from typing import Iterable, List, Optional, Tuple, Type, Union
 
 from .expr import Abs, Expr, Power, Prod, Rat, Sum, Symbol, TrigFunction, cos, cot, csc, log, nesting, sec, sin, tan
-from .regex import any_, eq, general_count, kinder_replace, kinder_replace_many, replace_class, replace_factory
+from .regex import any_, eq, general_contains, general_count, kinder_replace, kinder_replace_many, replace_class
 from .utils import ExprFn
 
 
@@ -49,23 +49,16 @@ def _pythagorean_perform(sum: Expr) -> Optional[Expr]:
     if not isinstance(sum, Sum):
         return
 
-    ##------------ Simplify 1 +/- cls(...)^2 ------------##
-    # - for this case: what if there is a constant (or variable) common factor?
-    identities: List[Tuple[Expr, ExprFn]] = [
-        (1 + tan(any_) ** 2, lambda x: sec(x) ** 2),
-        (-1 + sec(any_) ** 2, lambda x: tan(x) ** 2),
-        (1 + cot(any_) ** 2, lambda x: csc(x) ** 2),
-        (-1 + csc(any_) ** 2, lambda x: cot(x) ** 2),
-        (1 - sin(any_) ** 2, lambda x: cos(x) ** 2),
-        (1 - cos(any_) ** 2, lambda x: sin(x) ** 2),
-    ]
-    for cond, perform in identities:
-        result = eq(sum, cond, up_to_factor=True, up_to_sum=True)
-        if result["success"]:
-            factor = result["factor"]
-            inner = result["matches"]
-            rest = result["rest"]
-            return factor * perform(inner) + rest
+    # first check if we have anything squared before we do anything else
+    # because the rest of the function, with all the `eq` calls, is expensive.
+    cond = (
+        lambda x: isinstance(x, Power)
+        and x.exponent == 2
+        and isinstance(x.base, TrigFunction)
+        and x.base.is_inverse is False
+    )
+    if not general_contains(sum, cond):
+        return
 
     ##------------ Simplify sin^2(...) + cos^2(...) ------------##
     def is_thing_squared(
@@ -97,6 +90,25 @@ def _pythagorean_perform(sum: Expr) -> Optional[Expr]:
         new_terms += [el[1] for el in both_inners]
         return Sum(new_terms)
 
+    ##------------ Simplify 1 +/- cls(...)^2 ------------##
+    # - for this case: what if there is a constant (or variable) common factor?
+    identities: List[Tuple[Expr, ExprFn]] = [
+        # More common ones first
+        (1 + tan(any_) ** 2, lambda x: sec(x) ** 2),
+        (1 - sin(any_) ** 2, lambda x: cos(x) ** 2),
+        (1 - cos(any_) ** 2, lambda x: sin(x) ** 2),
+        (-1 + sec(any_) ** 2, lambda x: tan(x) ** 2),
+        (1 + cot(any_) ** 2, lambda x: csc(x) ** 2),
+        (-1 + csc(any_) ** 2, lambda x: cot(x) ** 2),
+    ]
+    for cond, perform in identities:
+        result = eq(sum, cond, up_to_factor=True, up_to_sum=True)
+        if result["success"]:
+            factor = result["factor"]
+            inner = result["matches"]
+            rest = result["rest"]
+            return factor * perform(inner) + rest
+
     # other_table = [
     #     (r"^sec\((.+)\)\^2$", r"^-tan\((.+)\)\^2$", Const(1)),
     # ]
@@ -119,7 +131,7 @@ def _pythagorean_complex_perform(sum: Expr) -> Optional[Expr]:
     new_sum = rewrite_as_one_fraction(new_sum)
     if sum == new_sum:
         return
-    new_sum = pythagorean_simplification(new_sum)
+    new_sum = kinder_replace(new_sum, _pythagorean_perform)
     if is_simpler(new_sum, sum):
         # assume we're doing this in the ctx of the larger simplification
         return reciprocate_trigs(new_sum)

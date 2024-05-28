@@ -1438,6 +1438,8 @@ TrigStr = Literal["sin", "cos", "tan", "sec", "csc", "cot"]
 
 
 class TrigFunction(SingleFunc, ABC):
+    is_inverse: bool = False  # class property
+
     _SPECIAL_KEYS = [
         "0",
         "1/6",
@@ -1460,11 +1462,6 @@ class TrigFunction(SingleFunc, ABC):
     @abstractmethod
     @classproperty
     def func(cls) -> TrigStr:
-        pass
-
-    @abstractmethod
-    @classproperty
-    def is_inverse(cls) -> bool:
         pass
 
     @staticproperty

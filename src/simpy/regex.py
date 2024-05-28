@@ -370,6 +370,12 @@ def general_count(expr: Expr, condition: Callable[[Expr], bool]) -> int:
     return sum(general_count(e, condition) for e in expr.children())
 
 
+def general_contains(expr: Expr, condition: Callable[[Expr], bool]) -> bool:
+    if condition(expr):
+        return True
+    return any(general_contains(e, condition) for e in expr.children())
+
+
 def replace_factory(condition, perform) -> ExprFn:
     return replace_factory_list([condition], [perform])
 
@@ -433,7 +439,6 @@ def kinder_replace_many(expr: Expr, performs: Iterable[OptionalExprFn], verbose=
                 is_hit["hi"] = True
                 return new
 
-        # find all instances of old in expr and replace with new
         if isinstance(e, Sum):
             return Sum([_replace(t) for t in e.terms])
         if isinstance(e, Prod):

@@ -131,7 +131,10 @@ class Integration:
         if root.is_failed:
             return None
         Integration._go_backwards(root)
-        return root.solution.simplify()
+
+        # Unsure if not simplifying here could cause problems down the line
+        # but it seems to work fine for now.
+        return root.solution
 
     def _cycle(self, node: Node) -> Optional[Union[Node, Literal["SOLVED"]]]:
         # 1. APPLY ALL SAFE TRANSFORMS
