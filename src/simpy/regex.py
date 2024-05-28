@@ -2,8 +2,6 @@
 
 This module is currently still developmental. It does the job often but is not promised to be robust
 outside of the cases it is currently used for. Use with caution.
-
-Still WIP. Ideally need to do stuff like "check if somefactor * cos(sth) + somefactor * sin(sth) exists."
 """
 
 from collections import defaultdict
@@ -84,32 +82,6 @@ def eq(expr: Expr, query: Expr, *, up_to_factor=False, up_to_sum=False) -> EqRes
             )
         expr, query = query, expr
     return Eq(expr, query, up_to_factor, up_to_sum=up_to_sum)()
-
-
-# @dataclass
-# class Inverse(Expr):
-#     inner: Expr # = 1
-
-#     def __eq__(self, other):
-#         return isinstance(other, Inverse) and other.inner == self.inner
-
-#     def __repr__(self) -> str:
-#         return f"Inverse({self.inner})"
-
-#     # implementing some Expr abstract methods
-#     def subs(self, subs: Dict[str, "Rat"]):
-#         raise NotImplementedError(f"Cannot evaluate {self}")
-
-#     def children(self) -> List["Expr"]:
-#         return self.inner
-
-#     def diff(self, var: "Symbol") -> "Expr":
-#         raise NotImplementedError(
-#             f"Cannot get the derivative of {self.__class__.__name__}"
-#         )
-
-#     def latex(self) -> str:
-#         raise NotImplementedError(f"Cannot convert {self.__class__.__name__} to latex")
 
 
 def get_anys(expr: Expr) -> List[Any_]:
@@ -302,10 +274,6 @@ class Eq:
                         join_dicts2(self._matches, quotient_matches)
                         self._matches[anys[0].key].append(anyvalue)
                         return True
-
-                # for a in anys:
-                #     self._anyfind[a.anykey].append(Inverse(one))
-                # return True
 
         if not expr.__class__ == query.__class__:
             return False
