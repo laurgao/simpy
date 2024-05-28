@@ -70,11 +70,31 @@ class Node:
         return self._children
 
     def add_child(self, child: "Node") -> None:
+
+        def eq_with_var(a, b) -> bool:
+            a_expr, a_var = a
+            b_expr, b_var = b
+
+            def _recursive_call(e1: Expr, e2: Expr) -> bool:
+                if type(e1) != type(e2):
+                    return False
+                if isinstance(e1, Symbol):
+                    if e1 == a_var:
+                        return e2 == b_var
+                    return e1 == e2
+                c1 = e1.children()
+                c2 = e2.children()
+                if c1 == [] or c2 == []:
+                    return e1 == e2
+                if len(c1) != len(c2):
+                    return False
+                return all(_recursive_call(x, y) for x, y in zip(c1, c2))
+            
+            return _recursive_call(a_expr, b_expr)
+
         if not child.is_filler:
             parents = _parents(self)
-            info = lambda p: repr(replace(p.expr, p.var, self.var))
-            parents_info = [info(p) for p in parents if not p.is_filler]
-            if info(child) in parents_info:
+            if any(eq_with_var((p.expr, p.var), (child.expr, child.var)) for p in parents):
                 return
         self.children.append(child)
 

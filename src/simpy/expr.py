@@ -227,6 +227,8 @@ class Expr(ABC):
 
 @dataclass
 class Associative:
+    """The children's __new__ must handle sorting & flattening."""
+
     terms: List[Expr]
 
     def __post_init__(self):
@@ -235,8 +237,8 @@ class Associative:
         # will call Associative.__post_init__(). the super in Associative will call Expr.__post_init__()
         # (This is according to chatgpt and I haven't confirmed it yet.)
         super().__post_init__()
-        self._flatten()
-        self._sort()
+        # self._flatten()
+        # self._sort()
 
     @classmethod
     def _flatten_terms(cls, terms: List[Expr]):
@@ -261,7 +263,8 @@ class Associative:
     def children(self) -> List["Expr"]:
         return self.terms
 
-    def _sort(self) -> None:
+    @classmethod
+    def _sort_terms(cls, terms) -> None:
         def _nesting(expr: "Expr") -> int:
             """Like the public nesting except constant multipliers don't count
             to prevent fucky reprs for things like
@@ -312,7 +315,7 @@ class Associative:
             return 1 if a.__repr__() > b.__repr__() else -1
 
         key = cmp_to_key(_compare)
-        self.terms = sorted(self.terms, key=key)
+        return sorted(terms, key=key)
 
     def _evalf(self, subs):
         return self.__class__([term.evalf(subs) for term in self.terms])
@@ -737,6 +740,8 @@ class Sum(Associative, Expr):
         if len(final_terms) == 1:
             return final_terms[0]
 
+        final_terms = cls._sort_terms(final_terms)
+
         instance = super().__new__(cls)
         instance.terms = final_terms
         return instance
@@ -744,12 +749,14 @@ class Sum(Associative, Expr):
     def __init__(self, terms: List[Expr]):
         # Overrides the shit that does self.terms = terms because i've already set terms
         # in __new__.
-        self.__post_init__()
+        # also, no need to super().__post_init__ because we already casted stuff in __new__.
+        pass
 
-    def _sort(self):
+    @classmethod
+    def _sort_terms(cls, terms):
         # Sums are typically written from largest complexity to smallest (whereas for products it's the opposite)
-        super()._sort()
-        self.terms = list(reversed(self.terms))
+        terms = super()._sort_terms(terms)
+        return list(reversed(terms))
 
     def __neg__(self) -> "Sum":
         return Sum([-t for t in self.terms])
@@ -938,7 +945,7 @@ class Prod(Associative, Expr):
         if len(new_terms) == 1:
             return new_terms[0]
 
-        # should sort here.
+        new_terms = cls._sort_terms(new_terms)
 
         if len(new_terms) == 2 and new_terms[0] == Rat(-1) and isinstance(new_terms[1], Sum):
             # do not let allow this to exist as a Prod because it causes a fucky repr
@@ -952,7 +959,7 @@ class Prod(Associative, Expr):
 
     def __init__(self, terms: List[Expr]):
         # terms are already set in __new__
-        self.__post_init__()
+        pass
 
     def __repr__(self) -> str:
         def _term_repr(term):
@@ -1187,7 +1194,7 @@ class Power(Expr):
         return default_return
 
     def __init__(self, base: Expr, exponent: Expr):
-        self.__post_init__()
+        pass
 
     def _power_expandable(self) -> bool:
         return (
