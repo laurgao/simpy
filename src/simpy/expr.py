@@ -889,7 +889,7 @@ def deconstruct_power(expr: Expr) -> Tuple[Expr, Rat]:
 
 isfractionorneg = lambda x: isinstance(x, Rat) and (x.value.denominator != 1 or x < 0)
 islongsymbol = (
-    lambda x: isinstance(x, Symbol) and len(x.name) > 1 or x.__class__.__name__ == "Any_" and len(x.anykey) > 1
+    lambda x: isinstance(x, Symbol) and len(x.name) > 1 or x.__class__.__name__ == "Any_" and len(x.key) > 1
 )
 
 

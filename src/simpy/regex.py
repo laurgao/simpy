@@ -15,15 +15,15 @@ from .utils import ExprFn, OptionalExprFn, random_id
 
 
 class Any_(Expr):
-    def __init__(self, anykey=None, *, is_multiple_terms=False):
-        if not anykey:
-            anykey = random_id(10)
-        self._anykey = anykey
+    def __init__(self, key=None, *, is_multiple_terms=False):
+        if not key:
+            key = random_id(10)
+        self._key = key
         self._is_multiple_terms = is_multiple_terms
 
     @property
-    def anykey(self) -> str:
-        return self._anykey
+    def key(self) -> str:
+        return self._key
 
     @property
     def is_multiple_terms(self) -> bool:
@@ -31,14 +31,14 @@ class Any_(Expr):
 
     def __eq__(self, other):
         if isinstance(other, Any_):
-            return self.anykey == other.anykey
+            return self.key == other.key
         # if isinstance(other, Expr):
         #     return True
         # return NotImplemented
         return False
 
     def __repr__(self) -> str:
-        return "any_" + self.anykey
+        return "any_" + self.key
 
     # implementing some Expr abstract methods
     def subs(self, subs: Dict[str, "Rat"]):
@@ -60,14 +60,28 @@ class Any_(Expr):
 any_ = Any_()
 
 # smallTODO: make this a namedtuple
-EqResult = Dict[Literal["success", "factor", "rest", "anyfind"], Any]
+EqResult = Dict[Literal["success", "factor", "rest", "matches"], Any]
 
 
 @cast
 def eq(expr: Expr, query: Expr, *, up_to_factor=False, up_to_sum=False) -> EqResult:
+    """Tests if `expr` is equal to `query` when `query` contains `Any_` objects.
+
+    Returns a dictionary with keys:
+    - "success": bool
+
+    if success is True, the result will also contains these keys:
+    - "matches": Dict[str, Expr] with the dictionary key being the key attribute of the Any_ object, and the dict value
+        being the found expression that matches the Any_ object.
+        Returns a single Expr if the query only contains one Any_ object.
+    - "factor": Expr (if up_to_factor=True)
+    - "rest": Expr (if up_to_sum=True)
+    """
     if expr.has(Any_):
         if query.has(Any_):
-            raise ValueError("Can't both arguments to eq have Any_")
+            raise ValueError(
+                f"Only a maximum of one argument to the `eq` function can contain 'Any_' objects. Your inputs: expr=({expr}), query=({query})"
+            )
         expr, query = query, expr
     return Eq(expr, query, up_to_factor, up_to_sum=up_to_sum)()
 
@@ -99,10 +113,11 @@ def eq(expr: Expr, query: Expr, *, up_to_factor=False, up_to_sum=False) -> EqRes
 
 
 def get_anys(expr: Expr) -> List[Any_]:
+    """Returns a list of all Any_ objects in the expression."""
     if isinstance(expr, Any_):
         return [expr]
 
-    str_set = set([symbol.anykey for e in expr.children() for symbol in get_anys(e)])
+    str_set = set([symbol.key for e in expr.children() for symbol in get_anys(e)])
     return [Any_(s) for s in str_set]
 
 
@@ -117,12 +132,14 @@ def all_same(list_: list) -> bool:
     return True
 
 
-AnyfindInProgress = Dict[str, List[Expr]]
-Anyfind = Dict[str, Expr]
+MatchesInProgress = Dict[str, List[Expr]]
+Matches = Dict[str, Expr]
 
 
-def _anyfinds_eq(x: Anyfind, y: Anyfind):
-    # assert there aren't contradictions.
+def _matches_eq(x: Matches, y: Matches) -> bool:
+    """Returns True if there aren't contradictions between two sets of matches.
+    and False otherwise.
+    """
     for k in x:
         if k in y and not y[k] == x[k]:
             return False
@@ -134,20 +151,20 @@ def _anyfinds_eq(x: Anyfind, y: Anyfind):
     return True
 
 
-_qanyfind = Dict[str, Dict[str, Anyfind]]
+_qmatches = Dict[str, Dict[str, Matches]]
 
 
-def consolidate(query_anyfinds: _qanyfind, expr: Sum) -> EqResult:
+def consolidate(query_matches: _qmatches, expr: Sum) -> EqResult:
     final = defaultdict(list)
     accounted_expr_terms = []
 
     # We need to make sure every query term has a match.
-    for query_term_repr, query_term_values in query_anyfinds.items():
+    for query_term_repr, query_term_values in query_matches.items():
         has_match = False
         for expr_term_repr, matches in query_term_values.items():
             if all(
-                any(_anyfinds_eq(matches2, matches) for matches2 in query_term_values2.values())
-                for query_term_values2 in query_anyfinds.values()
+                any(_matches_eq(matches2, matches) for matches2 in query_term_values2.values())
+                for query_term_values2 in query_matches.values()
             ):
                 join_dicts(final, matches)
                 accounted_expr_terms.append(expr_term_repr)
@@ -160,10 +177,10 @@ def consolidate(query_anyfinds: _qanyfind, expr: Sum) -> EqResult:
 
     assert all(all_same(v) for v in final.values())
     final = {k: v[0] for k, v in final.items()}
-    assert all(any(_anyfinds_eq(x, final) for x in y.values()) for y in query_anyfinds.values())
+    assert all(any(_matches_eq(x, final) for x in y.values()) for y in query_matches.values())
 
     rest = Sum([t for t in expr.terms if repr(t) not in accounted_expr_terms])
-    return {"anyfind": final, "rest": rest, "success": True}
+    return {"matches": final, "rest": rest, "success": True}
 
 
 class Eq:
@@ -189,16 +206,15 @@ class Eq:
         self._up_to_sum = up_to_sum
 
         # Mutable:
-        self._anyfind: AnyfindInProgress = defaultdict(list)
+        self._matches: MatchesInProgress = defaultdict(list)
         self._result: EqResult = defaultdict(str)
 
         if up_to_factor:
-            self._anyfactor = Any_("factor_" + random_id(5))
-            new_query = self._anyfactor * query
+            self._any_factor = Any_("factor_" + random_id(5))
+            new_query = self._any_factor * query
             self._query = new_query.expand() if new_query.expandable() else new_query
 
     def __call__(self) -> EqResult:
-        """Returns (is_equal, factor, anyfinds) if up_to_factor=True and (is_equal, anyfinds) otherwise."""
         falsereturn = {"success": False}
         if self._up_to_sum:
             # Usually, this means that self._expr is a sum and self._query is also a sum.
@@ -208,56 +224,48 @@ class Eq:
             if not len(self._query.terms) <= len(self._expr.terms):
                 return falsereturn
 
-            # i want to prioritize most exact returns first.
-            # actually i want to have most exact return only fuck shit lmao
-
-            # xx = [[self._eq(expr_term, term) for expr_term in self._expr.terms] for term in self._query.terms]
-
-            # return the anyfind of each one
-            # if there is like sth in each query terms where the anyfind is the same...
-
             def _is_sum_eq(expr: Sum, query: Sum) -> EqResult:
-                query_anyfinds: _qanyfind = defaultdict(dict)
+                query_matches: _qmatches = defaultdict(dict)
                 for query_term in query.terms:
                     for expr_term in expr.terms:
                         output = Eq(expr_term, query_term, decompose_singles=False)()
-                        is_eq, anyfinds = output.get("success"), output.get("anyfind")
-                        if is_eq and all(any(_anyfinds_eq(x, anyfinds) for x in y) for y in query_anyfinds.values()):
-                            query_anyfinds[repr(query_term)][repr(expr_term)] = anyfinds
+                        is_eq, anyfinds = output.get("success"), output.get("matches")
+                        if is_eq and all(any(_matches_eq(x, anyfinds) for x in y) for y in query_matches.values()):
+                            query_matches[repr(query_term)][repr(expr_term)] = anyfinds
 
-                    if len(query_anyfinds[repr(query_term)]) == 0:
+                    if len(query_matches[repr(query_term)]) == 0:
                         return {"success": False}
 
-                return consolidate(query_anyfinds, expr)
+                return consolidate(query_matches, expr)
 
             result = _is_sum_eq(self._expr, self._query)
             if result["success"] is False:
                 return falsereturn
             self._result["rest"] = result["rest"]
-            self._anyfind = result["anyfind"]
+            self._matches = result["matches"]
 
         else:
             ans = self._eq(self._expr, self._query)
             if ans is False:
                 return falsereturn
 
-            for k, v in self._anyfind.items():
+            for k, v in self._matches.items():
                 if all_same(v):
-                    self._anyfind[k] = v[0]
+                    self._matches[k] = v[0]
                 else:
                     return falsereturn
 
         ## AT THIS POINT:
-        self._anyfind: Anyfind
+        self._matches: Matches
 
         if self._up_to_factor:
-            self._result["factor"] = self._anyfind[self._anyfactor.anykey]
-            del self._anyfind[self._anyfactor.anykey]
+            self._result["factor"] = self._matches[self._any_factor.key]
+            del self._matches[self._any_factor.key]
 
-        if self._decompose_singles and len(self._anyfind) == 1:
-            self._result["anyfind"] = list(self._anyfind.values())[0]
+        if self._decompose_singles and len(self._matches) == 1:
+            self._result["matches"] = list(self._matches.values())[0]
         else:
-            self._result["anyfind"] = self._anyfind
+            self._result["matches"] = self._matches
         self._result["success"] = True
         return self._result
 
@@ -271,17 +279,17 @@ class Eq:
         if not isinstance(expr, Expr) or not isinstance(query, Expr):
             return False
         if isinstance(query, Any_):
-            self._anyfind[query.anykey].append(expr)
+            self._matches[query.key].append(expr)
             return True
         if not query.has(Any_):
             return False
 
         if not self._is_divide:
             # You don't get to divide if we already is --- prevents inf recursion.
-            one, quotient_matches = anydivide(query, expr)
+            one, quotient_matches = divide_anys(query, expr)
             if isinstance(one, Any_):
-                self._anyfind[one.anykey].append(Rat(1))
-                join_dicts2(self._anyfind, quotient_matches)
+                self._matches[one.key].append(Rat(1))
+                join_dicts2(self._matches, quotient_matches)
                 return True
 
             if len(one.symbols()) == 0:
@@ -291,8 +299,8 @@ class Eq:
                 if len(anys) == 1:
                     anyvalue = one / anys[0]
                     if get_anys(anyvalue) == []:
-                        join_dicts2(self._anyfind, quotient_matches)
-                        self._anyfind[anys[0].anykey].append(anyvalue)
+                        join_dicts2(self._matches, quotient_matches)
+                        self._matches[anys[0].key].append(anyvalue)
                         return True
 
                 # for a in anys:
@@ -304,8 +312,11 @@ class Eq:
         return all([self._eq(getattr(expr, field.name), getattr(query, field.name)) for field in fields(expr)])
 
 
-def anydivide(num: Expr, denom: Expr) -> Tuple[Expr, AnyfindInProgress]:
-    """Returns: (quotient, anyfinds)"""
+def divide_anys(num: Expr, denom: Expr) -> Tuple[Expr, MatchesInProgress]:
+    """Division, but taking into account Any_ objects.
+
+    Returns: (quotient, matches)
+    """
 
     def _make_factors_list(expr: Expr) -> List[Expr]:
         if not isinstance(expr, Prod):
@@ -313,10 +324,10 @@ def anydivide(num: Expr, denom: Expr) -> Tuple[Expr, AnyfindInProgress]:
         # I want to move all anyfactors to the end -- try to match everything else first.
         terms = []
         anys = []
-        anyfactors = []
+        any_factors = []
         for t in expr.terms:
-            if isinstance(t, Any_) and "factor" in t.anykey:
-                anyfactors.append(t)
+            if isinstance(t, Any_) and "factor" in t.key:
+                any_factors.append(t)
             elif t.has(Any_):
                 anys.append(t)
             else:
@@ -325,13 +336,13 @@ def anydivide(num: Expr, denom: Expr) -> Tuple[Expr, AnyfindInProgress]:
             raise NotImplementedError(f"{expr} is ambiguous")
         if len(anys) > 0:
             terms.extend(anys)
-        if len(anyfactors) > 0:
-            terms.extend(anyfactors)
+        if len(any_factors) > 0:
+            terms.extend(any_factors)
         return terms
 
     numfactors = _make_factors_list(num)
     denfactors = _make_factors_list(denom)
-    anyfinds = defaultdict(list)
+    matches = defaultdict(list)
     for i in range(len(numfactors)):
         f = numfactors[i]
         for j in range(len(denfactors)):
@@ -340,22 +351,22 @@ def anydivide(num: Expr, denom: Expr) -> Tuple[Expr, AnyfindInProgress]:
                 continue
             output = Eq(df, f, decompose_singles=False, _is_divide=True)()
             if output["success"]:
-                join_dicts(anyfinds, output["anyfind"])
+                join_dicts(matches, output["matches"])
                 denfactors[j] = None
                 numfactors[i] = None
 
     new_df = [df for df in denfactors if df is not None]
     new_nf = [nf for nf in numfactors if nf is not None]
-    return Prod(new_nf) / Prod(new_df), anyfinds
+    return Prod(new_nf) / Prod(new_df), matches
 
 
-def join_dicts(d1: AnyfindInProgress, d2: Anyfind) -> None:
+def join_dicts(d1: MatchesInProgress, d2: Matches) -> None:
     """Mutates d1 to add the stuff in d2"""
     for k in d2.keys():
         d1[k].append(d2[k])
 
 
-def join_dicts2(d1: AnyfindInProgress, d2: AnyfindInProgress) -> None:
+def join_dicts2(d1: MatchesInProgress, d2: MatchesInProgress) -> None:
     """Mutates d1 to add the stuff in d2"""
     for k in d2.keys():
         if k in d1:

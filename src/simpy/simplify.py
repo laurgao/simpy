@@ -63,7 +63,7 @@ def _pythagorean_perform(sum: Expr) -> Optional[Expr]:
         result = eq(sum, cond, up_to_factor=True, up_to_sum=True)
         if result["success"]:
             factor = result["factor"]
-            inner = result["anyfind"]
+            inner = result["matches"]
             rest = result["rest"]
             return factor * perform(inner) + rest
 
@@ -185,7 +185,7 @@ def _combine_trigs(expr: Expr) -> Optional[Expr]:
         result = eq(expr, cond, up_to_factor=True)
         if result["success"]:
             factor = result["factor"]
-            inner = result["anyfind"]
+            inner = result["matches"]
             new = factor * perform(inner)
             return new
 

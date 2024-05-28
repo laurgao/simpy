@@ -15,11 +15,11 @@ def test_any_basic():
 @pytest.mark.parametrize(
     ["sum", "expected"],
     [
-        [tan(2 * x) ** 2 + 1, {"success": True, "factor": 1, "anyfind": 2 * x}],
-        [tan(2 * x + y) ** 2 + 1, {"success": True, "factor": 1, "anyfind": 2 * x + y}],
+        [tan(2 * x) ** 2 + 1, {"success": True, "factor": 1, "matches": 2 * x}],
+        [tan(2 * x + y) ** 2 + 1, {"success": True, "factor": 1, "matches": 2 * x + y}],
         [
             3 * tan(2 * x + y) ** 2 + 3,
-            {"success": True, "factor": 3, "anyfind": 2 * x + y},
+            {"success": True, "factor": 3, "matches": 2 * x + y},
         ],
     ],
 )
@@ -31,23 +31,23 @@ def test_up_to_factor_on_simple_examples():
     assert eq(tan(3), tan(3), up_to_factor=True) == {
         "success": True,
         "factor": 1,
-        "anyfind": {},
+        "matches": {},
     }
-    assert eq(x, x, up_to_factor=True) == {"success": True, "factor": 1, "anyfind": {}}
+    assert eq(x, x, up_to_factor=True) == {"success": True, "factor": 1, "matches": {}}
     assert eq(tan(x), 3 * tan(any_), up_to_factor=True) == {
         "success": True,
         "factor": 3,
-        "anyfind": x,
+        "matches": x,
     }
 
     # Not implemented right now but shrug don't need it.
-    # assert eq(2, 3, up_to_factor=True) == {"success": True, "factor": Rat(3, 2), "anyfind": {}}
+    # assert eq(2, 3, up_to_factor=True) == {"success": True, "factor": Rat(3, 2), "matches": {}}
 
     # I need to set clearer rules with like what happens if there's an any * factor on the outside bracket
     # like it's unclearish. rn in anydivide the any can only catch one but what if it's both idk.
     # right now let's just let it fail LOL
-    # assert eq(any_, x, up_to_factor=True) == {"success": True, "factor": 1, "anyfind": x}
-    # assert eq(any_, x*2, up_to_factor=True) == {"success": True, "factor": 1, "anyfind": 2*x}
+    # assert eq(any_, x, up_to_factor=True) == {"success": True, "factor": 1, "matches": x}
+    # assert eq(any_, x*2, up_to_factor=True) == {"success": True, "factor": 1, "matches": 2*x}
 
 
 def test_factor_doesnt_overstep():
@@ -66,7 +66,7 @@ def test_up_to_sum():
     expr = -sin(x) ** 2 - 5 ** cos(x) ** 2 + 1
     query = 1 - sin(any_) ** 2
     ans = eq(expr, query, up_to_sum=True)
-    assert ans == {"success": True, "anyfind": x, "rest": -(5 ** cos(x) ** 2)}
+    assert ans == {"success": True, "matches": x, "rest": -(5 ** cos(x) ** 2)}
 
 
 def test_up_to_sum_and_factor():
@@ -75,7 +75,7 @@ def test_up_to_sum_and_factor():
     ans = eq(expr, query, up_to_factor=True, up_to_sum=True)
     assert ans == {
         "success": True,
-        "anyfind": x,
+        "matches": x,
         "factor": -1,
         "rest": -(5 ** cos(x) ** 2),
     }
