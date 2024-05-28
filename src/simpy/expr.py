@@ -287,17 +287,24 @@ class Associative:
 
     @classmethod
     def _sort_terms(cls, terms) -> None:
-        def _nesting(expr: "Expr") -> int:
+        def _nesting_without_factor(expr: "Expr") -> int:
             """Like the public nesting except constant multipliers don't count
             to prevent fucky reprs for things like
             1 + x^3 + 3*x^2
             """
-            expr = remove_const_factor(expr)
-            if isinstance(expr, Symbol):
-                return 1
-            if len(expr.symbols()) == 0:
-                return 0
-            return 1 + max(_nesting(sub_expr) for sub_expr in expr.children())
+            if hasattr(expr, "_nesting_without_factor"):
+                return expr._nesting_without_factor
+
+            else:
+                expr2 = remove_const_factor(expr)
+                if isinstance(expr2, Symbol):
+                    ans = 1
+                elif len(expr2.symbols()) == 0:
+                    ans = 0
+                else:
+                    ans = 1 + max(_nesting_without_factor(sub_expr) for sub_expr in expr2.children())
+                expr._nesting_without_factor = ans
+                return expr._nesting_without_factor
 
         def _symboless_nest(expr: Expr) -> int:
             if not expr.children():
@@ -322,8 +329,8 @@ class Associative:
                     return expr.exponent
                 return Rat(1)
 
-            na = _nesting(a)
-            nb = _nesting(b)
+            na = _nesting_without_factor(a)
+            nb = _nesting_without_factor(b)
             if na == 0 and nb == 0:
                 return _symboless_compare(a, b)
 
@@ -1780,6 +1787,10 @@ def diff(expr: Expr, var: Optional[Symbol]) -> Expr:
 
 def remove_const_factor(expr: Expr) -> Expr:
     if isinstance(expr, Prod):
-        new_terms = [t for t in expr.terms if len(t.symbols()) > 0]
-        return Prod(new_terms)
+        if hasattr(expr, "_sans_const"):
+            return expr._sans_const
+        else:
+            new_terms = [t for t in expr.terms if len(t.symbols()) > 0]
+            expr._sans_const = Prod(new_terms)
+            return expr._sans_const
     return expr
