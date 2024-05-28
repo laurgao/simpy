@@ -92,6 +92,7 @@ def cast(func):
 
 class Expr(ABC):
     """Base class for all expressions."""
+
     def __post_init__(self):
         # if any field is an Expr, cast it
         for field in fields(self):
@@ -565,6 +566,7 @@ inf = Infinity()  # should division by zero be inf or be zero divisionerror or? 
 
 
 Accumulateable = Union[Rat, Infinity, NegInfinity, Float]
+AccumulateableTuple = (Rat, Infinity, NegInfinity, Float)  # because can't use Union in isinstance checks.
 
 
 def accumulate(*consts: List[Accumulateable], type_: Literal["sum", "prod"] = "sum") -> List[Expr]:
@@ -690,6 +692,7 @@ class Symbol(Expr):
 @dataclass
 class Sum(Associative, Expr):
     """A sum expression."""
+
     @cast
     def __new__(cls, terms: List[Expr]) -> "Expr":
         """When a sum is initiated:
@@ -725,8 +728,8 @@ class Sum(Associative, Expr):
             new_terms.append(Prod([new_coeff] + non_const_factors1))
 
         # accumulate all constants
-        const = accumulate(*[t for t in new_terms if isinstance(t, Accumulateable)])
-        non_constant_terms = [t for t in new_terms if not isinstance(t, Accumulateable)]
+        const = accumulate(*[t for t in new_terms if isinstance(t, AccumulateableTuple)])
+        non_constant_terms = [t for t in new_terms if not isinstance(t, AccumulateableTuple)]
 
         final_terms = const + non_constant_terms
         if len(final_terms) == 0:
@@ -893,6 +896,7 @@ islongsymbol = (
 @dataclass
 class Prod(Associative, Expr):
     """A product expression."""
+
     @cast
     def __new__(cls, terms: List[Expr]) -> "Expr":
         # We need to flatten BEFORE we accumulate like terms
@@ -924,11 +928,11 @@ class Prod(Associative, Expr):
             new_terms.append(Power(base, expo) if expo != 1 else base)
 
         # accumulate constants to the front
-        const = accumulate(*[t for t in new_terms if isinstance(t, Accumulateable)], type_="prod")
+        const = accumulate(*[t for t in new_terms if isinstance(t, AccumulateableTuple)], type_="prod")
         if const == [0]:
             return Rat(0)
 
-        non_constant_terms = [t for t in new_terms if not isinstance(t, Accumulateable)]
+        non_constant_terms = [t for t in new_terms if not isinstance(t, AccumulateableTuple)]
         new_terms = const + non_constant_terms
 
         if len(new_terms) == 0:
@@ -1141,7 +1145,7 @@ class Power(Expr):
             return b
         if b == 1:
             return Rat(1)
-        if isinstance(b, Accumulateable) and isinstance(x, Accumulateable):
+        if isinstance(b, AccumulateableTuple) and isinstance(x, AccumulateableTuple):
             ans = _accumulate_power(b, x)
             if ans is None:
                 return default_return
