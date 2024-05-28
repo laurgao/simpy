@@ -14,7 +14,7 @@ def invert(matrix: np.ndarray):
         )
 
     a, b, c, d = matrix[0, 0], matrix[0, 1], matrix[1, 0], matrix[1, 1]
-    det = (a * d - b * c).simplify()
+    det = a * d - b * c
     if det == 0:
         return None
 

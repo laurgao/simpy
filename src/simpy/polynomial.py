@@ -18,9 +18,7 @@ def _to_const_polynomial(expr: Expr, var: Symbol, answer: List[Rat] = None, mult
         answer: List[Rat] = []
 
     def _add_answer(const: Rat, idx: int, answer: List[Rat] = answer, multiplier: Rat = multiplier):
-        new_const = (
-            const * multiplier
-        ).simplify()  # you really shouldn't need simplify here. combine like terms should happen in init.
+        new_const = const * multiplier
         if idx < len(answer):
             answer[idx] += new_const
         elif idx == len(answer):
@@ -68,11 +66,10 @@ def polynomial_to_expr(poly: Polynomial, var: Symbol) -> Expr:
     final = Rat(0)
     for i, element in enumerate(poly):
         final += element * var**i
-    return final.simplify()
+    return final
 
 
-def rid_ending_zeros(arr: Polynomial) -> Polynomial:
-    lis = [el.simplify() for el in arr]
+def rid_ending_zeros(lis: Polynomial) -> Polynomial:
     num_zeros = 0
     for i in reversed(range(len(lis))):
         if lis[i] == 0:
