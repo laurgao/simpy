@@ -7,14 +7,7 @@ import pytest
 
 from src.simpy.expr import *
 from src.simpy.integration import *
-from test_utils import (
-    assert_definite_integral,
-    assert_eq_plusc,
-    assert_eq_value,
-    assert_integral,
-    x,
-    y,
-)
+from test_utils import assert_definite_integral, assert_eq_plusc, assert_eq_value, assert_integral, x, y
 
 
 def test_ex():
@@ -112,8 +105,7 @@ def test_misc():
 
 def test_csc_x_squared():
     integrand = 5 * csc(x) ** 2
-    # expected_ans = -5 * cot(x) # dream of this
-    expected_ans = 1 / (cos(x) * sin(x)) - tan(x)
+    expected_ans = -5 * cot(x)
     assert_integral(integrand, expected_ans)
 
 

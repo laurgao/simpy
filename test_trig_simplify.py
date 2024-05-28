@@ -47,7 +47,11 @@ def test_one_plus_tan_squared():
     simp = expr.simplify()
     assert_eq_strict(simp, 2 * sec(x + y) ** 2)
 
-    # expr = (2+y) + (2+y)*tan(x+y)** 2
+
+def test_one_minus_sin_squared_up_to_sum():
+    expr = 1 - sin(x) ** 2 + x
+    simp = expr.simplify()
+    assert_eq_strict(simp, x + cos(x) ** 2)
 
 
 """Other things
