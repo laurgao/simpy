@@ -91,6 +91,7 @@ def cast(func):
 
 
 class Expr(ABC):
+    """Base class for all expressions."""
     def __post_init__(self):
         # if any field is an Expr, cast it
         for field in fields(self):
@@ -688,6 +689,7 @@ class Symbol(Expr):
 
 @dataclass
 class Sum(Associative, Expr):
+    """A sum expression."""
     @cast
     def __new__(cls, terms: List[Expr]) -> "Expr":
         """When a sum is initiated:
@@ -785,10 +787,12 @@ class Sum(Associative, Expr):
         return ongoing_str
 
     def factor(self) -> Union["Prod", "Sum"]:
+        """
+        This method currently does:
+        - If there is a factor that is common to all terms, factor it out.
+        - If there is a factor that is common to some terms, let's just ignore it.
+        """
         # TODO: this feels like not the most efficient algo
-        # assume self is simplified please
-        # If there is a factor that is common to all terms, factor it out.
-        # If there is a factor that is common to some terms, let's just ignore it.
         # TODO: doesn't factor ex. quadratics into 2 binomials. implement some form of multi-term polynomial factoring at some point
         # (needed for partial fractions)
 
@@ -888,6 +892,7 @@ islongsymbol = (
 
 @dataclass
 class Prod(Associative, Expr):
+    """A product expression."""
     @cast
     def __new__(cls, terms: List[Expr]) -> "Expr":
         # We need to flatten BEFORE we accumulate like terms

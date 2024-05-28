@@ -82,7 +82,8 @@ def test_up_to_sum_and_factor():
 
 
 def test_cofounder():
-    # This shit was causing problems
+    # Tests that even if every query term individually has a match, it'll still be unsuccessful if we can't consolidate
+    # them to have the same values for each any.
     t, w = symbols("t w")
     expr = -sin(t * w) ** 2 - cos(t * w) ** 2
     query = -sin(any_) ** 2 + 1

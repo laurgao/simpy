@@ -140,7 +140,10 @@ _qanyfind = Dict[str, Dict[str, Anyfind]]
 def consolidate(query_anyfinds: _qanyfind, expr: Sum) -> EqResult:
     final = defaultdict(list)
     accounted_expr_terms = []
+
+    # We need to make sure every query term has a match.
     for query_term_repr, query_term_values in query_anyfinds.items():
+        has_match = False
         for expr_term_repr, matches in query_term_values.items():
             if all(
                 any(_anyfinds_eq(matches2, matches) for matches2 in query_term_values2.values())
@@ -148,6 +151,12 @@ def consolidate(query_anyfinds: _qanyfind, expr: Sum) -> EqResult:
             ):
                 join_dicts(final, matches)
                 accounted_expr_terms.append(expr_term_repr)
+                has_match = True
+                break  # this might cause trouble down the line that we're just matching the first one :/
+                # what if there are multiple expr terms that match the query? i dunno actually wtv this is fine wtv.
+
+        if not has_match:
+            return {"success": False}
 
     assert all(all_same(v) for v in final.values())
     final = {k: v[0] for k, v in final.items()}
