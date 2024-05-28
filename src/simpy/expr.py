@@ -925,13 +925,53 @@ def _deconstruct_prod(expr: Expr) -> Tuple[Rat, List[Expr]]:
 def deconstruct_power(expr: Expr) -> Tuple[Expr, Rat]:
     # x^3 -> (x, 3). x -> (x, 1). 3 -> (3, 1)
     if isinstance(expr, Power):
-        return (expr.base, expr.exponent)
+        return expr.base, expr.exponent
     else:
-        return (expr, Rat(1))
+        return expr, Rat(1)
 
 
 isfractionorneg = lambda x: isinstance(x, Rat) and (x.value.denominator != 1 or x < 0)
 islongsymbol = lambda x: isinstance(x, Symbol) and len(x.name) > 1 or x.__class__.__name__ == "Any_" and len(x.key) > 1
+
+
+def _combine_like_terms(initial_terms):
+    new_terms = []
+    decon = {}
+    for i, term in enumerate(initial_terms):
+        if term is None:
+            continue
+        if not i in decon:
+            decon[i] = deconstruct_power(term)
+        base, expo = decon[i]
+
+        # other terms with same base
+        for j in range(i + 1, len(initial_terms)):
+            if initial_terms[j] is None:
+                continue
+            if not j in decon:
+                decon[j] = deconstruct_power(initial_terms[j])
+            other_base, other_expo = decon[j]
+            if other_base == base:
+                expo += other_expo
+                initial_terms[j] = None
+                initial_terms[i] = None
+
+        if expo == 0:
+            continue
+        new_terms.append(Power(base, expo) if expo != 1 else base)
+
+    return new_terms
+
+
+def _accumulate_consts(new_terms):
+    constants = [term for term in new_terms if isinstance(term, AccumulateableTuple)]
+    if constants:
+        const = accumulate(*constants, type_="prod")
+        if const == [0]:
+            return const
+        non_constant_terms = [term for term in new_terms if not isinstance(term, AccumulateableTuple)]
+        return const + non_constant_terms
+    return new_terms
 
 
 @dataclass
@@ -948,36 +988,8 @@ class Prod(Associative, Expr):
         initial_terms = cls._flatten_terms(terms)
 
         # accumulate all like terms
-        new_terms = []
-        for i, term in enumerate(initial_terms):
-            if term is None:
-                continue
-
-            base, expo = deconstruct_power(term)
-
-            # other terms with same base
-            for j in range(i + 1, len(initial_terms)):
-                if initial_terms[j] is None:
-                    continue
-                other = initial_terms[j]
-                base2, expo2 = deconstruct_power(other)
-                if base2 == base:
-                    expo += expo2
-                    initial_terms[j] = None
-
-            # Decision: if exponent here is 0, we don't include it.
-            # We don't wait for simplify to remove it.
-            if expo == 0:
-                continue
-            new_terms.append(Power(base, expo) if expo != 1 else base)
-
-        # accumulate constants to the front
-        const = accumulate(*[t for t in new_terms if isinstance(t, AccumulateableTuple)], type_="prod")
-        if const == [0]:
-            return Rat(0)
-
-        non_constant_terms = [t for t in new_terms if not isinstance(t, AccumulateableTuple)]
-        new_terms = const + non_constant_terms
+        new_terms = _combine_like_terms(initial_terms)
+        new_terms = _accumulate_consts(new_terms)
 
         if len(new_terms) == 0:
             return Rat(1)
