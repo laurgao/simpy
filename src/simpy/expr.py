@@ -1458,6 +1458,7 @@ class TrigFunction(SingleFunc, ABC):
         "7/4",
         "11/6",
     ]
+    _special_values_cache = None
 
     @abstractmethod
     @classproperty
@@ -1494,8 +1495,14 @@ class TrigFunction(SingleFunc, ABC):
 
     @classproperty
     @abstractmethod
-    def special_values(cls) -> Dict[str, Expr]:
+    def _special_values(cls) -> Dict[str, Expr]:
         pass
+
+    @classproperty
+    def special_values(cls) -> Dict[str, Expr]:
+        if cls._special_values_cache is None:
+            cls._special_values_cache = cls._special_values
+        return cls._special_values_cache
 
     @classproperty
     @abstractmethod
@@ -1574,7 +1581,7 @@ class sin(TrigFunction):
         return csc
 
     @classproperty
-    def special_values(cls):
+    def _special_values(cls):
         return {
             "0": Rat(0),
             "1/6": Rat(1, 2),
@@ -1613,7 +1620,7 @@ class cos(TrigFunction):
         return sec
 
     @classproperty
-    def special_values(cls):
+    def _special_values(cls):
         return {
             "0": Rat(1),
             "1/6": sqrt(3) / 2,
@@ -1667,7 +1674,7 @@ class tan(TrigFunction):
         return super().__new__(cls, inner)
 
     @classproperty
-    def special_values(cls):
+    def _special_values(cls):
         return {k: sin.special_values[k] / cos.special_values[k] for k in cls._SPECIAL_KEYS}
 
     def diff(self, var) -> Expr:
@@ -1680,7 +1687,7 @@ class csc(TrigFunction):
     reciprocal_class = sin
 
     @classproperty
-    def special_values(cls):
+    def _special_values(cls):
         return {k: 1 / sin.special_values[k] for k in cls._SPECIAL_KEYS}
 
     def diff(self, var) -> Expr:
@@ -1693,7 +1700,7 @@ class sec(TrigFunction):
     reciprocal_class = cos
 
     @classproperty
-    def special_values(cls):
+    def _special_values(cls):
         return {k: 1 / cos.special_values[k] for k in cls._SPECIAL_KEYS}
 
     def diff(self, var) -> Expr:
@@ -1706,7 +1713,7 @@ class cot(TrigFunction):
     _func = lambda x: 1 / math.tan(x)
 
     @classproperty
-    def special_values(cls):
+    def _special_values(cls):
         return {k: cos.special_values[k] / sin.special_values[k] for k in cls._SPECIAL_KEYS}
 
     def diff(self, var) -> Expr:

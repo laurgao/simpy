@@ -31,7 +31,7 @@ from .expr import (
 )
 from .linalg import invert
 from .polynomial import Polynomial, is_polynomial, polynomial_to_expr, rid_ending_zeros, to_const_polynomial
-from .regex import count, general_count, kinder_replace, replace, replace_class, replace_factory
+from .regex import count, general_contains, kinder_replace, replace, replace_class, replace_factory
 from .simplify import pythagorean_simplification
 from .utils import ExprFn, random_id
 
@@ -853,7 +853,7 @@ class ProductToSum(Transform):
         if super().check(node) is False:
             return False
 
-        return general_count(node.expr, self.condition) > 0
+        return general_contains(node.expr, self.condition)
 
     def forward(self, node: Node) -> None:
         new_integrand = kinder_replace(node.expr, self.perform_opt)
@@ -1167,7 +1167,7 @@ class CompleteTheSquare(Transform):
             # which means that there's no square to complete.
             # the result will just be the same as the original.
 
-        return general_count(node.expr, condition) > 0
+        return general_contains(node.expr, condition)
 
     def forward(self, node: Node) -> None:
         # replace all quadratics with their completed-the-square form
@@ -1227,7 +1227,7 @@ class RewritePythagorean(Transform):
             return False
 
         # this is a complete waste of resources.
-        return general_count(node.expr, self.condition) > 0
+        return general_contains(node.expr, self.condition)
 
     def forward(self, node: Node) -> bool:
         def _replace_factory(c, p, e):
