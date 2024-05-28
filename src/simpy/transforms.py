@@ -31,7 +31,7 @@ from .expr import (
 )
 from .linalg import invert
 from .polynomial import Polynomial, is_polynomial, polynomial_to_expr, rid_ending_zeros, to_const_polynomial
-from .regex import count, general_count, replace, replace_class, replace_factory
+from .regex import count, general_count, kinder_replace, replace, replace_class, replace_factory
 from .simplify import pythagorean_simplification
 from .utils import ExprFn, random_id
 
@@ -818,6 +818,19 @@ class ProductToSum(Transform):
         return const * ProductToSum._perform_on_terms(nexpr.base, nexpr.base) ** (nexpr.exponent / 2)
 
     @staticmethod
+    def perform_opt(expr: Expr) -> Optional[Expr]:
+        if isinstance(expr, Prod):
+            if len(expr.terms) != 2:
+                return
+            return ProductToSum._perform_on_terms(*expr.terms)
+        elif isinstance(expr, Power):
+            if not isinstance(expr.base, (sin, cos)):
+                return
+            if not (isinstance(expr.exponent, Rat) and expr.exponent % 2 == 0):
+                return
+            return ProductToSum._perform_on_terms(expr.base, expr.base) ** (expr.exponent / 2)
+
+    @staticmethod
     def _perform_on_terms(a: Union[sin, cos], b: Union[sin, cos]) -> Expr:
         # Dream:
         # a_, b_ = any
@@ -831,6 +844,8 @@ class ProductToSum(Transform):
             temp = cos(a.inner + b.inner) + cos(a.inner - b.inner)
         elif isinstance(a, sin) and isinstance(b, sin):
             temp = cos(a.inner - b.inner) - cos(a.inner + b.inner)
+        else:
+            return
 
         return temp / 2
 
@@ -841,7 +856,7 @@ class ProductToSum(Transform):
         return general_count(node.expr, self.condition) > 0
 
     def forward(self, node: Node) -> None:
-        new_integrand = replace_factory(self.condition, self.perform)(node.expr)
+        new_integrand = kinder_replace(node.expr, self.perform_opt)
         node.add_child(Node(new_integrand, node.var, self, node))
 
     def backward(self, node: Node) -> None:
