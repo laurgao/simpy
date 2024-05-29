@@ -107,6 +107,8 @@ class Expr(ABC):
     # These should never change per instance.
     _symbols_cache = None
     _nesting_cache: Dict[str, int] = None
+    _expandable_cache = None
+    _expand_cache = None
 
     def __post_init__(self):
         # if any field is an Expr, cast it
@@ -176,14 +178,24 @@ class Expr(ABC):
     def __abs__(self) -> "Expr":
         return Abs(self)
 
-    # should be overloaded if necessary
     def expandable(self) -> bool:
+        if self._expandable_cache is None:
+            self._expandable_cache = self._expandable()
+        return self._expandable_cache
+
+    def expand(self) -> bool:
+        if self._expand_cache is None:
+            self._expand_cache = self._expand()
+        return self._expand_cache
+
+    # should be overloaded if necessary
+    def _expandable(self) -> bool:
         if not self.children():
             return False
         return any(c.expandable() for c in self.children())
 
     # overload if necessary
-    def expand(self) -> "Expr":
+    def _expand(self) -> "Expr":
         """Subclasses: this function should raise AssertionError if self.expandable() is false."""
         if self.expandable():
             raise NotImplementedError(f"Expansion of {self} not implemented")
@@ -831,7 +843,7 @@ class Sum(Associative, Expr):
     def __neg__(self) -> "Sum":
         return Sum([-t for t in self.terms])
 
-    def expand(self) -> Expr:
+    def _expand(self) -> Expr:
         assert self.expandable(), f"Cannot expand {self}"
         return Sum([t.expand() if t.expandable() else t for t in self.terms])
 
@@ -1020,7 +1032,6 @@ def _combine_like_terms(initial_terms):
 
         _add_term(Power(base, expo))
 
-
     if consts:
         consts = accumulate(*consts, type_="prod")
         if consts == [0]:
@@ -1157,8 +1168,7 @@ class Prod(Associative, Expr):
     def is_subtraction(self):
         return isinstance(self.terms[0], Rat) and self.terms[0] < 0
 
-    @cast
-    def expandable(self) -> bool:
+    def _expandable(self) -> bool:
         # a product is expandable if it contains any sums in the numerator
         # OR if it contains sums in the denominator AND the denominator has another term other than the sum
         # (so, a singular sum in a numerator is expandable but a single sum in the denominator isn't.)
@@ -1168,7 +1178,7 @@ class Prod(Associative, Expr):
         has_sub_expandable = any(t.expandable() for t in self.terms)
         return num_expandable or denom_expandable or has_sub_expandable
 
-    def expand(self):
+    def _expand(self):
         assert self.expandable(), f"Cannot expand {self}"
         # expand sub-expressions
         num, denom = self.numerator_denominator
@@ -1330,10 +1340,10 @@ class Power(Expr):
             and isinstance(self.base, Sum)
         )
 
-    def expandable(self) -> bool:
+    def _expandable(self) -> bool:
         return self._power_expandable() or self.base.expandable() or self.exponent.expandable()
 
-    def expand(self) -> Expr:
+    def _expand(self) -> Expr:
         assert self.expandable(), f"Cannot expand {self}"
         b = self.base.expand() if self.base.expandable() else self.base
         x = self.exponent.expand() if self.exponent.expandable() else self.exponent
@@ -1397,7 +1407,7 @@ class SingleFunc(Expr):
         inner = self.inner.subs(subs)
         return self.__class__(inner)
 
-    def expand(self) -> Expr:
+    def _expand(self) -> Expr:
         assert self.inner.expandable(), f"Cannot expand {self}"
         return self.__class__(self.inner.expand())
 
@@ -1432,7 +1442,7 @@ class log(Expr):
         base = self.base.subs(subs)
         return log(inner, base)
 
-    def expand(self) -> Expr:
+    def _expand(self) -> Expr:
         assert self.inner.expandable(), f"Cannot expand {self}"
         return self.__class__(self.inner.expand())
 
