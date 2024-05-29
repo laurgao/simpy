@@ -978,10 +978,17 @@ def _deconstruct_prod(expr: Expr) -> Tuple[Rat, List[Expr]]:
 
 def deconstruct_power(expr: Expr) -> Tuple[Expr, Rat]:
     # x^3 -> (x, 3). x -> (x, 1). 3 -> (3, 1)
-    if isinstance(expr, Power):
-        return expr.base, expr.exponent
-    else:
-        return expr, Rat(1)
+    if hasattr(expr, "_deconstruct_power_cache"):
+        return expr._deconstruct_power_cache
+
+    def _dpo(expr):
+        if isinstance(expr, Power):
+            return expr.base, expr.exponent
+        else:
+            return expr, Rat(1)
+
+    expr._deconstruct_power_cache = _dpo(expr)
+    return expr._deconstruct_power_cache
 
 
 isfractionorneg = lambda x: isinstance(x, Rat) and (x.value.denominator != 1 or x < 0)
