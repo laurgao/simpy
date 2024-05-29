@@ -779,7 +779,7 @@ class Sum(Associative, Expr):
             if term is None:
                 continue
             is_hit = False
-            if isinstance(term, Accumulateable):
+            if isinstance(term, AccumulaTuple):
                 consts.append(term)
                 continue
 
