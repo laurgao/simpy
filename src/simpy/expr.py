@@ -638,7 +638,7 @@ inf = Infinity()  # should division by zero be inf or be zero divisionerror or? 
 
 
 Accumulateable = Union[Rat, Infinity, NegInfinity, Float]
-AccumulateableTuple = (Rat, Infinity, NegInfinity, Float)  # because can't use Union in isinstance checks.
+AccumulaTuple = (Rat, Infinity, NegInfinity, Float)  # because can't use Union in isinstance checks.
 
 
 def accumulate(*consts: List[Accumulateable], type_: Literal["sum", "prod"] = "sum") -> List[Expr]:
@@ -772,13 +772,15 @@ class Sum(Associative, Expr):
         """
         terms = cls._flatten_terms(terms)
         # accumulate all like terms
-        new_terms = []
+
+        consts = []
+        non_constant_terms = []
         for i, term in enumerate(terms):
             if term is None:
                 continue
             is_hit = False
-            if isinstance(term, Rat):
-                new_terms.append(term)
+            if isinstance(term, Accumulateable):
+                consts.append(term)
                 continue
 
             new_coeff, non_const_factors1 = _deconstruct_prod(term)
@@ -800,24 +802,24 @@ class Sum(Associative, Expr):
             # but by skipping checks for combine like terms, we make it significantly faster.
             # Doing this speeds up the sum constructor by ~30% and everything by ~7%
             if not is_hit:
-                new_terms.append(term)
+                non_constant_terms.append(term)
                 continue
 
             if new_coeff == 0:
                 continue
             elif new_coeff == 1:
                 if len(non_const_factors1) == 1:
-                    new_terms.append(non_const_factors1[0])
+                    non_constant_terms.append(non_const_factors1[0])
                 else:
-                    new_terms.append(Prod(non_const_factors1, skip_checks=True))
+                    non_constant_terms.append(Prod(non_const_factors1, skip_checks=True))
             else:
-                new_terms.append(Prod([new_coeff] + non_const_factors1, skip_checks=True))
+                non_constant_terms.append(Prod([new_coeff] + non_const_factors1, skip_checks=True))
 
         # accumulate all constants
-        const = accumulate(*[t for t in new_terms if isinstance(t, AccumulateableTuple)])
-        non_constant_terms = [t for t in new_terms if not isinstance(t, AccumulateableTuple)]
+        if consts:
+            consts = accumulate(*consts)
 
-        final_terms = const + non_constant_terms
+        final_terms = consts + non_constant_terms
         if len(final_terms) == 0:
             return Rat(0)
         if len(final_terms) == 1:
@@ -860,7 +862,7 @@ class Sum(Associative, Expr):
             if i == 0:
                 ongoing_str += f"{term}"
             elif term.is_subtraction:
-                ongoing_str += f" - {term * -1}"
+                ongoing_str += f" - {-term}"
             else:
                 ongoing_str += f" + {term}"
 
@@ -872,7 +874,7 @@ class Sum(Associative, Expr):
             if i == 0:
                 ongoing_str += term.latex()
             elif isinstance(term, Prod) and term.is_subtraction:
-                ongoing_str += f" - {(term * -1).latex()}"
+                ongoing_str += f" - {(-term).latex()}"
             else:
                 ongoing_str += f" + {term.latex()}"
 
@@ -1001,7 +1003,7 @@ def _combine_like_terms(initial_terms):
     decon = {}
 
     def _add_term(term):
-        if isinstance(term, AccumulateableTuple):
+        if isinstance(term, AccumulaTuple):
             consts.append(term)
         else:
             non_constant_terms.append(term)
@@ -1293,7 +1295,7 @@ class Power(Expr):
             return b
         if b == 1:
             return Rat(1)
-        if isinstance(b, AccumulateableTuple) and isinstance(x, AccumulateableTuple):
+        if isinstance(b, AccumulaTuple) and isinstance(x, AccumulaTuple):
             ans = _accumulate_power(b, x)
             if ans is None:
                 return default_return
