@@ -107,6 +107,8 @@ class Expr(ABC):
     # These should never change per instance.
     _symbols_cache = None
     _nesting_cache: Dict[str, int] = None
+    _expandable_cache = None
+    _expand_cache = None
 
     def __post_init__(self):
         # if any field is an Expr, cast it
@@ -176,14 +178,24 @@ class Expr(ABC):
     def __abs__(self) -> "Expr":
         return Abs(self)
 
-    # should be overloaded if necessary
     def expandable(self) -> bool:
+        if self._expandable_cache is None:
+            self._expandable_cache = self._expandable()
+        return self._expandable_cache
+
+    def expand(self) -> bool:
+        if self._expand_cache is None:
+            self._expand_cache = self._expand()
+        return self._expand_cache
+
+    # should be overloaded if necessary
+    def _expandable(self) -> bool:
         if not self.children():
             return False
         return any(c.expandable() for c in self.children())
 
     # overload if necessary
-    def expand(self) -> "Expr":
+    def _expand(self) -> "Expr":
         """Subclasses: this function should raise AssertionError if self.expandable() is false."""
         if self.expandable():
             raise NotImplementedError(f"Expansion of {self} not implemented")
@@ -451,16 +463,20 @@ class Rat(Num, Expr):
 
     value: Fraction
 
-    def __new__(cls, value, denom: int = None):
-        assert isinstance(value, (int, Fraction)) or int(value) == value, f"got value={value} not allowed Rational"
-        if denom is not None:
-            assert not isinstance(value, Fraction)
-            assert isinstance(denom, int)
-        return super().__new__(cls)
+    def __init__(self, value: Union[Fraction, int, float], denom: int = 1):
+        """I would check types but asserts are... expensive lol.
 
-    def __init__(self, value, denom: int = 1):
+        if value is a float where int(value) != value, too bad you're getting int'd
+        - this is also coincidentally sympy's behaviour
+
+        if value is fraction, denom will be ignored.
+
+        like just
+        assert isinstance(value, Fraction) or int(value) == value, f"Got {value}, not allowed const"
+        makes everything 5-7% slower
+        """
         if not isinstance(value, Fraction):
-            value = Fraction(int(value), denom)
+            value = Fraction(int(value), int(denom))
         self.value = value
         super().__post_init__()
 
@@ -622,7 +638,7 @@ inf = Infinity()  # should division by zero be inf or be zero divisionerror or? 
 
 
 Accumulateable = Union[Rat, Infinity, NegInfinity, Float]
-AccumulateableTuple = (Rat, Infinity, NegInfinity, Float)  # because can't use Union in isinstance checks.
+AccumulaTuple = (Rat, Infinity, NegInfinity, Float)  # because can't use Union in isinstance checks.
 
 
 def accumulate(*consts: List[Accumulateable], type_: Literal["sum", "prod"] = "sum") -> List[Expr]:
@@ -672,10 +688,15 @@ def _accumulate_power(b: Accumulateable, x: Accumulateable) -> Optional[Expr]:
             return inf
 
     if isinstance(b, Rat) and isinstance(x, Rat):
-        try:
-            return Rat(b.value**x.value)
-        except:
-            pass
+        # If the answer is rational, return right away
+        num = b.value.numerator ** abs(x.value)
+        den = b.value.denominator ** abs(x.value)
+        isint = lambda x: int(x.real) == x
+        if isint(num) and isint(den):
+            if x > 0:
+                return Rat(int(num), int(den))
+            else:
+                return Rat(int(den), int(num))
 
         # Rewriting for consistency between same values.
         if b.value.numerator == 1:
@@ -689,32 +710,16 @@ def _accumulate_power(b: Accumulateable, x: Accumulateable) -> Optional[Expr]:
         elif b < 0:
             return -1 * Power(-b, x)
 
-        # check if one of num^exponent or denom^exponent is integer
-        n, d = abs(b.value.numerator), b.value.denominator
-        if x < 0:
-            n, d = d, n
-        xvalue = abs(x).value
-        xn = n**xvalue  # exponentiated numerator
-        xd = d**xvalue
-        isint = lambda a: int(a) == a and a != 1
-        if not isint(xn) and not isint(xd):  # Cannot be simplified further
-            return
-
-        # the answer will be a product
-        terms = []
-        if isint(xn):
-            terms.append(Rat(xn))
-            terms.append(
-                Power(d, -xvalue)
-            )  # will this circular? no it won't it should get caught under line after `if not isint(xn) and not...`
-        else:
-            # isint(xd)
-            terms.append(Rat(1, int(xd)))
-            terms.append(Power(n, xvalue))
-        if b.value.numerator < 0:
-            terms.append(Rat(-1))
-
-        return Prod(terms)
+        ans = None
+        if isint(num) and num != 1:
+            ans = Prod([Rat(num), Power(b.value.denominator, -x, skip_checks=True)], skip_checks=True)
+        elif isint(den) and den != 1:
+            ans = Prod([Rat(1, den), Power(b.value.numerator, x, skip_checks=True)], skip_checks=True)
+        if ans:
+            if x > 0:
+                return ans
+            else:
+                return 1 / ans
 
 
 @dataclass
@@ -767,12 +772,15 @@ class Sum(Associative, Expr):
         """
         terms = cls._flatten_terms(terms)
         # accumulate all like terms
-        new_terms = []
+
+        consts = []
+        non_constant_terms = []
         for i, term in enumerate(terms):
             if term is None:
                 continue
-            if isinstance(term, Rat):
-                new_terms.append(term)
+            is_hit = False
+            if isinstance(term, AccumulaTuple):
+                consts.append(term)
                 continue
 
             new_coeff, non_const_factors1 = _deconstruct_prod(term)
@@ -786,16 +794,32 @@ class Sum(Associative, Expr):
                 coeff2, non_const_factors2 = _deconstruct_prod(term2)
 
                 if non_const_factors1 == non_const_factors2:
+                    is_hit = True
                     new_coeff += coeff2
                     terms[j] = None
 
-            new_terms.append(Prod([new_coeff] + non_const_factors1))
+            # Yes you can replace the next few lines with Prod([new_coeff] + non_const_factors1)
+            # but by skipping checks for combine like terms, we make it significantly faster.
+            # Doing this speeds up the sum constructor by ~30% and everything by ~7%
+            if not is_hit:
+                non_constant_terms.append(term)
+                continue
+
+            if new_coeff == 0:
+                continue
+            elif new_coeff == 1:
+                if len(non_const_factors1) == 1:
+                    non_constant_terms.append(non_const_factors1[0])
+                else:
+                    non_constant_terms.append(Prod(non_const_factors1, skip_checks=True))
+            else:
+                non_constant_terms.append(Prod([new_coeff] + non_const_factors1, skip_checks=True))
 
         # accumulate all constants
-        const = accumulate(*[t for t in new_terms if isinstance(t, AccumulateableTuple)])
-        non_constant_terms = [t for t in new_terms if not isinstance(t, AccumulateableTuple)]
+        if consts:
+            consts = accumulate(*consts)
 
-        final_terms = const + non_constant_terms
+        final_terms = consts + non_constant_terms
         if len(final_terms) == 0:
             return Rat(0)
         if len(final_terms) == 1:
@@ -821,7 +845,7 @@ class Sum(Associative, Expr):
     def __neg__(self) -> "Sum":
         return Sum([-t for t in self.terms])
 
-    def expand(self) -> Expr:
+    def _expand(self) -> Expr:
         assert self.expandable(), f"Cannot expand {self}"
         return Sum([t.expand() if t.expandable() else t for t in self.terms])
 
@@ -838,7 +862,7 @@ class Sum(Associative, Expr):
             if i == 0:
                 ongoing_str += f"{term}"
             elif term.is_subtraction:
-                ongoing_str += f" - {term * -1}"
+                ongoing_str += f" - {-term}"
             else:
                 ongoing_str += f" + {term}"
 
@@ -850,7 +874,7 @@ class Sum(Associative, Expr):
             if i == 0:
                 ongoing_str += term.latex()
             elif isinstance(term, Prod) and term.is_subtraction:
-                ongoing_str += f" - {(term * -1).latex()}"
+                ongoing_str += f" - {(-term).latex()}"
             else:
                 ongoing_str += f" + {term.latex()}"
 
@@ -936,22 +960,37 @@ class Sum(Associative, Expr):
 def _deconstruct_prod(expr: Expr) -> Tuple[Rat, List[Expr]]:
     # 3*x^2*y -> (3, [x^2, y])
     # turns smtn into a constant and a list of other terms
-    if isinstance(expr, Prod):
-        non_const_factors = [term for term in expr.terms if not isinstance(term, Rat)]
-        const_factors = [term for term in expr.terms if isinstance(term, Rat)]
-        coeff = Prod(const_factors) if const_factors else Rat(1)
-    else:
-        non_const_factors = [expr]
-        coeff = Rat(1)
-    return (coeff, non_const_factors)
+
+    if hasattr(expr, "_deconstruct_prod_cache"):
+        return expr._deconstruct_prod_cache
+
+    def _dp(expr: Expr):
+        if isinstance(expr, Prod):
+            non_const_factors = [term for term in expr.terms if not isinstance(term, Rat)]
+            const_factors = [term for term in expr.terms if isinstance(term, Rat)]
+            coeff = Prod(const_factors) if const_factors else Rat(1)
+        else:
+            non_const_factors = [expr]
+            coeff = Rat(1)
+        return (coeff, non_const_factors)
+
+    expr._deconstruct_prod_cache = _dp(expr)
+    return expr._deconstruct_prod_cache
 
 
 def deconstruct_power(expr: Expr) -> Tuple[Expr, Rat]:
     # x^3 -> (x, 3). x -> (x, 1). 3 -> (3, 1)
-    if isinstance(expr, Power):
-        return expr.base, expr.exponent
-    else:
-        return expr, Rat(1)
+    if hasattr(expr, "_deconstruct_power_cache"):
+        return expr._deconstruct_power_cache
+
+    def _dpo(expr):
+        if isinstance(expr, Power):
+            return expr.base, expr.exponent
+        else:
+            return expr, Rat(1)
+
+    expr._deconstruct_power_cache = _dpo(expr)
+    return expr._deconstruct_power_cache
 
 
 isfractionorneg = lambda x: isinstance(x, Rat) and (x.value.denominator != 1 or x < 0)
@@ -959,9 +998,18 @@ islongsymbol = lambda x: isinstance(x, Symbol) and len(x.name) > 1 or x.__class_
 
 
 def _combine_like_terms(initial_terms):
-    new_terms = []
+    consts = []
+    non_constant_terms = []
     decon = {}
+
+    def _add_term(term):
+        if isinstance(term, AccumulaTuple):
+            consts.append(term)
+        else:
+            non_constant_terms.append(term)
+
     for i, term in enumerate(initial_terms):
+        is_hit = False
         if term is None:
             continue
         if not i in decon:
@@ -976,26 +1024,28 @@ def _combine_like_terms(initial_terms):
                 decon[j] = deconstruct_power(initial_terms[j])
             other_base, other_expo = decon[j]
             if other_base == base:
+                is_hit = True
                 expo += other_expo
                 initial_terms[j] = None
                 initial_terms[i] = None
 
+        if not is_hit:
+            _add_term(term)
+            continue
+
         if expo == 0:
             continue
-        new_terms.append(Power(base, expo) if expo != 1 else base)
+        if expo == 1:
+            _add_term(base)
+            continue
 
-    return new_terms
+        _add_term(Power(base, expo))
 
-
-def _accumulate_consts(new_terms):
-    constants = [term for term in new_terms if isinstance(term, AccumulateableTuple)]
-    if constants:
-        const = accumulate(*constants, type_="prod")
-        if const == [0]:
-            return const
-        non_constant_terms = [term for term in new_terms if not isinstance(term, AccumulateableTuple)]
-        return const + non_constant_terms
-    return new_terms
+    if consts:
+        consts = accumulate(*consts, type_="prod")
+        if consts == [0]:
+            return consts
+    return consts + non_constant_terms
 
 
 @dataclass
@@ -1006,14 +1056,18 @@ class Prod(Associative, Expr):
     _fields_already_casted = True
 
     @cast
-    def __new__(cls, terms: List[Expr]) -> "Expr":
+    def __new__(cls, terms: List[Expr], *, skip_checks=False) -> "Expr":
+        if skip_checks:
+            instance = super().__new__(cls)
+            instance.terms = terms
+            return instance
+
         # We need to flatten BEFORE we accumulate like terms
         # ex: Prod(x, Prod(Power(x, -1), y))
         initial_terms = cls._flatten_terms(terms)
 
         # accumulate all like terms
         new_terms = _combine_like_terms(initial_terms)
-        new_terms = _accumulate_consts(new_terms)
 
         if len(new_terms) == 0:
             return Rat(1)
@@ -1032,7 +1086,7 @@ class Prod(Associative, Expr):
         instance.terms = new_terms
         return instance
 
-    def __init__(self, terms: List[Expr]):
+    def __init__(self, terms: List[Expr], skip_checks=False):
         # terms are already set in __new__
         super().__post_init__()
 
@@ -1103,8 +1157,14 @@ class Prod(Associative, Expr):
             else:
                 numerator.append(term)
 
-        num_expr = Prod(numerator) if len(numerator) > 0 else Rat(1)
-        denom_expr = Prod(denominator) if len(denominator) > 0 else Rat(1)
+        num_expr = (
+            Prod(numerator, skip_checks=True) if len(numerator) > 1 else numerator[0] if len(numerator) == 1 else Rat(1)
+        )
+        denom_expr = (
+            Prod(denominator, skip_checks=True)
+            if len(denominator) > 1
+            else denominator[0] if len(denominator) == 1 else Rat(1)
+        )
         return [num_expr, denom_expr]
 
     @property
@@ -1117,8 +1177,7 @@ class Prod(Associative, Expr):
     def is_subtraction(self):
         return isinstance(self.terms[0], Rat) and self.terms[0] < 0
 
-    @cast
-    def expandable(self) -> bool:
+    def _expandable(self) -> bool:
         # a product is expandable if it contains any sums in the numerator
         # OR if it contains sums in the denominator AND the denominator has another term other than the sum
         # (so, a singular sum in a numerator is expandable but a single sum in the denominator isn't.)
@@ -1128,7 +1187,7 @@ class Prod(Associative, Expr):
         has_sub_expandable = any(t.expandable() for t in self.terms)
         return num_expandable or denom_expandable or has_sub_expandable
 
-    def expand(self):
+    def _expand(self):
         assert self.expandable(), f"Cannot expand {self}"
         # expand sub-expressions
         num, denom = self.numerator_denominator
@@ -1217,13 +1276,16 @@ class Power(Expr):
         return "{" + _term_latex(self.base) + "}^{" + _term_latex(self.exponent) + "}"
 
     @cast
-    def __new__(cls, base: Expr, exponent: Expr) -> "Expr":
+    def __new__(cls, base: Expr, exponent: Expr, *, skip_checks=False) -> "Expr":
         b = base
         x = exponent
 
         default_return = super().__new__(cls)
         default_return.base = b
         default_return.exponent = x
+
+        if skip_checks:
+            return default_return
 
         if x == 0:
             # Ok this is up to debate, but since python does 0**0 = 1 I'm gonna do it too.
@@ -1233,7 +1295,7 @@ class Power(Expr):
             return b
         if b == 1:
             return Rat(1)
-        if isinstance(b, AccumulateableTuple) and isinstance(x, AccumulateableTuple):
+        if isinstance(b, AccumulaTuple) and isinstance(x, AccumulaTuple):
             ans = _accumulate_power(b, x)
             if ans is None:
                 return default_return
@@ -1254,7 +1316,7 @@ class Power(Expr):
         if isinstance(x, Prod):
             for i, t in enumerate(x.terms):
                 if isinstance(t, log) and t.base == b:
-                    rest = Prod(x.terms[:i] + x.terms[i + 1 :])
+                    rest = Prod(x.terms[:i] + x.terms[i + 1 :], skip_checks=True)
                     return Power(
                         t.inner, rest
                     )  # Just in case this needs to be simplified, we will pass this through the constructor
@@ -1276,7 +1338,7 @@ class Power(Expr):
 
         return default_return
 
-    def __init__(self, base: Expr, exponent: Expr):
+    def __init__(self, base: Expr, exponent: Expr, skip_checks=False):
         self.__post_init__()
 
     def _power_expandable(self) -> bool:
@@ -1287,10 +1349,10 @@ class Power(Expr):
             and isinstance(self.base, Sum)
         )
 
-    def expandable(self) -> bool:
+    def _expandable(self) -> bool:
         return self._power_expandable() or self.base.expandable() or self.exponent.expandable()
 
-    def expand(self) -> Expr:
+    def _expand(self) -> Expr:
         assert self.expandable(), f"Cannot expand {self}"
         b = self.base.expand() if self.base.expandable() else self.base
         x = self.exponent.expand() if self.exponent.expandable() else self.exponent
@@ -1354,7 +1416,7 @@ class SingleFunc(Expr):
         inner = self.inner.subs(subs)
         return self.__class__(inner)
 
-    def expand(self) -> Expr:
+    def _expand(self) -> Expr:
         assert self.inner.expandable(), f"Cannot expand {self}"
         return self.__class__(self.inner.expand())
 
@@ -1389,7 +1451,7 @@ class log(Expr):
         base = self.base.subs(subs)
         return log(inner, base)
 
-    def expand(self) -> Expr:
+    def _expand(self) -> Expr:
         assert self.inner.expandable(), f"Cannot expand {self}"
         return self.__class__(self.inner.expand())
 
@@ -1411,8 +1473,11 @@ class log(Expr):
             return Rat(1)
         if isinstance(inner, Power) and inner.base == base:
             return inner.exponent
-        if isinstance(inner, Float) and isinstance(base, (Float, E)):
-            return Float(math.log(inner.value))
+        if isinstance(inner, Float):
+            if base == e:
+                return Float(math.log(inner.value))
+            if isinstance(base, Float):
+                return Float(math.log(inner.value) / math.log(base.value))
 
         return super().__new__(cls)
 
@@ -1541,7 +1606,10 @@ class TrigFunction(SingleFunc, ABC):
     @cast
     def __new__(cls, inner: Expr) -> "Expr":
         # 1. Check if inner is a special value
-        if not cls.is_inverse:
+        if inner == 0:
+            return cls.special_values["0"]
+
+        if not cls.is_inverse and inner.has(Pi):
             pi_coeff = inner / pi
             if isinstance(pi_coeff, Rat):
                 pi_coeff = pi_coeff % 2
@@ -1549,7 +1617,7 @@ class TrigFunction(SingleFunc, ABC):
                     return cls.special_values[str(pi_coeff.value)]
 
             # check if inner has ... a 2pi term in a sum
-            if isinstance(inner, Sum) and inner.has(Pi):
+            if isinstance(inner, Sum):
                 for t in inner.terms:
                     if t.has(Pi):
                         coeff = t / pi
@@ -1752,6 +1820,10 @@ class asin(TrigFunction):
     def diff(self, var):
         return 1 / sqrt(1 - self.inner**2) * self.inner.diff(var)
 
+    @classproperty
+    def _special_values(cls):
+        return {v: k for k, v in sin.special_values}
+
 
 class acos(TrigFunction):
     func = "cos"
@@ -1761,6 +1833,10 @@ class acos(TrigFunction):
     def diff(self, var):
         return -1 / sqrt(1 - self.inner**2) * self.inner.diff(var)
 
+    @classproperty
+    def _special_values(cls):
+        return {v: k for k, v in cos.special_values}
+
 
 class atan(TrigFunction):
     func = "tan"
@@ -1769,6 +1845,10 @@ class atan(TrigFunction):
 
     def diff(self, var):
         return 1 / (1 + self.inner**2) * self.inner.diff(var)
+
+    @classproperty
+    def _special_values(cls):
+        return {v: k for k, v in tan.special_values}
 
 
 class Abs(SingleFunc):

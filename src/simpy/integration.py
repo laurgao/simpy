@@ -113,7 +113,7 @@ class Integration:
     def integrate_bounds(self, expr: Expr, bounds: Tuple[Symbol, Expr, Expr]) -> Optional[Expr]:
         """Performs definite integral."""
         x, a, b = bounds
-        integral = self.integrate(expr, bounds[0])
+        integral = self.integrate(expr, bounds[0], final=False)
         if integral is None:
             return None
         return (integral.subs({x.name: b}) - integral.subs({x.name: a})).simplify()
@@ -217,7 +217,7 @@ class Integration:
             return True
         return False
 
-    def integrate(self, integrand: Expr, var: Symbol) -> Optional[Expr]:
+    def integrate(self, integrand: Expr, var: Symbol, final=True) -> Optional[Expr]:
         """Performs indefinite integral."""
         root = Node(integrand.simplify(), var)
         _integrate_safely(root)
@@ -253,7 +253,7 @@ class Integration:
         if self._debug:
             _print_success_tree(root)
             breakpoint()
-        return root.solution.simplify()
+        return root.solution.simplify() if final else root.solution
 
     @staticmethod
     def _go_backwards(root: Node):

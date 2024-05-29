@@ -770,14 +770,7 @@ class SinUSub(Transform):
     def forward(self, node: Node) -> None:
         intermediate = generate_intermediate_var()
         dy_dx = self._sin.diff(node.var)
-        new_integrand = (
-            replace(
-                node.expr,
-                self._sin,
-                intermediate,
-            )
-            / dy_dx
-        )
+        new_integrand = replace(node.expr, self._sin, intermediate) / dy_dx
         # should be done in check, here is a patch.
         if new_integrand.contains(node.var):
             return
@@ -1226,14 +1219,16 @@ class RewritePythagorean(Transform):
         if super().check(node) is False:
             return False
 
-        # this is a complete waste of resources.
-        return general_contains(node.expr, self.condition)
+        return True
 
     def forward(self, node: Node) -> bool:
+        is_hit = {"is_hit": False}
+
         def _replace_factory(c, p, e):
             # chill replace factory that only checks outer layer of nesting.
             def _replace(e) -> Expr:
                 if c(e):
+                    is_hit["is_hit"] = True
                     return p(e)
                 if isinstance(e, Prod):
                     return Prod([_replace(term) for term in e.terms])
@@ -1243,7 +1238,7 @@ class RewritePythagorean(Transform):
             return _replace(e)
 
         new_expr = _replace_factory(self.condition, self.perform, node.expr)
-        if new_expr == node.expr:
+        if not is_hit["is_hit"]:
             return
         node.add_child(Node(new_expr, node.var, self, node))
 
