@@ -199,6 +199,14 @@ class Transform(ABC):
         return True
 
 
+class USub(Transform, ABC):
+    _u: Expr = None
+
+    def backward(self, node: Node) -> None:
+        super().backward(node)
+        node.parent.solution = replace(node.solution, node.var, self._u)
+
+
 class SafeTransform(Transform, ABC):
     pass
 
@@ -349,15 +357,13 @@ def _get_last_heuristic_transform(node: Node, tup=(PullConstant, Additivity)):
 
 # Let's just add all the transforms we've used for now.
 # and we will make this shit good and generalized later.
-class TrigUSub2(Transform):
+class TrigUSub2(USub):
     """
     u-sub of a trig function
     this is the weird u-sub where if u=sinx, dx != du/cosx but dx = du/sqrt(1-u^2)
     ex: integral of f(tanx) -> integral of f(u) / 1 + y^2, sub u = tanx
     -> dx = du/(1+x^2)
     """
-
-    _variable_change = None
 
     _key: str = None
     # {label: trigfn class, derivative of inverse trigfunction}
@@ -376,7 +382,7 @@ class TrigUSub2(Transform):
         new_node = Node(new_integrand, intermediate, self, node)
         node.add_child(new_node)
 
-        self._variable_change = cls(node.var)
+        self._u = cls(node.var)
 
     def check(self, node: Node) -> bool:
         if super().check(node) is False:
@@ -397,10 +403,6 @@ class TrigUSub2(Transform):
                 return True
 
         return False
-
-    def backward(self, node: Node) -> None:
-        super().backward(node)
-        node.parent.solution = replace(node.solution, node.var, self._variable_change)
 
 
 class RewriteTrig(Transform):
@@ -462,11 +464,10 @@ class RewriteTrig(Transform):
         node.parent.solution = node.solution
 
 
-class InverseTrigUSub(Transform):
+class InverseTrigUSub(USub):
     """Does the sub of u = asin(x), u = atan(x)"""
 
     _key = None
-    _variable_change = None
 
     # {label: class, search query, dy_dx, variable_change}
     _table: Dict[str, Tuple[ExprFn, Callable[[str], str], ExprFn, ExprFn]] = {
@@ -481,7 +482,7 @@ class InverseTrigUSub(Transform):
         new_thing = replace(node.expr, node.var, cls(intermediate)) * dy_dx
         node.add_child(Node(new_thing, intermediate, self, node))
 
-        self._variable_change = var_change(node.var)
+        self._u = var_change(node.var)
 
     def check(self, node: Node) -> bool:
         if super().check(node) is False:
@@ -501,18 +502,14 @@ class InverseTrigUSub(Transform):
 
         return False
 
-    def backward(self, node: Node) -> None:
-        super().backward(node)
-        node.parent.solution = replace(node.solution, node.var, self._variable_change)
 
-
-class PolynomialUSub(Transform):
+class PolynomialUSub(USub):
     """check that x^n-1 is a term and every other instance of x is x^n
     you're gonna replace u=x^n
     ex: x/sqrt(1-x^2)
     """
 
-    _variable_change = None  # x^n
+    # _u = x^n
 
     def check(self, node: Node) -> bool:
         if super().check(node) is False:
@@ -543,30 +540,26 @@ class PolynomialUSub(Transform):
             # How are you gonna sub u = x^0 = 1, du = 0 dx
             return False
 
-        self._variable_change = Power(node.var, n)  # x^n
-        count_ = count(node.expr, self._variable_change)
+        self._u = Power(node.var, n)  # x^n
+        count_ = count(node.expr, self._u)
         return count_ > 0 and count_ == count(rest, node.var)
 
     def forward(self, node: Node) -> None:
         intermediate = generate_intermediate_var()
-        dx_dy = self._variable_change.diff(node.var)
-        new_integrand = replace(node.expr, self._variable_change, intermediate) / dx_dy
+        dx_dy = self._u.diff(node.var)
+        new_integrand = replace(node.expr, self._u, intermediate) / dx_dy
         new_integrand = new_integrand
         node.add_child(Node(new_integrand, intermediate, self, node))
 
-    def backward(self, node: Node) -> None:
-        super().backward(node)
-        node.parent.solution = replace(node.solution, node.var, self._variable_change)
 
-
-class LinearUSub(Transform):
+class LinearUSub(USub):
     """u-substitution for smtn like f(ax+b)
     u = ax+b
     du = a dx
     \int f(ax+b) dx = 1/a \int f(u) du
     """
 
-    _variable_change: Expr = None  # writes u in terms of x
+    # _u writes u in terms of x
     _inverse_var_change: ExprFn = None  # this will write x in terms of u
 
     def check(self, node: Node) -> bool:
@@ -612,9 +605,9 @@ class LinearUSub(Transform):
             result = _is_a_linear_sum_or_prod(e)
             if result is not None:
                 u, u_inverse = result
-                if self._variable_change is not None:
-                    return u == self._variable_change
-                self._variable_change = u
+                if self._u is not None:
+                    return u == self._u
+                self._u = u
 
                 # If u_inverse exists, set it.
                 # it must be the same as any prev u_inverse because the same u implies the same
@@ -633,22 +626,18 @@ class LinearUSub(Transform):
 
     def forward(self, node: Node) -> None:
         intermediate = generate_intermediate_var()
-        du_dx = self._variable_change.diff(node.var)
+        du_dx = self._u.diff(node.var)
 
-        # We have to account for the case where self._variable_change doesn't appear directly
+        # We have to account for the case where self._u doesn't appear directly
         # in the integrand.
         if self._inverse_var_change is not None:
             new = self._inverse_var_change(intermediate)
             new_integrand = replace(node.expr, node.var, new)
         else:
-            new_integrand = replace(node.expr, self._variable_change, intermediate)
+            new_integrand = replace(node.expr, self._u, intermediate)
         new_integrand /= du_dx
         new_integrand = new_integrand
         node.add_child(Node(new_integrand, intermediate, self, node))
-
-    def backward(self, node: Node) -> None:
-        super().backward(node)
-        node.parent.solution = replace(node.solution, node.var, self._variable_change)
 
 
 class CompoundAngle(Transform):
@@ -691,7 +680,7 @@ class CompoundAngle(Transform):
         node.parent.solution = node.solution
 
 
-class SinUSub(Transform):
+class SinUSub(USub):
     """u-substitution for if sinx cosx exists in the outer product"""
 
     # TODO: generalize this in some form? to other trig fns maybe?
@@ -699,7 +688,6 @@ class SinUSub(Transform):
     # like transform D but for trigfns
     _sin: sin = None
     _cos: cos = None
-    _variable_change: Expr = None
 
     def check(self, node: Node) -> bool:
         if super().check(node) is False:
@@ -754,11 +742,7 @@ class SinUSub(Transform):
         if new_integrand.contains(node.var):
             return
         node.add_child(Node(new_integrand, intermediate, self, node))
-        self._variable_change = self._sin
-
-    def backward(self, node: Node) -> None:
-        super().backward(node)
-        node.parent.solution = replace(node.solution, node.var, self._variable_change)
+        self._u = self._sin
 
 
 class ProductToSum(Transform):
@@ -1076,9 +1060,8 @@ class PartialFractions(Transform):
         node.parent.solution = node.solution
 
 
-class GenericUSub(Transform):
+class GenericUSub(USub):
     _u: Expr = None
-    _variable_change: Expr = None
 
     def check(self, node: Node) -> bool:
         if super().check(node) is False:
@@ -1105,11 +1088,7 @@ class GenericUSub(Transform):
         du_dx = self._u.diff(node.var)
         new_integrand = replace((node.expr / du_dx), self._u, intermediate)
         node.add_child(Node(new_integrand, intermediate, self, node))
-        self._variable_change = self._u
-
-    def backward(self, node: Node) -> None:
-        super().backward(node)
-        node.parent.solution = replace(node.solution, node.var, self._variable_change)
+        self._u = self._u
 
 
 class CompleteTheSquare(Transform):
