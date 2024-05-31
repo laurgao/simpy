@@ -1,7 +1,7 @@
 from typing import Iterable, List, Optional, Tuple, Type, Union
 
-from .expr import Abs, Expr, Power, Prod, Rat, Sum, Symbol, TrigFunction, cos, cot, csc, log, nesting, sec, sin, tan
-from .regex import any_, eq, general_contains, general_count, kinder_replace, kinder_replace_many, replace_class
+from .expr import Abs, Expr, Power, Prod, Rat, Sum, TrigFunction, cos, cot, csc, log, sec, sin, tan
+from .regex import any_, eq, general_contains, kinder_replace, kinder_replace_many, replace_class
 from .utils import ExprFn
 
 
@@ -39,15 +39,14 @@ def _log_perform(expr: Expr) -> Optional[Expr]:
 
 
 def pythagorean_simplification(expr: Expr, **kwargs) -> Expr:
-    verbose = kwargs.get("verbose", False)
-    if not expr.has(TrigFunction):
-        return expr if not verbose else expr, False
     return kinder_replace(expr, _pythagorean_perform, **kwargs)
 
 
 def _pythagorean_perform(sum: Expr) -> Optional[Expr]:
     if not isinstance(sum, Sum):
         return
+    if not sum.has(TrigFunction):  # It is faster to check every time
+        return False
 
     # first check if we have anything squared before we do anything else
     # because the rest of the function, with all the `eq` calls, is expensive.
@@ -115,6 +114,7 @@ def _pythagorean_perform(sum: Expr) -> Optional[Expr]:
 
 
 def _pythagorean_complex_perform(sum: Expr) -> Optional[Expr]:
+    """Assumes sum.has(TrigFunction is true.)"""
     if not isinstance(sum, Sum):
         return
     ##------------ More complex pythagorean simplification across terms ------------##
@@ -128,46 +128,58 @@ def _pythagorean_complex_perform(sum: Expr) -> Optional[Expr]:
             lambda x: 1 / cos(x),
         ],
     )
-    new_sum = rewrite_as_one_fraction(new_sum)
-    if sum == new_sum:
+
+    new_sum = rewrite_as_one_fraction(new_sum, include_const_denoms=False)
+    if new_sum is None:
         return
-    new_sum = kinder_replace(new_sum, _pythagorean_perform)
-    if is_simpler(new_sum, sum):
+    new_sum, success = kinder_replace(new_sum, _pythagorean_perform, verbose=True)
+    if success:
         # assume we're doing this in the ctx of the larger simplification
         return reciprocate_trigs(new_sum)
 
 
-def rewrite_as_one_fraction(sum: Expr) -> Expr:
-    """Rewrites with common denominator"""
+def rewrite_as_one_fraction(sum: Expr, include_const_denoms=True) -> Optional[Expr]:
+    """Rewrites with common denominator
+
+    Returns None if left unchanged.
+    """
     if not isinstance(sum, Sum):
         return sum
     list_of_terms: List[Tuple[Expr, Expr]] = []
+
+    has_den = False
+    common_den_terms = []
+
+    def add_common_den(factors):
+        # remove dupes
+        # this ensures that if two dens have the same factor, do not count it twice.
+        for f in factors:
+            if f not in common_den_terms:
+                common_den_terms.append(f)
+
     for term in sum.terms:
         if isinstance(term, Prod):
             num, den = term.numerator_denominator
+            if den != 1 and (include_const_denoms or len(den.symbols()) > 0):
+                has_den = True
         elif isinstance(term, Power) and isinstance(term.exponent, Rat) and term.exponent.value < 0:
             num, den = Rat(1), Power(term.base, -term.exponent)
+            has_den = True
         else:
             num, den = term, Rat(1)
         list_of_terms.append((num, den))
 
-    common_den = Rat(1)
-    for _, den in list_of_terms:
-        ratio = den / common_den
-        common_den *= ratio
+        if isinstance(den, Prod):
+            add_common_den(den.terms)
+        else:
+            add_common_den([den])
 
+    if has_den == False:
+        return
+
+    common_den = Prod(common_den_terms)
     new_nums = [num * common_den / den for num, den in list_of_terms]
     return Sum(new_nums) / common_den
-
-
-def is_simpler(a, b):
-    """return if a is simpler than b"""
-
-    def count(e):
-        # counts the number of symbols
-        return general_count(e, lambda x: isinstance(x, Symbol))
-
-    return count(a) < count(b)
 
 
 def _reciprocate_trigs(expr: Expr) -> Optional[Expr]:
@@ -228,6 +240,10 @@ def simplify(expr: Expr) -> Expr:
 def trig_simplify(expr):
     # reciprocate and combine trigs is last because sometimes the pythag complex simplification will
     # generate new trigs in the num/denom that can be simplified down.
-    expr = kinder_replace_many(expr, [_pythagorean_perform, _pythagorean_complex_perform, _reciprocate_trigs])
+    expr = kinder_replace_many(
+        expr,
+        [_pythagorean_perform, _pythagorean_complex_perform, _reciprocate_trigs],
+        overarching_cond=lambda x: x.has(TrigFunction),
+    )
     expr = kinder_replace_many(expr, [_combine_trigs])
     return expr

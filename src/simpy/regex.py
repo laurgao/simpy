@@ -6,10 +6,10 @@ outside of the cases it is currently used for. Use with caution.
 
 from collections import defaultdict
 from dataclasses import dataclass, fields
-from typing import Any, Callable, Dict, Iterable, List, Literal, Tuple, Type
+from typing import Any, Callable, Dict, Iterable, List, Literal, Optional, Tuple, Type
 
 from .expr import Expr, Power, Prod, Rat, SingleFunc, Sum, Symbol, cast, log
-from .utils import ExprFn, OptionalExprFn, random_id
+from .utils import ExprCondition, ExprFn, OptionalExprFn, random_id
 
 
 class Any_(Expr):
@@ -361,7 +361,7 @@ def contains_cls(expr: Expr, cls: Type[Expr]) -> bool:
     return any(contains_cls(e, cls) for e in expr.children())
 
 
-def general_count(expr: Expr, condition: Callable[[Expr], bool]) -> int:
+def general_count(expr: Expr, condition: ExprCondition) -> int:
     """the `count` function above, except you can specify a condition rather than
     only allowing exact matches.
     """
@@ -370,7 +370,7 @@ def general_count(expr: Expr, condition: Callable[[Expr], bool]) -> int:
     return sum(general_count(e, condition) for e in expr.children())
 
 
-def general_contains(expr: Expr, condition: Callable[[Expr], bool]) -> bool:
+def general_contains(expr: Expr, condition: ExprCondition) -> bool:
     if condition(expr):
         return True
     return any(general_contains(e, condition) for e in expr.children())
@@ -380,7 +380,7 @@ def replace_factory(condition, perform) -> ExprFn:
     return replace_factory_list([condition], [perform])
 
 
-def replace_factory_list(conditions: Iterable[Callable[[Expr], bool]], performs: Iterable[ExprFn]) -> ExprFn:
+def replace_factory_list(conditions: Iterable[ExprCondition], performs: Iterable[ExprFn]) -> ExprFn:
     """
     list of iterable conditions should be ... mutually exclusive or sth
 
@@ -420,7 +420,9 @@ def kinder_replace(expr: Expr, perform: OptionalExprFn, **kwargs) -> Expr:
     return kinder_replace_many(expr, [perform], **kwargs)
 
 
-def kinder_replace_many(expr: Expr, performs: Iterable[OptionalExprFn], verbose=False, _d=False) -> Expr:
+def kinder_replace_many(
+    expr: Expr, performs: Iterable[OptionalExprFn], verbose=False, overarching_cond: Optional[ExprCondition] = None
+) -> Expr:
     """
     kinder, bc some queries dont have a clean condition.
     ex: checking multiple any_ matches.
@@ -433,9 +435,14 @@ def kinder_replace_many(expr: Expr, performs: Iterable[OptionalExprFn], verbose=
     is_hit = {"hi": False}
 
     def _replace(e: Expr) -> Expr:
+        if overarching_cond is not None and overarching_cond(e) is False:
+            return e
         for p in performs:
             new = p(e)
-            if new:
+            if new is False:
+                # This means do not continue to recurse
+                return e
+            if new is not None:
                 is_hit["hi"] = True
                 return new
 
