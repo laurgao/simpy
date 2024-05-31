@@ -1527,7 +1527,7 @@ TrigStr = Literal["sin", "cos", "tan", "sec", "csc", "cot"]
 
 
 class TrigFunction(SingleFunc, ABC):
-    is_inverse: bool = False  # class property
+    is_inverse: bool  # class property
 
     _SPECIAL_KEYS = [
         "0",
@@ -1664,7 +1664,11 @@ class TrigFunction(SingleFunc, ABC):
         return self.__class__(inner)
 
 
-class sin(TrigFunction):
+class TrigFunctionNotInverse(TrigFunction, ABC):
+    is_inverse = False
+
+
+class sin(TrigFunctionNotInverse):
     func = "sin"
     _func = math.sin
 
@@ -1703,7 +1707,7 @@ class sin(TrigFunction):
         return super().__new__(cls, inner)
 
 
-class cos(TrigFunction):
+class cos(TrigFunctionNotInverse):
     func = "cos"
     _func = math.cos
 
@@ -1751,7 +1755,7 @@ class cos(TrigFunction):
         return new
 
 
-class tan(TrigFunction):
+class tan(TrigFunctionNotInverse):
     func = "tan"
     _func = math.tan
 
@@ -1773,7 +1777,7 @@ class tan(TrigFunction):
         return sec(self.inner) ** 2 * self.inner.diff(var)
 
 
-class csc(TrigFunction):
+class csc(TrigFunctionNotInverse):
     func = "csc"
     _func = lambda x: 1 / math.sin(x)
     reciprocal_class = sin
@@ -1786,7 +1790,7 @@ class csc(TrigFunction):
         return (1 / sin(self.inner)).diff(var)
 
 
-class sec(TrigFunction):
+class sec(TrigFunctionNotInverse):
     func = "sec"
     _func = lambda x: 1 / math.cos(x)
     reciprocal_class = cos
@@ -1799,7 +1803,7 @@ class sec(TrigFunction):
         return sec(self.inner) * tan(self.inner) * self.inner.diff(var)
 
 
-class cot(TrigFunction):
+class cot(TrigFunctionNotInverse):
     reciprocal_class = tan
     func = "cot"
     _func = lambda x: 1 / math.tan(x)

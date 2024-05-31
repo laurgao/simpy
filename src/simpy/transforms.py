@@ -16,6 +16,7 @@ from .expr import (
     Sum,
     Symbol,
     TrigFunction,
+    TrigFunctionNotInverse,
     asin,
     atan,
     cos,
@@ -457,7 +458,7 @@ class RewriteTrig(Transform):
             return False
 
         expr = node.expr
-        return expr.has(TrigFunction)
+        return expr.has(TrigFunctionNotInverse)
 
     def backward(self, node: Node) -> None:
         super().backward(node)

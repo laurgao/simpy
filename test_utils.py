@@ -1,6 +1,19 @@
 from typing import Optional, Tuple, Type
 
-from src.simpy.expr import Expr, Power, Rat, SingleFunc, Symbol, TrigFunction, cast, cos, debug_repr, sec, symbols, tan
+from src.simpy.expr import (
+    Expr,
+    Power,
+    Rat,
+    SingleFunc,
+    Symbol,
+    TrigFunctionNotInverse,
+    cast,
+    cos,
+    debug_repr,
+    sec,
+    symbols,
+    tan,
+)
 from src.simpy.integration import integrate
 from src.simpy.regex import replace_class, replace_factory
 
@@ -60,7 +73,7 @@ def only_contains_class_squared(expr: Expr, cls: Type[SingleFunc]) -> bool:
 
 def sectan(a: Expr, b: Expr) -> Tuple[Expr, Expr]:
     # futureTODO: his (& similar things) should be done in simplify during subtractions.
-    if not a.has(TrigFunction) or not b.has(TrigFunction):
+    if not a.has(TrigFunctionNotInverse) or not b.has(TrigFunctionNotInverse):
         return a, b
 
     def _sectan(a, b):

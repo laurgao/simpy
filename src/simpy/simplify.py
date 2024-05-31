@@ -1,6 +1,22 @@
 from typing import Iterable, List, Optional, Tuple, Type, Union
 
-from .expr import Abs, Expr, Power, Prod, Rat, Sum, TrigFunction, cos, cot, csc, log, sec, sin, tan
+from .expr import (
+    Abs,
+    Expr,
+    Power,
+    Prod,
+    Rat,
+    Sum,
+    TrigFunction,
+    TrigFunctionNotInverse,
+    cos,
+    cot,
+    csc,
+    log,
+    sec,
+    sin,
+    tan,
+)
 from .regex import any_, eq, general_contains, kinder_replace, kinder_replace_many, replace_class
 from .utils import ExprFn
 
@@ -45,7 +61,7 @@ def pythagorean_simplification(expr: Expr, **kwargs) -> Expr:
 def _pythagorean_perform(sum: Expr) -> Optional[Expr]:
     if not isinstance(sum, Sum):
         return
-    if not sum.has(TrigFunction):  # It is faster to check every time
+    if not sum.has(TrigFunctionNotInverse):  # It is faster to check every time
         return False
 
     # first check if we have anything squared before we do anything else
@@ -230,7 +246,7 @@ def simplify(expr: Expr) -> Expr:
     This is the general one that does all heuristics & is for aesthetics (& comparisons).
     Use more specific simplification functions in integration please.
     """
-    if expr.has(TrigFunction):
+    if expr.has(TrigFunctionNotInverse):
         expr = trig_simplify(expr)
     if expr.has(log):
         expr = expand_logs(expr)
@@ -243,7 +259,7 @@ def trig_simplify(expr):
     expr = kinder_replace_many(
         expr,
         [_pythagorean_perform, _pythagorean_complex_perform, _reciprocate_trigs],
-        overarching_cond=lambda x: x.has(TrigFunction),
+        overarching_cond=lambda x: x.has(TrigFunctionNotInverse),
     )
     expr = kinder_replace_many(expr, [_combine_trigs])
     return expr
