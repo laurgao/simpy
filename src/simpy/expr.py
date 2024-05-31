@@ -971,8 +971,8 @@ def _deconstruct_prod(expr: Expr) -> Tuple[Rat, List[Expr]]:
 
     def _dp(expr: Expr):
         if isinstance(expr, Prod):
-            non_const_factors = [term for term in expr.terms if not isinstance(term, Rat)]
-            const_factors = [term for term in expr.terms if isinstance(term, Rat)]
+            non_const_factors = [term for term in expr.terms if not isinstance(term, AccumulaTuple)]
+            const_factors = [term for term in expr.terms if isinstance(term, AccumulaTuple)]
             coeff = Prod(const_factors) if const_factors else Rat(1)
         else:
             non_const_factors = [expr]

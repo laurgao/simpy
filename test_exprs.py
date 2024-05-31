@@ -53,6 +53,10 @@ def test_sum_combines_like_terms():
     assert_eq_strict(x + x + x, 3 * x)
     assert_eq_strict(3 * (x + 2) + 2 * (x + 2), 5 * (x + 2))  # like terms that is a sum
     assert_eq_strict(2 * x * y + 3 * x * y, 5 * x * y)  # like terms with multiple factors
+    assert_eq_strict(0.2 * x * y + 0.8 * x * y, x * y)  # like terms with multiple factors
+
+    # not sure if we want this to be the case but wtv
+    assert_eq_strict(2 * x + 0.2 * x, (Rat(2) + Float(0.2)) * x)
 
 
 def test_prod_combines_like_terms_prod():
