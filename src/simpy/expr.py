@@ -1940,7 +1940,11 @@ def remove_const_factor(expr: Expr) -> Expr:
             return expr._sans_const
         else:
             new_terms = [t for t in expr.terms if len(t.symbols()) > 0]
-            expr._sans_const = Prod(new_terms)
+            expr._sans_const = (
+                Prod(new_terms, skip_checks=True)
+                if len(new_terms) > 1
+                else new_terms[0] if len(new_terms) == 1 else Rat(1)
+            )
             return expr._sans_const
     return expr
 
