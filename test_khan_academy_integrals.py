@@ -3,8 +3,6 @@ LOL im gonna take a bunch of integral questions from https://www.khanacademy.org
 and make sure simpy can do them
 """
 
-import pytest
-
 from src.simpy.expr import *
 from src.simpy.integration import *
 from test_utils import assert_definite_integral, assert_eq_plusc, assert_eq_value, assert_integral, x, y

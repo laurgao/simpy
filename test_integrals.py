@@ -1,5 +1,3 @@
-import pytest
-
 from src.simpy.expr import *
 from src.simpy.integration import *
 from test_utils import (

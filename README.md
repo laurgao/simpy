@@ -4,19 +4,26 @@ _A worse version of [sympy](https://www.sympy.org)_
 
 Current version can do algebraic & trigonometric simplifications, perform differentiation, and can perform ALMOST ALL AP calc integrals including polynomials, rational functions, trig functions, logs, exponentials, and combinations of them.
 
-Examples of integrals
-
 ## Quick start
 
 Real installation instructions are coming soon! For now, just clone the repo and `pip install requirements.txt`. You can run `pytest .` in the root directory to run my tests. Look at `test_integrals.py` and `test_khan_academy_integrals.py` to see some sample integrals we can do :)
 
-For example, these polynomial integrals Laura had to do for homework:
+For example, these integrals:
 
 $$
 \begin{aligned}
-\frac{23}{378000} &= \int_{5}^{6} \frac{x}{90} \cdot \frac{(x-5)^2}{350} dx \\\\
-\frac{2589}{56000} &= \int_{6}^{15} \left(\frac{1}{15} - \frac{1}{360} \cdot (x-6)\right) \cdot \frac{(x-5)^2}{350} dx \\\\
-\frac{37}{224} &= \int_{15}^{30} \left(\frac{1}{15} - \frac{1}{360} \cdot (x-6)\right) \cdot \left(1 - \frac{(40-x)^2}{875}\right) dx
+&\int \tan^{-1}\left(x\right) dx = -\frac{\ln\left( \left|{x}^{2} + 1\right| \right)}{2} + x \cdot \tan^{-1}\left(x\right)
+\\
+
+&\int \frac{x - 5}{-2x + 2} = 2 \cdot \ln\left( \left|-x + 1\right| \right) - \frac{x}{2}
+
+\\
+
+&\int_{0}^{\pi/6} \text{sec}\left(2x\right) \cdot \text{tan}\left(2x\right) = \frac12
+
+\\
+
+&\int_{15}^{30} \left(\frac{1}{15} - \frac{1}{360} \cdot (x-6)\right) \cdot \left(1 - \frac{(40-x)^2}{875}\right) dx = \frac{37}{224}
 \end{aligned}
 $$
 
@@ -28,13 +35,13 @@ from fractions import Fraction as F
 
 x = sp.symbols("x")
 
-I1 = sp.integrate((x/90 * (x-5)**2 / 350), (x, 5, 6))
-I2 = sp.integrate((F(1, 15) - F(1, 360) * (x-6))*(x-5)**2 / 350, (x, 6, 15))
-I3 = sp.integrate((F(1, 15) - F(1, 360) * (x-6))*(1 - (40-x)**2/875), (x, 15, 30))
-print(I1, I2, I3)
-```
+ans1 = sp.integrate(sp.atan(x))
+ans2 = sp.integrate((x - 5)/(-2*x + 2))
+ans3 = sp.integrate(sp.sec(2*x)*sp.tan(2*x), (0, sp.pi/6))
+ans4 = sp.integrate((F(1, 15) - F(1, 360) * (x-6))*(1 - (40-x)**2/875), (x, 15, 30))
 
-Note: we don't support floats right now so please use fractions!
+print(ans1, ans2, ans3, ans4, sep="\n")
+```
 
 ## Please make issues!
 
