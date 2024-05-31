@@ -1214,11 +1214,13 @@ class Simplify(Transform):
         # The point of these 2 transforms is to rewrite the expr in a not necessarily 'simpler' form.
         if isinstance(t, (RewritePythagorean, RewriteTrig)):
             return False
-        return pythagorean_simplification(node.expr, verbose=True)[1]
+        ans, success = pythagorean_simplification(node.expr, verbose=True)
+        if success:
+            self._ans = ans
+        return success
 
     def forward(self, node: Node) -> None:
-        new = pythagorean_simplification(node.expr)
-        node.add_child(Node(new, node.var, self, node))
+        node.add_child(Node(self._ans, node.var, self, node))
 
     def backward(self, node: Node) -> None:
         super().backward(node)
