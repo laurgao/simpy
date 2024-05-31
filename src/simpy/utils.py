@@ -41,17 +41,3 @@ def eq_with_var(a: Tuple[Expr, Symbol], b: Tuple[Expr, Symbol]) -> bool:
         return all(_recursive_call(x, y) for x, y in zip(c1, c2))
 
     return _recursive_call(a_expr, b_expr)
-
-
-def is_simpler(a, b):
-    """return if a is simpler than b
-
-    currently unused. leaving case for potential future purposes.
-    """
-    from .regex import general_count
-
-    def count(e):
-        # counts the number of symbols
-        return general_count(e, lambda x: isinstance(x, Symbol))
-
-    return count(a) < count(b)
