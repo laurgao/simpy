@@ -44,12 +44,6 @@ def test_lecture_example():
     assert_integral(expression, expected_integral)
 
 
-# def test_sin3x():
-#     expression = sin(x) ** 3
-#     integral = integrate(expression, x)
-#     breakpoint()
-
-
 def test_x2_sqrt_1_x3():
     expression = x**2 / sqrt(1 - x**3)
     expected = -2 * sqrt(1 - x**3) / 3

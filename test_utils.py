@@ -1,4 +1,4 @@
-from typing import Optional, Tuple, Type
+from typing import Optional, Tuple, Type, Union
 
 from src.simpy.expr import (
     Expr,
@@ -32,17 +32,25 @@ def assert_definite_integral(integrand: Expr, bounds: tuple, expected: Expr):
 
 
 @cast
-def assert_eq_plusc(a: Expr, b: Expr, *vars):
+def assert_eq_plusc(a: Expr, b: Union[Expr, Tuple[Expr, ...]], *vars):
     """Assert a and b are equal up to a constant, relative to vars.
     If no vars are given, then
     """
+    if isinstance(b, tuple):
+        assert any(_assert_eq_plusc(a, b_, *vars)[0] for b_ in b)
+        return
+    success, diff = _assert_eq_plusc(a, b, *vars)
+    assert success, f"diff = {diff}"
+
+
+def _assert_eq_plusc(a, b, *vars) -> Tuple[bool, Expr]:
     a, b = sectan(a, b)
     diff = a - b
     diff = diff.expand().simplify() if diff.expandable() else diff.simplify()
     if not vars:
-        assert len(diff.symbols()) == 0, f"diff = {diff}"
+        return len(diff.symbols()) == 0, diff
     else:
-        assert all(var not in diff.symbols() for var in vars), f"diff = {diff}"
+        return all(var not in diff.symbols() for var in vars), diff
 
 
 def is_cls_squared(expr, cls) -> bool:
