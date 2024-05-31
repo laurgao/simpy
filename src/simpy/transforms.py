@@ -29,11 +29,12 @@ from .expr import (
     symbols,
     tan,
 )
+from .integral_table import check_integral_table
 from .linalg import invert
 from .polynomial import Polynomial, is_polynomial, polynomial_to_expr, rid_ending_zeros, to_const_polynomial
 from .regex import count, general_contains, kinder_replace, replace, replace_class, replace_factory
 from .simplify import pythagorean_simplification
-from .utils import ExprFn, random_id
+from .utils import ExprFn, eq_with_var, random_id
 
 Number_ = Union[Fraction, int]
 
@@ -70,28 +71,6 @@ class Node:
         return self._children
 
     def add_child(self, child: "Node") -> None:
-
-        def eq_with_var(a, b) -> bool:
-            a_expr, a_var = a
-            b_expr, b_var = b
-
-            def _recursive_call(e1: Expr, e2: Expr) -> bool:
-                if type(e1) != type(e2):
-                    return False
-                if isinstance(e1, Symbol):
-                    if e1 == a_var:
-                        return e2 == b_var
-                    return e1 == e2
-                c1 = e1.children()
-                c2 = e2.children()
-                if c1 == [] or c2 == []:
-                    return e1 == e2
-                if len(c1) != len(c2):
-                    return False
-                return all(_recursive_call(x, y) for x, y in zip(c1, c2))
-
-            return _recursive_call(a_expr, b_expr)
-
         if not child.is_filler:
             parents = _parents(self)
             if any(eq_with_var((p.expr, p.var), (child.expr, child.var)) for p in parents):
@@ -1108,7 +1087,7 @@ class GenericUSub(Transform):
         if not isinstance(node.expr, Prod):
             return False
         for i, term in enumerate(node.expr.terms):
-            integral = _check_if_solveable(term, node.var)
+            integral = check_integral_table(term, node.var)
             if integral is None:
                 continue
             integral = remove_const_factor(integral)
@@ -1295,30 +1274,3 @@ SAFE_TRANSFORMS: List[Type[Transform]] = [
 
 def generate_intermediate_var() -> Symbol:
     return symbols(f"u_{random_id(10)}")
-
-
-STANDARD_TRIG_INTEGRALS: Dict[str, ExprFn] = {
-    "sin(x)": lambda x: -cos(x),
-    "cos(x)": sin,
-    "sec(x)^2": tan,  # Integration calculator says this is a standard integral. + i haven't encountered any transform that can solve this.
-    "sec(x)": lambda x: log(tan(x) + sec(x)),  # not a standard integral but it's fucked so im leaving it (unless?)
-}
-
-
-def _check_if_solveable(integrand: Expr, var: Symbol) -> Optional[Expr]:
-    if not integrand.contains(var):
-        return integrand * var
-    if isinstance(integrand, Power):
-        if integrand.base == var and not integrand.exponent.contains(var):
-            n = integrand.exponent
-            return (1 / (n + 1)) * Power(var, n + 1) if n != -1 else log(abs(integrand.base))
-        if integrand.exponent == var and not integrand.base.contains(var):
-            return 1 / log(integrand.base) * integrand
-    if isinstance(integrand, Symbol) and integrand == var:
-        return Fraction(1 / 2) * Power(var, 2)
-
-    silly_key = repr(replace(integrand, var, Symbol("x")))  # jank but does the job
-    if silly_key in STANDARD_TRIG_INTEGRALS:
-        return STANDARD_TRIG_INTEGRALS[silly_key](var)
-
-    return None

@@ -6,13 +6,14 @@ import warnings
 from collections import defaultdict
 from typing import Callable, Dict, List, Literal, Tuple, Union
 
-from .expr import Expr, Optional, Rat, Symbol, cast, nesting
+from .expr import Expr, Optional, Symbol, cast, nesting
+from .integral_table import check_integral_table
 from .regex import replace, replace_factory
-from .transforms import HEURISTICS, SAFE_TRANSFORMS, Node, _check_if_solveable
+from .transforms import HEURISTICS, SAFE_TRANSFORMS, Node
 
 
 def _check_if_node_solvable(node: Node):
-    answer = _check_if_solveable(node.expr, node.var)
+    answer = check_integral_table(node.expr, node.var)
     if answer is None:
         return
 
