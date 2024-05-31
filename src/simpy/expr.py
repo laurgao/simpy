@@ -878,7 +878,7 @@ class Sum(Associative, Expr):
         for i, term in enumerate(self.terms):
             if i == 0:
                 ongoing_str += term.latex()
-            elif isinstance(term, Prod) and term.is_subtraction:
+            elif term.is_subtraction:
                 ongoing_str += f" - {(-term).latex()}"
             else:
                 ongoing_str += f" + {term.latex()}"
@@ -1943,3 +1943,7 @@ def remove_const_factor(expr: Expr) -> Expr:
             expr._sans_const = Prod(new_terms)
             return expr._sans_const
     return expr
+
+
+def latex(expr: Expr) -> str:
+    return expr.latex()

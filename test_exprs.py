@@ -134,6 +134,7 @@ def test_repr():
 
     # when there are multiple symboless terms, make sure their order is logical
     assert repr(2 + log(2)) == "ln(2) + 2"
+    assert repr(log(4) + Rat(9, 16) - log(2)) == "-ln(2) + ln(4) + 9/16"
     assert repr(Rat(2, 3) ** Rat(2, 3) * -1) == "-(2/3)^(2/3)"
     assert repr(Float(2.2) * Rat(3) * x) == "3*2.2*x"
     # make sure consts show up before pi
