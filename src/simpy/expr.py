@@ -763,13 +763,16 @@ class Sum(Associative, Expr):
     _fields_already_casted = True
 
     @cast
-    def __new__(cls, terms: List[Expr]) -> "Expr":
+    def __new__(cls, terms: List[Expr], *, skip_checks: bool = False) -> "Expr":
         """When a sum is initiated:
         - terms are converted to expr
         - flatten
         - accumulate like terms & constants
         - sort
         """
+        if skip_checks:
+            return super().__new__(cls)
+
         terms = cls._flatten_terms(terms)
         # accumulate all like terms
 
@@ -831,9 +834,11 @@ class Sum(Associative, Expr):
         instance.terms = final_terms
         return instance
 
-    def __init__(self, terms: List[Expr]):
+    def __init__(self, terms: List[Expr], *, skip_checks: bool = False):
         # Overrides the shit that does self.terms = terms because i've already set terms
         # in __new__.
+        if skip_checks:
+            self.terms = terms
         super().__post_init__()
 
     @classmethod
@@ -1056,7 +1061,7 @@ class Prod(Associative, Expr):
     _fields_already_casted = True
 
     @cast
-    def __new__(cls, terms: List[Expr], *, skip_checks=False) -> "Expr":
+    def __new__(cls, terms: List[Expr], *, skip_checks: bool = False) -> "Expr":
         if skip_checks:
             instance = super().__new__(cls)
             instance.terms = terms
@@ -1086,7 +1091,7 @@ class Prod(Associative, Expr):
         instance.terms = new_terms
         return instance
 
-    def __init__(self, terms: List[Expr], skip_checks=False):
+    def __init__(self, terms: List[Expr], *, skip_checks: bool = False):
         # terms are already set in __new__
         super().__post_init__()
 
@@ -1276,7 +1281,7 @@ class Power(Expr):
         return "{" + _term_latex(self.base) + "}^{" + _term_latex(self.exponent) + "}"
 
     @cast
-    def __new__(cls, base: Expr, exponent: Expr, *, skip_checks=False) -> "Expr":
+    def __new__(cls, base: Expr, exponent: Expr, *, skip_checks: bool = False) -> "Expr":
         b = base
         x = exponent
 
@@ -1338,7 +1343,7 @@ class Power(Expr):
 
         return default_return
 
-    def __init__(self, base: Expr, exponent: Expr, skip_checks=False):
+    def __init__(self, base: Expr, exponent: Expr, skip_checks: bool = False):
         self.__post_init__()
 
     def _power_expandable(self) -> bool:
@@ -1466,7 +1471,10 @@ class log(Expr):
             return "\\log_{" + self.base.latex() + "}\\left( " + self.inner.latex() + " \\right)"
 
     @cast
-    def __new__(cls, inner: Expr, base: Expr = e):
+    def __new__(cls, inner: Expr, base: Expr = e, *, skip_checks: bool = False):
+        if skip_checks:
+            super().__new__(cls)
+
         if inner == 1:
             return Rat(0)
         if inner == base:
@@ -1480,6 +1488,11 @@ class log(Expr):
                 return Float(math.log(inner.value) / math.log(base.value))
 
         return super().__new__(cls)
+
+    def __init__(self, inner: Expr, base: Expr = e, *, skip_checks: bool = False):
+        self.inner = inner
+        self.base = base
+        self.__post_init__()
 
     def diff(self, var) -> Expr:
         return self.inner.diff(var) / self.inner
@@ -1604,7 +1617,10 @@ class TrigFunction(SingleFunc, ABC):
         return f"{'a' if self.is_inverse else ''}{self.func}"
 
     @cast
-    def __new__(cls, inner: Expr) -> "Expr":
+    def __new__(cls, inner: Expr, *, skip_checks: bool = False) -> "Expr":
+        if skip_checks:
+            return super().__new__(cls)
+
         # 1. Check if inner is a special value
         if inner == 0:
             return cls.special_values["0"]
@@ -1657,11 +1673,20 @@ class TrigFunction(SingleFunc, ABC):
 
         return super().__new__(cls)
 
+    def __init__(self, inner: Expr, *, skip_checks: bool = False):
+        super().__init__(inner)
+
     def _evalf(self, subs):
         inner = self.inner._evalf(subs)
         if isinstance(inner, Num):
             return Float(self._func(inner.value))
         return self.__class__(inner)
+
+    def latex(self) -> str:
+        if not self.is_inverse:
+            return super().latex()
+
+        return "\\" + self.func + "^{-1}\\left(" + self.inner.latex() + "\\right)"
 
 
 class TrigFunctionNotInverse(TrigFunction, ABC):
