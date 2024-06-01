@@ -1124,9 +1124,11 @@ class Prod(Associative, Expr):
         return "*".join(map(_term_repr, self.terms))
 
     def latex(self) -> str:
+        from .latex import bracketfy
+
         def _term_latex(term: Expr):
             if isinstance(term, Sum):
-                return "\\left(" + term.latex() + "\\right)"
+                return bracketfy(term)
             return term.latex()
 
         # special case for subtraction:
@@ -1267,9 +1269,11 @@ class Power(Expr):
         return f"{_term_repr(self.base)}^{_term_repr(self.exponent)}"
 
     def latex(self) -> str:
+        from .latex import bracketfy
+
         def _term_latex(term: Expr):
             if isinstance(term, Sum) or isinstance(term, Prod):
-                return "\\left(" + term.latex() + "\\right)"
+                return bracketfy(term)
             return term.latex()
 
         # special case for sqrt
@@ -1414,7 +1418,9 @@ class SingleFunc(Expr):
         return _repr(self.inner, self._label)
 
     def latex(self) -> str:
-        return "\\text{" + self._label + "}\\left(" + self.inner.latex() + "\\right)"
+        from .latex import bracketfy
+
+        return "\\text{" + self._label + "} " + bracketfy(self.inner)
 
     @cast
     def subs(self, subs: Dict[str, "Expr"]):
@@ -1465,10 +1471,12 @@ class log(Expr):
 
     def latex(self) -> str:
         # Have informally tested this; does the job.
+        from .latex import bracketfy
+
         if self.base == e:
-            return "\\ln\\left( " + self.inner.latex() + " \\right)"
+            return "\\ln " + bracketfy(self.inner)
         else:
-            return "\\log_{" + self.base.latex() + "}\\left( " + self.inner.latex() + " \\right)"
+            return "\\log_{" + self.base.latex() + "} " + bracketfy(self.inner)
 
     @cast
     def __new__(cls, inner: Expr, base: Expr = e, *, skip_checks: bool = False):
@@ -1683,10 +1691,13 @@ class TrigFunction(SingleFunc, ABC):
         return self.__class__(inner)
 
     def latex(self) -> str:
-        if not self.is_inverse:
-            return super().latex()
+        from .latex import bracketfy
 
-        return "\\" + self.func + "^{-1}\\left(" + self.inner.latex() + "\\right)"
+        inner = bracketfy(self.inner)
+        if not self.is_inverse:
+            return "\\" + self.func + " " + inner
+
+        return "\\" + self.func + "^{-1} " + inner
 
 
 class TrigFunctionNotInverse(TrigFunction, ABC):
@@ -1889,7 +1900,8 @@ class Abs(SingleFunc):
         return "abs"
 
     def latex(self) -> str:
-        return "\\left|" + self.inner.latex() + "\\right|"
+        from .latex import bracketfy
+        return bracketfy(self.inner, bracket="||")
 
     @cast
     def __new__(cls, inner: Expr) -> Expr:

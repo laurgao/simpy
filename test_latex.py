@@ -15,5 +15,10 @@ def test_sum_subtraction_bug():
 
 def test_readme():
     # I'll test some examples in the readme I guess.
-    assert_latex(atan(x), "\\tan^{-1}\\left(x\\right)")
-    assert_latex(2 * log(abs(1 - x)) - x / 2, "2 \\cdot \\ln\\left( \\left| -x + 1 \\right| \\right) - \\frac{x}{2}")
+    assert_latex(sec(2 * x), "\\sec(2 \\cdot x)")
+    assert_latex(atan(x), "\\tan^{-1}(x)")
+    assert_latex(2 * log(abs(1 - x)) - x / 2, "2 \\cdot \\ln (| -x + 1 |) - \\frac{x}{2}")
+
+
+def test_big_frac():
+    assert_latex(tan((2 + x) / (x + 3)), "\\tan \left(\\frac{x + 2}{x + 3} \\right)")
