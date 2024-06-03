@@ -45,7 +45,7 @@ def assert_eq_plusc(a: Expr, b: Union[Expr, Tuple[Expr, ...]], *vars):
 
 def _assert_eq_plusc(a, b, *vars) -> Tuple[bool, Expr]:
     diff = a - b
-    if len(diff.symbols()) == 0 or all(var not in diff.symbols() for var in vars):
+    if len(diff.symbols()) == 0 or vars and all(var not in diff.symbols() for var in vars):
         return True, None
     diff = diff.expand().simplify() if diff.expandable() else diff.simplify()
     if not vars:

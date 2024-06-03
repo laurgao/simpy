@@ -564,6 +564,10 @@ class Rat(Num, Expr):
 
     ###
 
+    @cast
+    def __floordiv__(self, other) -> "Rat":
+        return Rat(self.value // other.value)
+
     def latex(self) -> str:
         if self.value.denominator == 1:
             return f"{self.value}"

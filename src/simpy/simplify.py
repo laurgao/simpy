@@ -291,21 +291,21 @@ def is_class_squared(expr: Expr, cls: Type[SingleFunc]) -> bool:
     return is_cls_squared(expr, cls)
 
 
-def sectan(a: Expr) -> Optional[Expr]:
+def sectan(sum: Expr) -> Optional[Expr]:
     """If a sum has some sec^n(x) and tan^n(x) where n is even, and rewriting the secs as tans with the
     pythagorean identity sec^2(x) = 1 + tan^2(x) allows cancellation of terms, then do the simplification.
+
+    Assumes sum.has(TrigFunctionNotInverse) is already satisfied
     """
-    if not isinstance(a, Sum):
-        return
-    if not a.has(TrigFunctionNotInverse):
+    if not isinstance(sum, Sum):
         return
 
     secs = []
     tans = []
     others = []
-    for t in a.terms:
+    for t in sum.terms:
         if is_class_squared(t, sec):
-            secs.append(secs)
+            secs.append(t)
         elif is_class_squared(t, tan):
             tans.append(t)
         else:
@@ -328,7 +328,11 @@ def sectan(a: Expr) -> Optional[Expr]:
         tans.extend(new.terms)
 
     new_sum = Sum(tans + others)
-    if len(new_sum.terms) < a.terms:
+    if not isinstance(new_sum, Sum):
+        # This must mean that we simplified the sum into one term
+        return new_sum
+
+    if len(new_sum.terms) < sum.terms:
         return new_sum
 
 
