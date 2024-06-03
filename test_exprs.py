@@ -330,10 +330,14 @@ def test_singlefuncs_auto_simplify_special_values():
     assert_eq_strict(atan(cot(3 * x + 2)), 1 / (3 * x + 2))
 
 
-@pytest.mark.xfail
 def test_trigfuncs_auto_simplify_plus_2pis():
     assert_eq_strict(cos(x + 2 * pi), cos(x))
     assert_eq_strict(sin(x + e**y + 4 * pi), sin(x + e**y))
+
+    # Period of tan is pi
+    assert_eq_strict(tan(x + pi), tan(x))
+
+    # Inverses aren't periodic
     assert_eq_strict(asin(x + 2 * pi), asin(x + 2 * pi))
 
 

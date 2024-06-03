@@ -1687,8 +1687,10 @@ class TrigFunction(SingleFunc, ABC):
                 for t in inner.terms:
                     if t.has(Pi):
                         coeff = t / pi
-                        if isinstance(coeff, Rat) and coeff % 2 == 0:
-                            return cls(inner - t)
+                        if isinstance(coeff, Rat) and coeff % cls._period == 0:
+                            instance = super().__new__(cls)
+                            instance.inner = inner - t
+                            return instance
 
         # 2. Check if inner is trigfunction
         # things like sin(cos(x)) cannot be more simplified.
@@ -1721,10 +1723,15 @@ class TrigFunction(SingleFunc, ABC):
         if isinstance(inner, Float):
             return Float(cls._func(inner.value))
 
-        return super().__new__(cls)
+        instance = super().__new__(cls)
+        instance.inner = inner
+        return instance
 
     def __init__(self, inner: Expr, *, skip_checks: bool = False):
-        super().__init__(inner)
+        if skip_checks:
+            self.inner = inner
+
+        super().__post_init__()
 
     def _evalf(self, subs):
         inner = self.inner._evalf(subs)
@@ -1744,6 +1751,7 @@ class TrigFunction(SingleFunc, ABC):
 
 class TrigFunctionNotInverse(TrigFunction, ABC):
     is_inverse = False
+    _period = 2
 
 
 class sin(TrigFunctionNotInverse):
@@ -1817,9 +1825,6 @@ class cos(TrigFunctionNotInverse):
     def diff(self, var: Symbol) -> Expr:
         return -sin(self.inner) * self.inner.diff(var)
 
-    def __init__(self, inner):
-        super().__post_init__()
-
     @cast
     def __new__(cls, inner: Expr) -> "Expr":
         # bruh this is so complicated because doing cos(new, -inner) just sets inner as the original inner because of passing
@@ -1827,7 +1832,6 @@ class cos(TrigFunctionNotInverse):
         new = super().__new__(cls, inner)
         if not isinstance(new, cos):
             return new
-        new.inner = inner
         if inner.is_subtraction:
             new.inner = -inner
         return new
@@ -1836,6 +1840,7 @@ class cos(TrigFunctionNotInverse):
 class tan(TrigFunctionNotInverse):
     func = "tan"
     _func = math.tan
+    _period = 1
 
     @classproperty
     def reciprocal_class(cls):
@@ -1885,6 +1890,7 @@ class cot(TrigFunctionNotInverse):
     reciprocal_class = tan
     func = "cot"
     _func = lambda x: 1 / math.tan(x)
+    _period = 1
 
     @classproperty
     def _special_values(cls):
