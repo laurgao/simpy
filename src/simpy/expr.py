@@ -569,9 +569,11 @@ class Rat(Num, Expr):
         return Rat(self.value // other.value)
 
     def latex(self) -> str:
+        from .latex import group
+
         if self.value.denominator == 1:
             return f"{self.value}"
-        return "\\frac{" + str(self.value.numerator) + "}{" + str(self.value.denominator) + "}"
+        return "\\frac " + group(str(self.value.numerator)) + group(str(self.value.denominator))
 
     def reciprocal(self) -> "Rat":
         return Rat(self.value.denominator, self.value.numerator)
@@ -586,6 +588,14 @@ class Rat(Num, Expr):
     @property
     def is_int(self) -> bool:
         return self.value.denominator == 1
+
+    @property
+    def numerator(self) -> "Rat":
+        return Rat(self.value.numerator)
+
+    @property
+    def denominator(self) -> "Rat":
+        return Rat(self.value.denominator)
 
 
 @dataclass
@@ -1154,7 +1164,7 @@ class Prod(Associative, Expr):
         return "*".join(map(_term_repr, self.terms))
 
     def latex(self) -> str:
-        from .latex import bracketfy
+        from .latex import bracketfy, group
 
         def _term_latex(term: Expr):
             if isinstance(term, Sum):
@@ -1171,7 +1181,7 @@ class Prod(Associative, Expr):
         numerator, denominator = self.numerator_denominator
         if denominator != Rat(1):
             # don't need brackets around num/denom bc the frac bar handles it.
-            return "\\frac{" + numerator.latex() + "}{" + denominator.latex() + "}"
+            return "\\frac " + group(numerator) + group(denominator)
 
         return " \\cdot ".join(map(_term_latex, self.terms))
 
@@ -1315,7 +1325,7 @@ class Power(Expr):
         return f"{_term_repr(self.base)}^{_term_repr(self.exponent)}"
 
     def latex(self) -> str:
-        from .latex import bracketfy
+        from .latex import bracketfy, group
 
         def _term_latex(term: Expr):
             if isinstance(term, Sum) or isinstance(term, Prod):
@@ -1328,7 +1338,7 @@ class Power(Expr):
         if self.exponent == Rat(-1, 2):
             return "{\\sqrt{" + self.base.latex() + "}" + "}^{-1}"
 
-        return "{" + _term_latex(self.base) + "}^{" + _term_latex(self.exponent) + "}"
+        return group(_term_latex(self.base)) + "^" + group(_term_latex(self.exponent))
 
     @cast
     def __new__(cls, base: Expr, exponent: Expr, *, skip_checks: bool = False) -> "Expr":
