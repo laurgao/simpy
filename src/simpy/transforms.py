@@ -766,16 +766,26 @@ class ProductToSum(Transform):
         return False
 
     @staticmethod
-    def perform(expr: Union[Prod, Power]) -> Expr:
+    def perform(expr: Union[Prod, Power]) -> Sum:
+        """assumes that ProductToSum.condition is satisfied
+
+        also note this is used in simplify and not in this transform
+        """
         nexpr = remove_const_factor(expr)
         const = expr / nexpr
         if isinstance(nexpr, Prod):
-            return const * ProductToSum._perform_on_terms(*nexpr.terms)
+            return ProductToSum._perform_on_terms(*nexpr.terms, const=const)
 
-        return const * ProductToSum._perform_on_terms(nexpr.base, nexpr.base) ** (nexpr.exponent / 2)
+        b = ProductToSum._perform_on_terms(nexpr.base, nexpr.base, const=const)
+        if nexpr.exponent == 2:
+            return b
+        else:
+            # TODO: make this recursively apply pts till no even power
+            return Power(b, nexpr.exponent / 2).expand()
 
     @staticmethod
     def perform_opt(expr: Expr) -> Optional[Expr]:
+        """optimized for this integral transform"""
         if isinstance(expr, Prod):
             if len(expr.terms) != 2:
                 return
@@ -788,23 +798,26 @@ class ProductToSum(Transform):
             return ProductToSum._perform_on_terms(expr.base, expr.base) ** (expr.exponent / 2)
 
     @staticmethod
-    def _perform_on_terms(a: Union[sin, cos], b: Union[sin, cos]) -> Expr:
+    def _perform_on_terms(a: Union[sin, cos], b: Union[sin, cos], *, const: Optional[Expr] = None) -> Sum:
         # Dream:
         # a_, b_ = any
         # sin(a_) * sin(b_) = cos(a_-b_) - cos(a_+b_)
         # highly readable and very cool
+
+        c = Rat(1, 2) if const is None else const / 2
+
         if isinstance(a, sin) and isinstance(b, cos):
-            temp = sin(a.inner + b.inner) + sin(a.inner - b.inner)
+            temp = sin(a.inner + b.inner) * c + sin(a.inner - b.inner) * c
         elif isinstance(a, cos) and isinstance(b, sin):
-            temp = sin(a.inner + b.inner) - sin(a.inner - b.inner)
+            temp = sin(a.inner + b.inner) * c - sin(a.inner - b.inner) * c
         elif isinstance(a, cos) and isinstance(b, cos):
-            temp = cos(a.inner + b.inner) + cos(a.inner - b.inner)
+            temp = cos(a.inner + b.inner) * c + cos(a.inner - b.inner) * c
         elif isinstance(a, sin) and isinstance(b, sin):
-            temp = cos(a.inner - b.inner) - cos(a.inner + b.inner)
+            temp = cos(a.inner - b.inner) * c - cos(a.inner + b.inner) * c
         else:
             return
 
-        return temp / 2
+        return temp
 
     def check(self, node: Node) -> bool:
         if super().check(node) is False:

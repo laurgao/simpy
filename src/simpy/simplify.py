@@ -1,4 +1,4 @@
-from typing import Iterable, List, Optional, Tuple, Type, Union
+from typing import Any, Iterable, List, Optional, Tuple, Type, Union
 
 from .expr import (
     Abs,
@@ -20,7 +20,7 @@ from .expr import (
     tan,
 )
 from .regex import any_, eq, general_contains, kinder_replace, kinder_replace_many, replace_class, replace_factory
-from .utils import ExprFn
+from .utils import ExprFn, count_symbols
 
 
 def expand_logs(expr: Expr, **kwargs) -> Expr:
@@ -263,7 +263,9 @@ def trig_simplify(expr):
         [_pythagorean_perform, _pythagorean_complex_perform, _reciprocate_trigs],
         overarching_cond=lambda x: x.has(TrigFunctionNotInverse),
     )
-    expr = kinder_replace_many(expr, [_combine_trigs, sectan], overarching_cond=lambda x: x.has(TrigFunctionNotInverse))
+    expr = kinder_replace_many(
+        expr, [_combine_trigs, product_to_sum, sectan], overarching_cond=lambda x: x.has(TrigFunctionNotInverse)
+    )
     return expr
 
 
@@ -328,3 +330,46 @@ def sectan(a: Expr) -> Optional[Expr]:
     new_sum = Sum(tans + others)
     if len(new_sum.terms) < a.terms:
         return new_sum
+
+
+def product_to_sum(expr: Expr) -> Optional[Expr]:
+    from .transforms import ProductToSum
+
+    """Does applying product-to-sum on every term of a sum ... create a cancellation?
+
+    Assumes that expr.has(TrigFunctionNotInverse) == True
+    """
+
+    if not isinstance(expr, Sum):
+        return
+
+    satisfies = [ProductToSum.condition(t) for t in expr.terms]
+    if not count(satisfies, True) >= 2:
+        return
+
+    final_terms = []
+    for boool, term in zip(satisfies, expr.terms):
+        if not boool:
+            final_terms.append(term)
+            continue
+
+        new = ProductToSum.perform(term)
+        final_terms.extend(new.terms)
+
+    final = Sum(final_terms)
+
+    # If final is simpler, return final
+    if len(final.terms) < len(expr.terms):
+        return final
+
+    if len(final.terms) == len(expr.terms) and count_symbols(final) < count_symbols(expr):
+        # This ensures that e.g. 2*cos(x)*sin(2*x)/3 - cos(2*x)*sin(x)/3 simplifies to -2*sin(x)**3/3 + sin(x)
+        return final
+
+
+def count(l: list, query: Any) -> int:
+    c = 0
+    for el in l:
+        if el == query:
+            c += 1
+    return c

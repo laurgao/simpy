@@ -60,16 +60,10 @@ These didn't pass when I didn't have 'heuristic simplifications'
 """
 
 
-def product_to_sum(expr):
-    return replace_factory(ProductToSum.condition, ProductToSum.perform)(expr)
-
-
 def test_pts():
     # applying product-to-sum makes this simpler
     e1 = 2 * cos(x) * sin(2 * x) / 3 - sin(x) * cos(2 * x) / 3
     e2 = sin(3 * x) / 6 + sin(x) / 2
-    e1 = product_to_sum(e1)
-    e2 = product_to_sum(e2)
     assert_eq_value(e1, e2)
 
 

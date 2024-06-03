@@ -41,3 +41,9 @@ def eq_with_var(a: Tuple[Expr, Symbol], b: Tuple[Expr, Symbol]) -> bool:
         return all(_recursive_call(x, y) for x, y in zip(c1, c2))
 
     return _recursive_call(a_expr, b_expr)
+
+
+def count_symbols(expr: Expr) -> int:
+    from .regex import general_count
+
+    return general_count(expr, lambda x: isinstance(x, Symbol))

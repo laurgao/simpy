@@ -109,11 +109,8 @@ def test_misc():
 
     # we used to get this wrong from a byparts error
     integrand = cos(x) * cos(2 * x)
-    expected_ans = 2 * cos(x) * sin(2 * x) / 3 - sin(x) * cos(2 * x) / 3
-    expected_ans_2 = (sin(3 * x) / 3 + sin(x)) / 2
-    # these 2 answers are exactly equivalent but i literally can't even see why.
-    ans = integrate(integrand)
-    assert ans == expected_ans or ans == expected_ans_2
+    expected_ans = sin(3 * x) / 6 + sin(x) / 2
+    assert_integral(integrand, expected_ans)
 
 
 def test_integrate_with_completing_the_square():
