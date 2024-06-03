@@ -480,10 +480,16 @@ class InverseTrigUSub(USub):
         intermediate = generate_intermediate_var()
         cls, q, dy_dx, var_change = self._table[self._key]
         dy_dx = dy_dx(intermediate)
-        new_thing = replace(node.expr, node.var, cls(intermediate)) * dy_dx
-        node.add_child(Node(new_thing, intermediate, self, node))
-
+        new_integrand = replace(node.expr, node.var, cls(intermediate)) * dy_dx
+        new_node = Node(new_integrand, intermediate, self, node)
+        node.add_child(new_node)
         self._u = var_change(node.var)
+
+        # I feel like you already know that it's gonna be pythagorean-simplified so why not just tack
+        # that on right now
+        second_transform = Simplify()
+        if second_transform.check(new_node):
+            second_transform.forward(new_node)
 
     def check(self, node: Node) -> bool:
         if super().check(node) is False:
@@ -1224,10 +1230,10 @@ class Simplify(Transform):
         if super().check(node) is False:
             return False
 
-        t = _get_last_heuristic_transform(node)
-        # The point of these 2 transforms is to rewrite the expr in a not necessarily 'simpler' form.
-        if isinstance(t, (RewritePythagorean, RewriteTrig)):
-            return False
+        # t = _get_last_heuristic_transform(node)
+        # # The point of these 2 transforms is to rewrite the expr in a not necessarily 'simpler' form.
+        # if isinstance(t, (RewritePythagorean, RewriteTrig, Simplify)):
+        #     return False
         ans, success = pythagorean_simplification(node.expr, verbose=True)
         if success:
             self._ans = ans
@@ -1243,8 +1249,9 @@ class Simplify(Transform):
 
 # Leave RewriteTrig, InverseTrigUSub near the end bc they are deprioritized
 # and more fucky
+# Do not include Simplify because it only is needed after InverseTrigUSub, and we just manually
+# trigger it.
 HEURISTICS: List[Type[Transform]] = [
-    Simplify,
     PolynomialUSub,
     CompoundAngle,
     SinUSub,
