@@ -1,7 +1,6 @@
 import pytest
 
 from src.simpy import *
-from src.simpy.transforms import ProductToSum, replace_factory
 from test_utils import *
 
 
@@ -30,12 +29,11 @@ def test_simplify_sin2x_plus_cos2x():
     assert_eq_strict(simplified, 2 * y)
 
 
-@pytest.mark.xfail
 def test_simplify_one_minus_sin_squared():
     # this one used to fail when I only allowed the entire sum to be 1 - sin^2(...)
-    expr = sin(x) ** 2 - 5 * cos(x) ** 2 + -1
+    expr = sin(x) ** 2 - 5 * cos(x) ** 2 - 1
     simplified = expr.simplify()
-    assert_eq_strict(simplified, -4 * cos(x))
+    assert_eq_strict(simplified, -6 * cos(x) ** 2)
 
 
 def test_one_plus_tan_squared():
