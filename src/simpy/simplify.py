@@ -3,9 +3,11 @@ from typing import Iterable, List, Optional, Tuple, Type, Union
 from .expr import (
     Abs,
     Expr,
+    Num,
     Power,
     Prod,
     Rat,
+    SingleFunc,
     Sum,
     TrigFunction,
     TrigFunctionNotInverse,
@@ -17,7 +19,7 @@ from .expr import (
     sin,
     tan,
 )
-from .regex import any_, eq, general_contains, kinder_replace, kinder_replace_many, replace_class
+from .regex import any_, eq, general_contains, kinder_replace, kinder_replace_many, replace_class, replace_factory
 from .utils import ExprFn
 
 
@@ -261,5 +263,68 @@ def trig_simplify(expr):
         [_pythagorean_perform, _pythagorean_complex_perform, _reciprocate_trigs],
         overarching_cond=lambda x: x.has(TrigFunctionNotInverse),
     )
-    expr = kinder_replace_many(expr, [_combine_trigs])
+    expr = kinder_replace_many(expr, [_combine_trigs, sectan], overarching_cond=lambda x: x.has(TrigFunctionNotInverse))
     return expr
+
+
+def is_cls_squared(expr, cls) -> bool:
+    return (
+        isinstance(expr, Power)
+        and isinstance(expr.base, cls)
+        and isinstance(expr.exponent, Rat)
+        and expr.exponent % 2 == 0
+    )
+
+
+def remove_num_factor(expr):
+    if not isinstance(expr, Prod):
+        return expr
+
+    x = [t for t in expr.terms if not isinstance(t, Num)]
+    return Prod(x, skip_checks=True) if len(x) > 1 else x[0] if len(x) == 1 else Rat(1)
+
+
+def is_class_squared(expr: Expr, cls: Type[SingleFunc]) -> bool:
+    expr = remove_num_factor(expr)
+    return is_cls_squared(expr, cls)
+
+
+def sectan(a: Expr) -> Optional[Expr]:
+    """If a sum has some sec^n(x) and tan^n(x) where n is even, and rewriting the secs as tans with the
+    pythagorean identity sec^2(x) = 1 + tan^2(x) allows cancellation of terms, then do the simplification.
+    """
+    if not isinstance(a, Sum):
+        return
+    if not a.has(TrigFunctionNotInverse):
+        return
+
+    secs = []
+    tans = []
+    others = []
+    for t in a.terms:
+        if is_class_squared(t, sec):
+            secs.append(secs)
+        elif is_class_squared(t, tan):
+            tans.append(t)
+        else:
+            others.append(t)
+
+    if not secs or not tans:
+        return
+
+    # convert secs to tans
+    condition = lambda x: is_cls_squared(x, sec)
+
+    def perform(e: Power):
+        n = e.exponent
+        return (1 + tan(e.base.inner) ** 2) ** (n // 2)
+
+    for s in secs:
+        new = replace_factory(condition, perform)(s)
+        new = new.expand() if new.expandable() else s
+        assert isinstance(new, Sum)
+        tans.extend(new.terms)
+
+    new_sum = Sum(tans + others)
+    if len(new_sum.terms) < a.terms:
+        return new_sum

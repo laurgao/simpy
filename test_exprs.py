@@ -78,6 +78,16 @@ def test_basic_power_simplification():
     assert_eq_strict(2 / sqrt(2), sqrt(2))
 
 
+def test_expandable():
+    assert not (x / (x + 2)).expandable()
+    assert ((x + 2) / x).expandable()
+    assert log(x * (x + 2)).expandable()
+    assert (log(x * (x + 2)) * 3).expandable()
+
+    # This one requires seeing a sum in the denominator
+    assert (y / (x * (x + 6))).expandable()
+
+
 def test_expand_prod():
     # make sure an expandable denominator gets expanded
     assert_eq_strict((1 / (x * (x + 6))).expand(), 1 / (x**2 + x * 6))  # this can be converted to a power

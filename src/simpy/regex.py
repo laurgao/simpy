@@ -395,6 +395,9 @@ def replace_factory_list(conditions: Iterable[ExprCondition], performs: Iterable
             if condition(expr):
                 return perform(expr)
 
+        if len(expr.children()) == 0:  # Number, Symbol
+            return expr
+
         # find all instances of old in expr and replace with new
         if isinstance(expr, Sum):
             return Sum([_replace(e) for e in expr.terms])
@@ -407,9 +410,6 @@ def replace_factory_list(conditions: Iterable[ExprCondition], performs: Iterable
         # i love recursion
         if isinstance(expr, SingleFunc):
             return expr.__class__(_replace(expr.inner))
-
-        if len(expr.children()) == 0:  # Number, Symbol
-            return expr
 
         raise NotImplementedError(f"replace not implemented for {expr.__class__.__name__}")
 
@@ -446,6 +446,9 @@ def kinder_replace_many(
                 is_hit["hi"] = True
                 return new
 
+        if len(e.children()) == 0:  # Number, Symbol
+            return e
+
         if isinstance(e, Sum):
             return Sum([_replace(t) for t in e.terms])
         if isinstance(e, Prod):
@@ -458,9 +461,6 @@ def kinder_replace_many(
         if isinstance(e, SingleFunc):
             return e.__class__(_replace(e.inner))
 
-        if len(e.children()) == 0:  # Number, Symbol
-            return e
-
         raise NotImplementedError(f"replace not implemented for {e.__class__.__name__}")
 
     ans = _replace(expr)
@@ -470,7 +470,7 @@ def kinder_replace_many(
 def replace(expr: Expr, old: Expr, new: Expr) -> Expr:
     """replaces every instance of `old` (that appears in `expr`) with `new`."""
     # Special case of the general replace_factory that gets used often.
-    condition = lambda e: isinstance(e, old.__class__) and e == old
+    condition = lambda e: e == old
     perform = lambda e: new
     return replace_factory(condition, perform)(expr)
 
@@ -481,6 +481,12 @@ def replace_class(expr: Expr, cls: List[Type[SingleFunc]], newfunc: List[Callabl
     # bc it's not used anywhere else.
     # however it doesn't matter super much rn that everything is structured in :sparkles: prestine condition :sparkles:
     assert all(issubclass(cl, SingleFunc) for cl in cls), "cls must subclass SingleFunc"
+
+    if not any(expr.has(cl) for cl in cls):
+        return expr
+    if len(expr.children()) == 0:  # Number, Symbol
+        return expr
+
     if isinstance(expr, Sum):
         return Sum([replace_class(e, cls, newfunc) for e in expr.terms])
     if isinstance(expr, Prod):
@@ -501,8 +507,5 @@ def replace_class(expr: Expr, cls: List[Type[SingleFunc]], newfunc: List[Callabl
             if isinstance(expr, cl):
                 return newfunc[i](new_inner)
         return expr.__class__(new_inner)
-
-    if len(expr.children()) == 0:  # Number, Symbol
-        return expr
 
     raise NotImplementedError(f"replace_class not implemented for {expr.__class__.__name__}")

@@ -415,11 +415,16 @@ class Num(ABC):
         return isinstance(other, Num) and self.value < other.value
 
     @property
-    def is_subtraction(self):
+    def is_subtraction(self) -> bool:
         return self.value < 0
 
-    def __abs__(self) -> "Rat":
-        return Rat(abs(self.value))
+    @property
+    def is_int(self) -> bool:
+        return False
+
+    @property
+    def sign(self) -> int:
+        return -1 if self.value < 0 else 1
 
 
 def Const(value: Union[float, Fraction, int]) -> Num:
@@ -456,6 +461,10 @@ class Float(Num, Expr):
 
     def __neg__(self) -> "Float":
         return Float(-self.value)
+
+    @property
+    def is_int(self) -> bool:
+        return int(self.value) == self.value
 
 
 class Rat(Num, Expr):
@@ -535,6 +544,23 @@ class Rat(Num, Expr):
 
     def __neg__(self):
         return Rat(-self.value)
+
+    @cast
+    def __pow__(self, other) -> Expr:
+        if isinstance(other, Rat):
+            value = self.value**other.value
+            if isinstance(value, Fraction):
+                return Rat(value)
+        return super().__pow__(other)
+
+    @cast
+    def __rpow__(self, other) -> Expr:
+        if isinstance(other, Rat):
+            return other.__pow__(self)
+        return super().__rpow__(other)
+
+    def __abs__(self) -> "Rat":
+        return Rat(abs(self.value))
 
     ###
 
@@ -944,7 +970,7 @@ class Sum(Associative, Expr):
         common_factors = [f for f in common_factors if f is not None]
 
         def _makeprod(terms: List[Tuple[Expr, int, bool]]):
-            return Rat(1) if len(terms) == 0 else Prod([Power(t[0], t[1] * (1 if t[2] else -1)) for t in terms])
+            return Rat(1) if len(terms) == 0 else Prod([Power(t[0], t[1] if t[2] else -t[1]) for t in terms])
 
         common_expr = _makeprod(common_factors)
         if common_coeff:
@@ -1188,11 +1214,12 @@ class Prod(Associative, Expr):
         # a product is expandable if it contains any sums in the numerator
         # OR if it contains sums in the denominator AND the denominator has another term other than the sum
         # (so, a singular sum in a numerator is expandable but a single sum in the denominator isn't.)
-        num, denom = self.numerator_denominator
-        num_expandable = any(isinstance(t, Sum) for t in num.terms) if isinstance(num, Prod) else isinstance(num, Sum)
-        denom_expandable = any(isinstance(t, Sum) for t in denom.terms) if isinstance(denom, Prod) else False
-        has_sub_expandable = any(t.expandable() for t in self.terms)
-        return num_expandable or denom_expandable or has_sub_expandable
+        if any(isinstance(t, Sum) or t.expandable() for t in self.terms):
+            return True
+        num, den = self.numerator_denominator
+        if isinstance(den, Prod) and any(isinstance(t, Sum) for t in den.terms):
+            return True
+        return False
 
     def _expand(self):
         assert self.expandable(), f"Cannot expand {self}"
@@ -1201,21 +1228,36 @@ class Prod(Associative, Expr):
         if denom.expandable():
             denom = denom.expand()
 
-        # now we assume denom is good and we move on with life as usual
-        if not isinstance(num, Prod):
-            expanded_terms = [num.expand() if num.expandable() else num]
+        if not isinstance(denom, Prod):
+            denom_terms = [Power(denom, -1)]
         else:
-            expanded_terms = [t.expand() if t.expandable() else t for t in num.terms]
-        sums = [t for t in expanded_terms if isinstance(t, Sum)]
-        other = [t for t in expanded_terms if not isinstance(t, Sum)]
-        if not sums:
-            return Prod(expanded_terms) / denom
+            denom_terms = [Power(t.base, -t.exponent) if isinstance(t, Power) else Power(t, -1) for t in denom.terms]
+
+        # now we assume denom is good and we move on with life as usual
+        sums: List[Sum] = []
+        other = []
+        if not isinstance(num, Prod):
+            num = num.expand() if num.expandable() else num
+            if isinstance(num, Sum):
+                sums.append(num)
+            else:
+                return Prod([num] + denom_terms)
+        else:
+            for t in num.terms:
+                te = t.expand() if t.expandable() else t
+                if isinstance(te, Sum):
+                    sums.append(te)
+                else:
+                    other.append(te)
+
+            if not sums:
+                return Prod(sums + other + denom_terms)
 
         # for every combination of terms in the sums, multiply them and add
         # (using itertools)
         final_sum_terms = []
-        for terms in itertools.product(*[s.terms for s in sums]):
-            final_sum_terms.append(Prod(other + list(terms)) / denom)
+        for expanded_terms in itertools.product(*[s.terms for s in sums]):
+            final_sum_terms.append(Prod(other + list(expanded_terms) + denom_terms))
 
         return Sum(final_sum_terms)
 
@@ -1353,7 +1395,7 @@ class Power(Expr):
     def _power_expandable(self) -> bool:
         return (
             isinstance(self.exponent, Rat)
-            and self.exponent.value.denominator == 1
+            and self.exponent.is_int
             and abs(self.exponent) != 1
             and isinstance(self.base, Sum)
         )
@@ -1377,7 +1419,7 @@ class Power(Expr):
             new_term = [Power(t, p) for t, p in zip(new.base.terms, permutation)]
             coefficient = multinomial_coefficient(permutation, n)
             expanded.append(Prod([Rat(coefficient)] + new_term))
-        return Sum(expanded) ** (n / new.exponent.value.numerator)
+        return Sum(expanded) ** new.exponent.sign
 
     @cast
     def subs(self, subs: Dict[str, Expr]):
@@ -1901,6 +1943,7 @@ class Abs(SingleFunc):
 
     def latex(self) -> str:
         from .latex import bracketfy
+
         return bracketfy(self.inner, bracket="||")
 
     @cast
