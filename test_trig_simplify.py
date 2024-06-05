@@ -1,7 +1,6 @@
 import pytest
 
 from src.simpy import *
-from src.simpy.transforms import ProductToSum, replace_factory
 from test_utils import *
 
 
@@ -30,12 +29,11 @@ def test_simplify_sin2x_plus_cos2x():
     assert_eq_strict(simplified, 2 * y)
 
 
-@pytest.mark.xfail
 def test_simplify_one_minus_sin_squared():
     # this one used to fail when I only allowed the entire sum to be 1 - sin^2(...)
-    expr = sin(x) ** 2 - 5 * cos(x) ** 2 + -1
+    expr = sin(x) ** 2 - 5 * cos(x) ** 2 - 1
     simplified = expr.simplify()
-    assert_eq_strict(simplified, -4 * cos(x))
+    assert_eq_strict(simplified, -6 * cos(x) ** 2)
 
 
 def test_one_plus_tan_squared():
@@ -60,16 +58,10 @@ These didn't pass when I didn't have 'heuristic simplifications'
 """
 
 
-def product_to_sum(expr):
-    return replace_factory(ProductToSum.condition, ProductToSum.perform)(expr)
-
-
 def test_pts():
     # applying product-to-sum makes this simpler
     e1 = 2 * cos(x) * sin(2 * x) / 3 - sin(x) * cos(2 * x) / 3
     e2 = sin(3 * x) / 6 + sin(x) / 2
-    e1 = product_to_sum(e1)
-    e2 = product_to_sum(e2)
     assert_eq_value(e1, e2)
 
 
@@ -103,3 +95,12 @@ def test_compound_angle():
     )
     e2 = sin(x) ** 3 / 3 - sin(x) ** 5 / 5
     assert_eq_value(e1, e2)
+
+
+@pytest.mark.xfail
+def test_2():
+    e1 = sin(2 * x) ^ 3 / 48 + 3 * sin(4 * x) / 64 - sin(2 * x) / 4 + 5 * x / 16
+    e2 = (9 * sin(4 * x) - sin(6 * x) - 45 * sin(2 * x) + 60 * x) / 192
+    assert_eq_value(e1, e2)
+    # I've tested that this is the correct answer but it doesn't simplify. needs compound angle or sth
+    # -> need to somehow have sin(2*x)^3/48 + sin(6*x)/192 - sin(2*x)/64 simplify to 0.

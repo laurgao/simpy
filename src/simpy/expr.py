@@ -415,11 +415,16 @@ class Num(ABC):
         return isinstance(other, Num) and self.value < other.value
 
     @property
-    def is_subtraction(self):
+    def is_subtraction(self) -> bool:
         return self.value < 0
 
-    def __abs__(self) -> "Rat":
-        return Rat(abs(self.value))
+    @property
+    def is_int(self) -> bool:
+        return False
+
+    @property
+    def sign(self) -> int:
+        return -1 if self.value < 0 else 1
 
 
 def Const(value: Union[float, Fraction, int]) -> Num:
@@ -456,6 +461,10 @@ class Float(Num, Expr):
 
     def __neg__(self) -> "Float":
         return Float(-self.value)
+
+    @property
+    def is_int(self) -> bool:
+        return int(self.value) == self.value
 
 
 class Rat(Num, Expr):
@@ -536,12 +545,35 @@ class Rat(Num, Expr):
     def __neg__(self):
         return Rat(-self.value)
 
+    @cast
+    def __pow__(self, other) -> Expr:
+        if isinstance(other, Rat):
+            value = self.value**other.value
+            if isinstance(value, Fraction):
+                return Rat(value)
+        return super().__pow__(other)
+
+    @cast
+    def __rpow__(self, other) -> Expr:
+        if isinstance(other, Rat):
+            return other.__pow__(self)
+        return super().__rpow__(other)
+
+    def __abs__(self) -> "Rat":
+        return Rat(abs(self.value))
+
     ###
 
+    @cast
+    def __floordiv__(self, other) -> "Rat":
+        return Rat(self.value // other.value)
+
     def latex(self) -> str:
+        from .latex import group
+
         if self.value.denominator == 1:
             return f"{self.value}"
-        return "\\frac{" + str(self.value.numerator) + "}{" + str(self.value.denominator) + "}"
+        return "\\frac " + group(str(self.value.numerator)) + group(str(self.value.denominator))
 
     def reciprocal(self) -> "Rat":
         return Rat(self.value.denominator, self.value.numerator)
@@ -556,6 +588,14 @@ class Rat(Num, Expr):
     @property
     def is_int(self) -> bool:
         return self.value.denominator == 1
+
+    @property
+    def numerator(self) -> "Rat":
+        return Rat(self.value.numerator)
+
+    @property
+    def denominator(self) -> "Rat":
+        return Rat(self.value.denominator)
 
 
 @dataclass
@@ -763,13 +803,16 @@ class Sum(Associative, Expr):
     _fields_already_casted = True
 
     @cast
-    def __new__(cls, terms: List[Expr]) -> "Expr":
+    def __new__(cls, terms: List[Expr], *, skip_checks: bool = False) -> "Expr":
         """When a sum is initiated:
         - terms are converted to expr
         - flatten
         - accumulate like terms & constants
         - sort
         """
+        if skip_checks:
+            return super().__new__(cls)
+
         terms = cls._flatten_terms(terms)
         # accumulate all like terms
 
@@ -831,9 +874,11 @@ class Sum(Associative, Expr):
         instance.terms = final_terms
         return instance
 
-    def __init__(self, terms: List[Expr]):
+    def __init__(self, terms: List[Expr], *, skip_checks: bool = False):
         # Overrides the shit that does self.terms = terms because i've already set terms
         # in __new__.
+        if skip_checks:
+            self.terms = terms
         super().__post_init__()
 
     @classmethod
@@ -873,7 +918,7 @@ class Sum(Associative, Expr):
         for i, term in enumerate(self.terms):
             if i == 0:
                 ongoing_str += term.latex()
-            elif isinstance(term, Prod) and term.is_subtraction:
+            elif term.is_subtraction:
                 ongoing_str += f" - {(-term).latex()}"
             else:
                 ongoing_str += f" + {term.latex()}"
@@ -939,7 +984,7 @@ class Sum(Associative, Expr):
         common_factors = [f for f in common_factors if f is not None]
 
         def _makeprod(terms: List[Tuple[Expr, int, bool]]):
-            return Rat(1) if len(terms) == 0 else Prod([Power(t[0], t[1] * (1 if t[2] else -1)) for t in terms])
+            return Rat(1) if len(terms) == 0 else Prod([Power(t[0], t[1] if t[2] else -t[1]) for t in terms])
 
         common_expr = _makeprod(common_factors)
         if common_coeff:
@@ -966,8 +1011,8 @@ def _deconstruct_prod(expr: Expr) -> Tuple[Rat, List[Expr]]:
 
     def _dp(expr: Expr):
         if isinstance(expr, Prod):
-            non_const_factors = [term for term in expr.terms if not isinstance(term, Rat)]
-            const_factors = [term for term in expr.terms if isinstance(term, Rat)]
+            non_const_factors = [term for term in expr.terms if not isinstance(term, AccumulaTuple)]
+            const_factors = [term for term in expr.terms if isinstance(term, AccumulaTuple)]
             coeff = Prod(const_factors) if const_factors else Rat(1)
         else:
             non_const_factors = [expr]
@@ -1056,7 +1101,7 @@ class Prod(Associative, Expr):
     _fields_already_casted = True
 
     @cast
-    def __new__(cls, terms: List[Expr], *, skip_checks=False) -> "Expr":
+    def __new__(cls, terms: List[Expr], *, skip_checks: bool = False) -> "Expr":
         if skip_checks:
             instance = super().__new__(cls)
             instance.terms = terms
@@ -1086,7 +1131,7 @@ class Prod(Associative, Expr):
         instance.terms = new_terms
         return instance
 
-    def __init__(self, terms: List[Expr], skip_checks=False):
+    def __init__(self, terms: List[Expr], *, skip_checks: bool = False):
         # terms are already set in __new__
         super().__post_init__()
 
@@ -1119,9 +1164,11 @@ class Prod(Associative, Expr):
         return "*".join(map(_term_repr, self.terms))
 
     def latex(self) -> str:
+        from .latex import bracketfy, group
+
         def _term_latex(term: Expr):
             if isinstance(term, Sum):
-                return "\\left(" + term.latex() + "\\right)"
+                return bracketfy(term)
             return term.latex()
 
         # special case for subtraction:
@@ -1134,7 +1181,7 @@ class Prod(Associative, Expr):
         numerator, denominator = self.numerator_denominator
         if denominator != Rat(1):
             # don't need brackets around num/denom bc the frac bar handles it.
-            return "\\frac{" + numerator.latex() + "}{" + denominator.latex() + "}"
+            return "\\frac " + group(numerator) + group(denominator)
 
         return " \\cdot ".join(map(_term_latex, self.terms))
 
@@ -1181,11 +1228,12 @@ class Prod(Associative, Expr):
         # a product is expandable if it contains any sums in the numerator
         # OR if it contains sums in the denominator AND the denominator has another term other than the sum
         # (so, a singular sum in a numerator is expandable but a single sum in the denominator isn't.)
-        num, denom = self.numerator_denominator
-        num_expandable = any(isinstance(t, Sum) for t in num.terms) if isinstance(num, Prod) else isinstance(num, Sum)
-        denom_expandable = any(isinstance(t, Sum) for t in denom.terms) if isinstance(denom, Prod) else False
-        has_sub_expandable = any(t.expandable() for t in self.terms)
-        return num_expandable or denom_expandable or has_sub_expandable
+        if any(isinstance(t, Sum) or t.expandable() for t in self.terms):
+            return True
+        num, den = self.numerator_denominator
+        if isinstance(den, Prod) and any(isinstance(t, Sum) for t in den.terms):
+            return True
+        return False
 
     def _expand(self):
         assert self.expandable(), f"Cannot expand {self}"
@@ -1194,21 +1242,36 @@ class Prod(Associative, Expr):
         if denom.expandable():
             denom = denom.expand()
 
-        # now we assume denom is good and we move on with life as usual
-        if not isinstance(num, Prod):
-            expanded_terms = [num.expand() if num.expandable() else num]
+        if not isinstance(denom, Prod):
+            denom_terms = [Power(denom, -1)]
         else:
-            expanded_terms = [t.expand() if t.expandable() else t for t in num.terms]
-        sums = [t for t in expanded_terms if isinstance(t, Sum)]
-        other = [t for t in expanded_terms if not isinstance(t, Sum)]
-        if not sums:
-            return Prod(expanded_terms) / denom
+            denom_terms = [Power(t.base, -t.exponent) if isinstance(t, Power) else Power(t, -1) for t in denom.terms]
+
+        # now we assume denom is good and we move on with life as usual
+        sums: List[Sum] = []
+        other = []
+        if not isinstance(num, Prod):
+            num = num.expand() if num.expandable() else num
+            if isinstance(num, Sum):
+                sums.append(num)
+            else:
+                return Prod([num] + denom_terms)
+        else:
+            for t in num.terms:
+                te = t.expand() if t.expandable() else t
+                if isinstance(te, Sum):
+                    sums.append(te)
+                else:
+                    other.append(te)
+
+            if not sums:
+                return Prod(sums + other + denom_terms)
 
         # for every combination of terms in the sums, multiply them and add
         # (using itertools)
         final_sum_terms = []
-        for terms in itertools.product(*[s.terms for s in sums]):
-            final_sum_terms.append(Prod(other + list(terms)) / denom)
+        for expanded_terms in itertools.product(*[s.terms for s in sums]):
+            final_sum_terms.append(Prod(other + list(expanded_terms) + denom_terms))
 
         return Sum(final_sum_terms)
 
@@ -1262,9 +1325,11 @@ class Power(Expr):
         return f"{_term_repr(self.base)}^{_term_repr(self.exponent)}"
 
     def latex(self) -> str:
+        from .latex import bracketfy, group
+
         def _term_latex(term: Expr):
             if isinstance(term, Sum) or isinstance(term, Prod):
-                return "\\left(" + term.latex() + "\\right)"
+                return bracketfy(term)
             return term.latex()
 
         # special case for sqrt
@@ -1273,10 +1338,10 @@ class Power(Expr):
         if self.exponent == Rat(-1, 2):
             return "{\\sqrt{" + self.base.latex() + "}" + "}^{-1}"
 
-        return "{" + _term_latex(self.base) + "}^{" + _term_latex(self.exponent) + "}"
+        return group(_term_latex(self.base)) + "^" + group(_term_latex(self.exponent))
 
     @cast
-    def __new__(cls, base: Expr, exponent: Expr, *, skip_checks=False) -> "Expr":
+    def __new__(cls, base: Expr, exponent: Expr, *, skip_checks: bool = False) -> "Expr":
         b = base
         x = exponent
 
@@ -1338,13 +1403,13 @@ class Power(Expr):
 
         return default_return
 
-    def __init__(self, base: Expr, exponent: Expr, skip_checks=False):
+    def __init__(self, base: Expr, exponent: Expr, skip_checks: bool = False):
         self.__post_init__()
 
     def _power_expandable(self) -> bool:
         return (
             isinstance(self.exponent, Rat)
-            and self.exponent.value.denominator == 1
+            and self.exponent.is_int
             and abs(self.exponent) != 1
             and isinstance(self.base, Sum)
         )
@@ -1368,7 +1433,7 @@ class Power(Expr):
             new_term = [Power(t, p) for t, p in zip(new.base.terms, permutation)]
             coefficient = multinomial_coefficient(permutation, n)
             expanded.append(Prod([Rat(coefficient)] + new_term))
-        return Sum(expanded) ** (n / new.exponent.value.numerator)
+        return Sum(expanded) ** new.exponent.sign
 
     @cast
     def subs(self, subs: Dict[str, Expr]):
@@ -1409,7 +1474,9 @@ class SingleFunc(Expr):
         return _repr(self.inner, self._label)
 
     def latex(self) -> str:
-        return "\\text{" + self._label + "}\\left(" + self.inner.latex() + "\\right)"
+        from .latex import bracketfy
+
+        return "\\text{" + self._label + "} " + bracketfy(self.inner)
 
     @cast
     def subs(self, subs: Dict[str, "Expr"]):
@@ -1460,13 +1527,18 @@ class log(Expr):
 
     def latex(self) -> str:
         # Have informally tested this; does the job.
+        from .latex import bracketfy
+
         if self.base == e:
-            return "\\ln\\left( " + self.inner.latex() + " \\right)"
+            return "\\ln " + bracketfy(self.inner)
         else:
-            return "\\log_{" + self.base.latex() + "}\\left( " + self.inner.latex() + " \\right)"
+            return "\\log_{" + self.base.latex() + "} " + bracketfy(self.inner)
 
     @cast
-    def __new__(cls, inner: Expr, base: Expr = e):
+    def __new__(cls, inner: Expr, base: Expr = e, *, skip_checks: bool = False):
+        if skip_checks:
+            super().__new__(cls)
+
         if inner == 1:
             return Rat(0)
         if inner == base:
@@ -1480,6 +1552,11 @@ class log(Expr):
                 return Float(math.log(inner.value) / math.log(base.value))
 
         return super().__new__(cls)
+
+    def __init__(self, inner: Expr, base: Expr = e, *, skip_checks: bool = False):
+        self.inner = inner
+        self.base = base
+        self.__post_init__()
 
     def diff(self, var) -> Expr:
         return self.inner.diff(var) / self.inner
@@ -1527,7 +1604,7 @@ TrigStr = Literal["sin", "cos", "tan", "sec", "csc", "cot"]
 
 
 class TrigFunction(SingleFunc, ABC):
-    is_inverse: bool = False  # class property
+    is_inverse: bool  # class property
 
     _SPECIAL_KEYS = [
         "0",
@@ -1604,7 +1681,10 @@ class TrigFunction(SingleFunc, ABC):
         return f"{'a' if self.is_inverse else ''}{self.func}"
 
     @cast
-    def __new__(cls, inner: Expr) -> "Expr":
+    def __new__(cls, inner: Expr, *, skip_checks: bool = False) -> "Expr":
+        if skip_checks:
+            return super().__new__(cls)
+
         # 1. Check if inner is a special value
         if inner == 0:
             return cls.special_values["0"]
@@ -1621,8 +1701,10 @@ class TrigFunction(SingleFunc, ABC):
                 for t in inner.terms:
                     if t.has(Pi):
                         coeff = t / pi
-                        if isinstance(coeff, Rat) and coeff % 2 == 0:
-                            return cls(inner - t)
+                        if isinstance(coeff, Rat) and coeff % cls._period == 0:
+                            instance = super().__new__(cls)
+                            instance.inner = inner - t
+                            return instance
 
         # 2. Check if inner is trigfunction
         # things like sin(cos(x)) cannot be more simplified.
@@ -1655,7 +1737,15 @@ class TrigFunction(SingleFunc, ABC):
         if isinstance(inner, Float):
             return Float(cls._func(inner.value))
 
-        return super().__new__(cls)
+        instance = super().__new__(cls)
+        instance.inner = inner
+        return instance
+
+    def __init__(self, inner: Expr, *, skip_checks: bool = False):
+        if skip_checks:
+            self.inner = inner
+
+        super().__post_init__()
 
     def _evalf(self, subs):
         inner = self.inner._evalf(subs)
@@ -1663,8 +1753,22 @@ class TrigFunction(SingleFunc, ABC):
             return Float(self._func(inner.value))
         return self.__class__(inner)
 
+    def latex(self) -> str:
+        from .latex import bracketfy
 
-class sin(TrigFunction):
+        inner = bracketfy(self.inner)
+        if not self.is_inverse:
+            return "\\" + self.func + " " + inner
+
+        return "\\" + self.func + "^{-1} " + inner
+
+
+class TrigFunctionNotInverse(TrigFunction, ABC):
+    is_inverse = False
+    _period = 2
+
+
+class sin(TrigFunctionNotInverse):
     func = "sin"
     _func = math.sin
 
@@ -1703,7 +1807,7 @@ class sin(TrigFunction):
         return super().__new__(cls, inner)
 
 
-class cos(TrigFunction):
+class cos(TrigFunctionNotInverse):
     func = "cos"
     _func = math.cos
 
@@ -1735,9 +1839,6 @@ class cos(TrigFunction):
     def diff(self, var: Symbol) -> Expr:
         return -sin(self.inner) * self.inner.diff(var)
 
-    def __init__(self, inner):
-        super().__post_init__()
-
     @cast
     def __new__(cls, inner: Expr) -> "Expr":
         # bruh this is so complicated because doing cos(new, -inner) just sets inner as the original inner because of passing
@@ -1745,15 +1846,15 @@ class cos(TrigFunction):
         new = super().__new__(cls, inner)
         if not isinstance(new, cos):
             return new
-        new.inner = inner
         if inner.is_subtraction:
             new.inner = -inner
         return new
 
 
-class tan(TrigFunction):
+class tan(TrigFunctionNotInverse):
     func = "tan"
     _func = math.tan
+    _period = 1
 
     @classproperty
     def reciprocal_class(cls):
@@ -1773,7 +1874,7 @@ class tan(TrigFunction):
         return sec(self.inner) ** 2 * self.inner.diff(var)
 
 
-class csc(TrigFunction):
+class csc(TrigFunctionNotInverse):
     func = "csc"
     _func = lambda x: 1 / math.sin(x)
     reciprocal_class = sin
@@ -1786,7 +1887,7 @@ class csc(TrigFunction):
         return (1 / sin(self.inner)).diff(var)
 
 
-class sec(TrigFunction):
+class sec(TrigFunctionNotInverse):
     func = "sec"
     _func = lambda x: 1 / math.cos(x)
     reciprocal_class = cos
@@ -1799,10 +1900,11 @@ class sec(TrigFunction):
         return sec(self.inner) * tan(self.inner) * self.inner.diff(var)
 
 
-class cot(TrigFunction):
+class cot(TrigFunctionNotInverse):
     reciprocal_class = tan
     func = "cot"
     _func = lambda x: 1 / math.tan(x)
+    _period = 1
 
     @classproperty
     def _special_values(cls):
@@ -1860,7 +1962,9 @@ class Abs(SingleFunc):
         return "abs"
 
     def latex(self) -> str:
-        return "\\left|" + self.inner.latex() + "\\right|"
+        from .latex import bracketfy
+
+        return bracketfy(self.inner, bracket="||")
 
     @cast
     def __new__(cls, inner: Expr) -> Expr:
@@ -1911,6 +2015,14 @@ def remove_const_factor(expr: Expr) -> Expr:
             return expr._sans_const
         else:
             new_terms = [t for t in expr.terms if len(t.symbols()) > 0]
-            expr._sans_const = Prod(new_terms)
+            expr._sans_const = (
+                Prod(new_terms, skip_checks=True)
+                if len(new_terms) > 1
+                else new_terms[0] if len(new_terms) == 1 else Rat(1)
+            )
             return expr._sans_const
     return expr
+
+
+def latex(expr: Expr) -> str:
+    return expr.latex()

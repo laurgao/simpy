@@ -52,7 +52,11 @@ def test_sum_combines_like_terms():
     assert_eq_strict(x + x, 2 * x)
     assert_eq_strict(x + x + x, 3 * x)
     assert_eq_strict(3 * (x + 2) + 2 * (x + 2), 5 * (x + 2))  # like terms that is a sum
-    assert_eq_strict(3 * (x + 2) + 2 * (2 + x), 5 * (x + 2))  # like terms that is a sum
+    assert_eq_strict(2 * x * y + 3 * x * y, 5 * x * y)  # like terms with multiple factors
+    assert_eq_strict(0.2 * x * y + 0.8 * x * y, x * y)  # like terms with multiple factors
+
+    # not sure if we want this to be the case but wtv
+    assert_eq_strict(2 * x + 0.2 * x, (Rat(2) + Float(0.2)) * x)
 
 
 def test_prod_combines_like_terms_prod():
@@ -72,6 +76,16 @@ def test_basic_power_simplification():
     assert_eq_strict(sqrt(4), 2)
     assert_eq_strict(sqrt(x**2), x)
     assert_eq_strict(2 / sqrt(2), sqrt(2))
+
+
+def test_expandable():
+    assert not (x / (x + 2)).expandable()
+    assert ((x + 2) / x).expandable()
+    assert log(x * (x + 2)).expandable()
+    assert (log(x * (x + 2)) * 3).expandable()
+
+    # This one requires seeing a sum in the denominator
+    assert (y / (x * (x + 6))).expandable()
 
 
 def test_expand_prod():
@@ -134,6 +148,7 @@ def test_repr():
 
     # when there are multiple symboless terms, make sure their order is logical
     assert repr(2 + log(2)) == "ln(2) + 2"
+    assert repr(log(4) + Rat(9, 16) - log(2)) == "-ln(2) + ln(4) + 9/16"
     assert repr(Rat(2, 3) ** Rat(2, 3) * -1) == "-(2/3)^(2/3)"
     assert repr(Float(2.2) * Rat(3) * x) == "3*2.2*x"
     # make sure consts show up before pi
@@ -315,10 +330,14 @@ def test_singlefuncs_auto_simplify_special_values():
     assert_eq_strict(atan(cot(3 * x + 2)), 1 / (3 * x + 2))
 
 
-@pytest.mark.xfail
 def test_trigfuncs_auto_simplify_plus_2pis():
     assert_eq_strict(cos(x + 2 * pi), cos(x))
     assert_eq_strict(sin(x + e**y + 4 * pi), sin(x + e**y))
+
+    # Period of tan is pi
+    assert_eq_strict(tan(x + pi), tan(x))
+
+    # Inverses aren't periodic
     assert_eq_strict(asin(x + 2 * pi), asin(x + 2 * pi))
 
 

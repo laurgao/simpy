@@ -6,10 +6,10 @@ outside of the cases it is currently used for. Use with caution.
 
 from collections import defaultdict
 from dataclasses import dataclass, fields
-from typing import Any, Callable, Dict, Iterable, List, Literal, Tuple, Type
+from typing import Any, Callable, Dict, Iterable, List, Literal, Optional, Tuple, Type
 
 from .expr import Expr, Power, Prod, Rat, SingleFunc, Sum, Symbol, cast, log
-from .utils import ExprFn, OptionalExprFn, random_id
+from .utils import ExprCondition, ExprFn, OptionalExprFn, random_id
 
 
 class Any_(Expr):
@@ -361,7 +361,7 @@ def contains_cls(expr: Expr, cls: Type[Expr]) -> bool:
     return any(contains_cls(e, cls) for e in expr.children())
 
 
-def general_count(expr: Expr, condition: Callable[[Expr], bool]) -> int:
+def general_count(expr: Expr, condition: ExprCondition) -> int:
     """the `count` function above, except you can specify a condition rather than
     only allowing exact matches.
     """
@@ -370,7 +370,7 @@ def general_count(expr: Expr, condition: Callable[[Expr], bool]) -> int:
     return sum(general_count(e, condition) for e in expr.children())
 
 
-def general_contains(expr: Expr, condition: Callable[[Expr], bool]) -> bool:
+def general_contains(expr: Expr, condition: ExprCondition) -> bool:
     if condition(expr):
         return True
     return any(general_contains(e, condition) for e in expr.children())
@@ -380,7 +380,7 @@ def replace_factory(condition, perform) -> ExprFn:
     return replace_factory_list([condition], [perform])
 
 
-def replace_factory_list(conditions: Iterable[Callable[[Expr], bool]], performs: Iterable[ExprFn]) -> ExprFn:
+def replace_factory_list(conditions: Iterable[ExprCondition], performs: Iterable[ExprFn]) -> ExprFn:
     """
     list of iterable conditions should be ... mutually exclusive or sth
 
@@ -395,6 +395,9 @@ def replace_factory_list(conditions: Iterable[Callable[[Expr], bool]], performs:
             if condition(expr):
                 return perform(expr)
 
+        if len(expr.children()) == 0:  # Number, Symbol
+            return expr
+
         # find all instances of old in expr and replace with new
         if isinstance(expr, Sum):
             return Sum([_replace(e) for e in expr.terms])
@@ -408,9 +411,6 @@ def replace_factory_list(conditions: Iterable[Callable[[Expr], bool]], performs:
         if isinstance(expr, SingleFunc):
             return expr.__class__(_replace(expr.inner))
 
-        if len(expr.children()) == 0:  # Number, Symbol
-            return expr
-
         raise NotImplementedError(f"replace not implemented for {expr.__class__.__name__}")
 
     return _replace
@@ -420,7 +420,9 @@ def kinder_replace(expr: Expr, perform: OptionalExprFn, **kwargs) -> Expr:
     return kinder_replace_many(expr, [perform], **kwargs)
 
 
-def kinder_replace_many(expr: Expr, performs: Iterable[OptionalExprFn], verbose=False, _d=False) -> Expr:
+def kinder_replace_many(
+    expr: Expr, performs: Iterable[OptionalExprFn], verbose=False, overarching_cond: Optional[ExprCondition] = None
+) -> Expr:
     """
     kinder, bc some queries dont have a clean condition.
     ex: checking multiple any_ matches.
@@ -433,11 +435,19 @@ def kinder_replace_many(expr: Expr, performs: Iterable[OptionalExprFn], verbose=
     is_hit = {"hi": False}
 
     def _replace(e: Expr) -> Expr:
+        if overarching_cond is not None and overarching_cond(e) is False:
+            return e
         for p in performs:
             new = p(e)
-            if new:
+            if new is False:
+                # This means do not continue to recurse
+                return e
+            if new is not None:
                 is_hit["hi"] = True
                 return new
+
+        if len(e.children()) == 0:  # Number, Symbol
+            return e
 
         if isinstance(e, Sum):
             return Sum([_replace(t) for t in e.terms])
@@ -451,9 +461,6 @@ def kinder_replace_many(expr: Expr, performs: Iterable[OptionalExprFn], verbose=
         if isinstance(e, SingleFunc):
             return e.__class__(_replace(e.inner))
 
-        if len(e.children()) == 0:  # Number, Symbol
-            return e
-
         raise NotImplementedError(f"replace not implemented for {e.__class__.__name__}")
 
     ans = _replace(expr)
@@ -463,7 +470,7 @@ def kinder_replace_many(expr: Expr, performs: Iterable[OptionalExprFn], verbose=
 def replace(expr: Expr, old: Expr, new: Expr) -> Expr:
     """replaces every instance of `old` (that appears in `expr`) with `new`."""
     # Special case of the general replace_factory that gets used often.
-    condition = lambda e: isinstance(e, old.__class__) and e == old
+    condition = lambda e: e == old
     perform = lambda e: new
     return replace_factory(condition, perform)(expr)
 
@@ -474,6 +481,12 @@ def replace_class(expr: Expr, cls: List[Type[SingleFunc]], newfunc: List[Callabl
     # bc it's not used anywhere else.
     # however it doesn't matter super much rn that everything is structured in :sparkles: prestine condition :sparkles:
     assert all(issubclass(cl, SingleFunc) for cl in cls), "cls must subclass SingleFunc"
+
+    if not any(expr.has(cl) for cl in cls):
+        return expr
+    if len(expr.children()) == 0:  # Number, Symbol
+        return expr
+
     if isinstance(expr, Sum):
         return Sum([replace_class(e, cls, newfunc) for e in expr.terms])
     if isinstance(expr, Prod):
@@ -494,8 +507,5 @@ def replace_class(expr: Expr, cls: List[Type[SingleFunc]], newfunc: List[Callabl
             if isinstance(expr, cl):
                 return newfunc[i](new_inner)
         return expr.__class__(new_inner)
-
-    if len(expr.children()) == 0:  # Number, Symbol
-        return expr
 
     raise NotImplementedError(f"replace_class not implemented for {expr.__class__.__name__}")

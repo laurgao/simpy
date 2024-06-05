@@ -1,8 +1,26 @@
-from typing import Iterable, List, Optional, Tuple, Type, Union
+from typing import Any, Iterable, List, Optional, Tuple, Type, Union
 
-from .expr import Abs, Expr, Power, Prod, Rat, Sum, Symbol, TrigFunction, cos, cot, csc, log, nesting, sec, sin, tan
-from .regex import any_, eq, general_contains, general_count, kinder_replace, kinder_replace_many, replace_class
-from .utils import ExprFn
+from .expr import (
+    Abs,
+    Expr,
+    Num,
+    Power,
+    Prod,
+    Rat,
+    SingleFunc,
+    Sum,
+    TrigFunction,
+    TrigFunctionNotInverse,
+    cos,
+    cot,
+    csc,
+    log,
+    sec,
+    sin,
+    tan,
+)
+from .regex import any_, eq, general_contains, kinder_replace, kinder_replace_many, replace_class, replace_factory
+from .utils import ExprFn, count_symbols
 
 
 def expand_logs(expr: Expr, **kwargs) -> Expr:
@@ -39,15 +57,14 @@ def _log_perform(expr: Expr) -> Optional[Expr]:
 
 
 def pythagorean_simplification(expr: Expr, **kwargs) -> Expr:
-    verbose = kwargs.get("verbose", False)
-    if not expr.has(TrigFunction):
-        return expr if not verbose else expr, False
     return kinder_replace(expr, _pythagorean_perform, **kwargs)
 
 
 def _pythagorean_perform(sum: Expr) -> Optional[Expr]:
     if not isinstance(sum, Sum):
         return
+    if not sum.has(TrigFunctionNotInverse):  # It is faster to check every time
+        return False
 
     # first check if we have anything squared before we do anything else
     # because the rest of the function, with all the `eq` calls, is expensive.
@@ -115,6 +132,7 @@ def _pythagorean_perform(sum: Expr) -> Optional[Expr]:
 
 
 def _pythagorean_complex_perform(sum: Expr) -> Optional[Expr]:
+    """Assumes sum.has(TrigFunction is true.)"""
     if not isinstance(sum, Sum):
         return
     ##------------ More complex pythagorean simplification across terms ------------##
@@ -128,46 +146,58 @@ def _pythagorean_complex_perform(sum: Expr) -> Optional[Expr]:
             lambda x: 1 / cos(x),
         ],
     )
-    new_sum = rewrite_as_one_fraction(new_sum)
-    if sum == new_sum:
+
+    new_sum = rewrite_as_one_fraction(new_sum, include_const_denoms=False)
+    if new_sum is None:
         return
-    new_sum = kinder_replace(new_sum, _pythagorean_perform)
-    if is_simpler(new_sum, sum):
+    new_sum, success = kinder_replace(new_sum, _pythagorean_perform, verbose=True)
+    if success:
         # assume we're doing this in the ctx of the larger simplification
         return reciprocate_trigs(new_sum)
 
 
-def rewrite_as_one_fraction(sum: Expr) -> Expr:
-    """Rewrites with common denominator"""
+def rewrite_as_one_fraction(sum: Expr, include_const_denoms=True) -> Optional[Expr]:
+    """Rewrites with common denominator
+
+    Returns None if left unchanged.
+    """
     if not isinstance(sum, Sum):
         return sum
     list_of_terms: List[Tuple[Expr, Expr]] = []
+
+    has_den = False
+    common_den_terms = []
+
+    def add_common_den(factors):
+        # remove dupes
+        # this ensures that if two dens have the same factor, do not count it twice.
+        for f in factors:
+            if f not in common_den_terms:
+                common_den_terms.append(f)
+
     for term in sum.terms:
         if isinstance(term, Prod):
             num, den = term.numerator_denominator
+            if den != 1 and (include_const_denoms or len(den.symbols()) > 0):
+                has_den = True
         elif isinstance(term, Power) and isinstance(term.exponent, Rat) and term.exponent.value < 0:
             num, den = Rat(1), Power(term.base, -term.exponent)
+            has_den = True
         else:
             num, den = term, Rat(1)
         list_of_terms.append((num, den))
 
-    common_den = Rat(1)
-    for _, den in list_of_terms:
-        ratio = den / common_den
-        common_den *= ratio
+        if isinstance(den, Prod):
+            add_common_den(den.terms)
+        else:
+            add_common_den([den])
 
+    if has_den == False:
+        return
+
+    common_den = Prod(common_den_terms)
     new_nums = [num * common_den / den for num, den in list_of_terms]
     return Sum(new_nums) / common_den
-
-
-def is_simpler(a, b):
-    """return if a is simpler than b"""
-
-    def count(e):
-        # counts the number of symbols
-        return general_count(e, lambda x: isinstance(x, Symbol))
-
-    return count(a) < count(b)
 
 
 def _reciprocate_trigs(expr: Expr) -> Optional[Expr]:
@@ -218,7 +248,7 @@ def simplify(expr: Expr) -> Expr:
     This is the general one that does all heuristics & is for aesthetics (& comparisons).
     Use more specific simplification functions in integration please.
     """
-    if expr.has(TrigFunction):
+    if expr.has(TrigFunctionNotInverse):
         expr = trig_simplify(expr)
     if expr.has(log):
         expr = expand_logs(expr)
@@ -228,6 +258,122 @@ def simplify(expr: Expr) -> Expr:
 def trig_simplify(expr):
     # reciprocate and combine trigs is last because sometimes the pythag complex simplification will
     # generate new trigs in the num/denom that can be simplified down.
-    expr = kinder_replace_many(expr, [_pythagorean_perform, _pythagorean_complex_perform, _reciprocate_trigs])
-    expr = kinder_replace_many(expr, [_combine_trigs])
+    expr = kinder_replace_many(
+        expr,
+        [_pythagorean_perform, _pythagorean_complex_perform, _reciprocate_trigs],
+        overarching_cond=lambda x: x.has(TrigFunctionNotInverse),
+    )
+    expr = kinder_replace_many(
+        expr, [_combine_trigs, product_to_sum, sectan], overarching_cond=lambda x: x.has(TrigFunctionNotInverse)
+    )
     return expr
+
+
+def is_cls_squared(expr, cls) -> bool:
+    return (
+        isinstance(expr, Power)
+        and isinstance(expr.base, cls)
+        and isinstance(expr.exponent, Rat)
+        and expr.exponent % 2 == 0
+    )
+
+
+def remove_num_factor(expr):
+    if not isinstance(expr, Prod):
+        return expr
+
+    x = [t for t in expr.terms if not isinstance(t, Num)]
+    return Prod(x, skip_checks=True) if len(x) > 1 else x[0] if len(x) == 1 else Rat(1)
+
+
+def is_class_squared(expr: Expr, cls: Type[SingleFunc]) -> bool:
+    expr = remove_num_factor(expr)
+    return is_cls_squared(expr, cls)
+
+
+def sectan(sum: Expr) -> Optional[Expr]:
+    """If a sum has some sec^n(x) and tan^n(x) where n is even, and rewriting the secs as tans with the
+    pythagorean identity sec^2(x) = 1 + tan^2(x) allows cancellation of terms, then do the simplification.
+
+    Assumes sum.has(TrigFunctionNotInverse) is already satisfied
+    """
+    if not isinstance(sum, Sum):
+        return
+
+    secs = []
+    tans = []
+    others = []
+    for t in sum.terms:
+        if is_class_squared(t, sec):
+            secs.append(t)
+        elif is_class_squared(t, tan):
+            tans.append(t)
+        else:
+            others.append(t)
+
+    if not secs or not tans:
+        return
+
+    # convert secs to tans
+    condition = lambda x: is_cls_squared(x, sec)
+
+    def perform(e: Power):
+        n = e.exponent
+        return (1 + tan(e.base.inner) ** 2) ** (n // 2)
+
+    for s in secs:
+        new = replace_factory(condition, perform)(s)
+        new = new.expand() if new.expandable() else s
+        assert isinstance(new, Sum)
+        tans.extend(new.terms)
+
+    new_sum = Sum(tans + others)
+    if not isinstance(new_sum, Sum):
+        # This must mean that we simplified the sum into one term
+        return new_sum
+
+    if len(new_sum.terms) < sum.terms:
+        return new_sum
+
+
+def product_to_sum(expr: Expr) -> Optional[Expr]:
+    from .transforms import ProductToSum
+
+    """Does applying product-to-sum on every term of a sum ... create a cancellation?
+
+    Assumes that expr.has(TrigFunctionNotInverse) == True
+    """
+
+    if not isinstance(expr, Sum):
+        return
+
+    satisfies = [ProductToSum.condition(t) for t in expr.terms]
+    if not count(satisfies, True) >= 2:
+        return
+
+    final_terms = []
+    for boool, term in zip(satisfies, expr.terms):
+        if not boool:
+            final_terms.append(term)
+            continue
+
+        new = ProductToSum.perform(term)
+        final_terms.extend(new.terms)
+
+    final = Sum(final_terms)
+
+    # If final is simpler, return final
+    if len(final.terms) < len(expr.terms):
+        return final
+
+    if len(final.terms) == len(expr.terms) and count_symbols(final) < count_symbols(expr):
+        # This ensures that e.g. 2*cos(x)*sin(2*x)/3 - cos(2*x)*sin(x)/3 simplifies to -2*sin(x)**3/3 + sin(x)
+        return final
+
+
+def count(l: list, query: Any) -> int:
+    c = 0
+    for el in l:
+        if el == query:
+            c += 1
+    return c

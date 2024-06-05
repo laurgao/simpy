@@ -3,8 +3,6 @@ LOL im gonna take a bunch of integral questions from https://www.khanacademy.org
 and make sure simpy can do them
 """
 
-import pytest
-
 from src.simpy.expr import *
 from src.simpy.integration import *
 from test_utils import assert_definite_integral, assert_eq_plusc, assert_eq_value, assert_integral, x, y
@@ -153,6 +151,13 @@ def test_bigger_power_trig():
     expr = sin(x) ** 4
     expected = (sin(4 * x) - 8 * sin(2 * x) + 12 * x) / 32
     assert_integral(expr, expected)
+
+
+def test_bigger_power_trig_2():
+    # both e1 and e2 are correct answers.
+    e1 = sin(2 * x) ** 3 / 48 + 3 * sin(4 * x) / 64 - sin(2 * x) / 4 + 5 * x / 16
+    e2 = (9 * sin(4 * x) - sin(6 * x) - 45 * sin(2 * x) + 60 * x) / 192
+    assert_integral(sin(x) ** 6, (e1, e2))
 
 
 def test_rewrite_pythag():

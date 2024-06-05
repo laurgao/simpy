@@ -3,8 +3,10 @@ coverage:
         project:
             default:
                 # Basic threshold for your project
-                target: 85%
+                target: 90%
         patch:
             default:
                 # Target coverage for the changes in pull requests
-                target: 80%
+                target: 85%
+ignore:
+    - "src/simpy/debug"

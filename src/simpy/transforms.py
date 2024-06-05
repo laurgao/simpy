@@ -16,6 +16,7 @@ from .expr import (
     Sum,
     Symbol,
     TrigFunction,
+    TrigFunctionNotInverse,
     asin,
     atan,
     cos,
@@ -29,11 +30,12 @@ from .expr import (
     symbols,
     tan,
 )
+from .integral_table import check_integral_table
 from .linalg import invert
 from .polynomial import Polynomial, is_polynomial, polynomial_to_expr, rid_ending_zeros, to_const_polynomial
 from .regex import count, general_contains, kinder_replace, replace, replace_class, replace_factory
 from .simplify import pythagorean_simplification
-from .utils import ExprFn, random_id
+from .utils import ExprFn, eq_with_var, random_id
 
 Number_ = Union[Fraction, int]
 
@@ -70,28 +72,6 @@ class Node:
         return self._children
 
     def add_child(self, child: "Node") -> None:
-
-        def eq_with_var(a, b) -> bool:
-            a_expr, a_var = a
-            b_expr, b_var = b
-
-            def _recursive_call(e1: Expr, e2: Expr) -> bool:
-                if type(e1) != type(e2):
-                    return False
-                if isinstance(e1, Symbol):
-                    if e1 == a_var:
-                        return e2 == b_var
-                    return e1 == e2
-                c1 = e1.children()
-                c2 = e2.children()
-                if c1 == [] or c2 == []:
-                    return e1 == e2
-                if len(c1) != len(c2):
-                    return False
-                return all(_recursive_call(x, y) for x, y in zip(c1, c2))
-
-            return _recursive_call(a_expr, b_expr)
-
         if not child.is_filler:
             parents = _parents(self)
             if any(eq_with_var((p.expr, p.var), (child.expr, child.var)) for p in parents):
@@ -218,6 +198,14 @@ class Transform(ABC):
         # return True
 
         return True
+
+
+class USub(Transform, ABC):
+    _u: Expr = None
+
+    def backward(self, node: Node) -> None:
+        super().backward(node)
+        node.parent.solution = replace(node.solution, node.var, self._u)
 
 
 class SafeTransform(Transform, ABC):
@@ -370,15 +358,13 @@ def _get_last_heuristic_transform(node: Node, tup=(PullConstant, Additivity)):
 
 # Let's just add all the transforms we've used for now.
 # and we will make this shit good and generalized later.
-class TrigUSub2(Transform):
+class TrigUSub2(USub):
     """
     u-sub of a trig function
     this is the weird u-sub where if u=sinx, dx != du/cosx but dx = du/sqrt(1-u^2)
     ex: integral of f(tanx) -> integral of f(u) / 1 + y^2, sub u = tanx
     -> dx = du/(1+x^2)
     """
-
-    _variable_change = None
 
     _key: str = None
     # {label: trigfn class, derivative of inverse trigfunction}
@@ -397,7 +383,7 @@ class TrigUSub2(Transform):
         new_node = Node(new_integrand, intermediate, self, node)
         node.add_child(new_node)
 
-        self._variable_change = cls(node.var)
+        self._u = cls(node.var)
 
     def check(self, node: Node) -> bool:
         if super().check(node) is False:
@@ -418,10 +404,6 @@ class TrigUSub2(Transform):
                 return True
 
         return False
-
-    def backward(self, node: Node) -> None:
-        super().backward(node)
-        node.parent.solution = replace(node.solution, node.var, self._variable_change)
 
 
 class RewriteTrig(Transform):
@@ -476,18 +458,17 @@ class RewriteTrig(Transform):
             return False
 
         expr = node.expr
-        return expr.has(TrigFunction)
+        return expr.has(TrigFunctionNotInverse)
 
     def backward(self, node: Node) -> None:
         super().backward(node)
         node.parent.solution = node.solution
 
 
-class InverseTrigUSub(Transform):
+class InverseTrigUSub(USub):
     """Does the sub of u = asin(x), u = atan(x)"""
 
     _key = None
-    _variable_change = None
 
     # {label: class, search query, dy_dx, variable_change}
     _table: Dict[str, Tuple[ExprFn, Callable[[str], str], ExprFn, ExprFn]] = {
@@ -499,10 +480,16 @@ class InverseTrigUSub(Transform):
         intermediate = generate_intermediate_var()
         cls, q, dy_dx, var_change = self._table[self._key]
         dy_dx = dy_dx(intermediate)
-        new_thing = replace(node.expr, node.var, cls(intermediate)) * dy_dx
-        node.add_child(Node(new_thing, intermediate, self, node))
+        new_integrand = replace(node.expr, node.var, cls(intermediate)) * dy_dx
+        new_node = Node(new_integrand, intermediate, self, node)
+        node.add_child(new_node)
+        self._u = var_change(node.var)
 
-        self._variable_change = var_change(node.var)
+        # I feel like you already know that it's gonna be pythagorean-simplified so why not just tack
+        # that on right now
+        second_transform = Simplify()
+        if second_transform.check(new_node):
+            second_transform.forward(new_node)
 
     def check(self, node: Node) -> bool:
         if super().check(node) is False:
@@ -522,18 +509,14 @@ class InverseTrigUSub(Transform):
 
         return False
 
-    def backward(self, node: Node) -> None:
-        super().backward(node)
-        node.parent.solution = replace(node.solution, node.var, self._variable_change)
 
-
-class PolynomialUSub(Transform):
+class PolynomialUSub(USub):
     """check that x^n-1 is a term and every other instance of x is x^n
     you're gonna replace u=x^n
     ex: x/sqrt(1-x^2)
     """
 
-    _variable_change = None  # x^n
+    # _u = x^n
 
     def check(self, node: Node) -> bool:
         if super().check(node) is False:
@@ -564,30 +547,26 @@ class PolynomialUSub(Transform):
             # How are you gonna sub u = x^0 = 1, du = 0 dx
             return False
 
-        self._variable_change = Power(node.var, n)  # x^n
-        count_ = count(node.expr, self._variable_change)
+        self._u = Power(node.var, n)  # x^n
+        count_ = count(node.expr, self._u)
         return count_ > 0 and count_ == count(rest, node.var)
 
     def forward(self, node: Node) -> None:
         intermediate = generate_intermediate_var()
-        dx_dy = self._variable_change.diff(node.var)
-        new_integrand = replace(node.expr, self._variable_change, intermediate) / dx_dy
+        dx_dy = self._u.diff(node.var)
+        new_integrand = replace(node.expr, self._u, intermediate) / dx_dy
         new_integrand = new_integrand
         node.add_child(Node(new_integrand, intermediate, self, node))
 
-    def backward(self, node: Node) -> None:
-        super().backward(node)
-        node.parent.solution = replace(node.solution, node.var, self._variable_change)
 
-
-class LinearUSub(Transform):
+class LinearUSub(USub):
     """u-substitution for smtn like f(ax+b)
     u = ax+b
     du = a dx
     \int f(ax+b) dx = 1/a \int f(u) du
     """
 
-    _variable_change: Expr = None  # writes u in terms of x
+    # _u writes u in terms of x
     _inverse_var_change: ExprFn = None  # this will write x in terms of u
 
     def check(self, node: Node) -> bool:
@@ -633,9 +612,9 @@ class LinearUSub(Transform):
             result = _is_a_linear_sum_or_prod(e)
             if result is not None:
                 u, u_inverse = result
-                if self._variable_change is not None:
-                    return u == self._variable_change
-                self._variable_change = u
+                if self._u is not None:
+                    return u == self._u
+                self._u = u
 
                 # If u_inverse exists, set it.
                 # it must be the same as any prev u_inverse because the same u implies the same
@@ -654,22 +633,18 @@ class LinearUSub(Transform):
 
     def forward(self, node: Node) -> None:
         intermediate = generate_intermediate_var()
-        du_dx = self._variable_change.diff(node.var)
+        du_dx = self._u.diff(node.var)
 
-        # We have to account for the case where self._variable_change doesn't appear directly
+        # We have to account for the case where self._u doesn't appear directly
         # in the integrand.
         if self._inverse_var_change is not None:
             new = self._inverse_var_change(intermediate)
             new_integrand = replace(node.expr, node.var, new)
         else:
-            new_integrand = replace(node.expr, self._variable_change, intermediate)
+            new_integrand = replace(node.expr, self._u, intermediate)
         new_integrand /= du_dx
         new_integrand = new_integrand
         node.add_child(Node(new_integrand, intermediate, self, node))
-
-    def backward(self, node: Node) -> None:
-        super().backward(node)
-        node.parent.solution = replace(node.solution, node.var, self._variable_change)
 
 
 class CompoundAngle(Transform):
@@ -712,7 +687,7 @@ class CompoundAngle(Transform):
         node.parent.solution = node.solution
 
 
-class SinUSub(Transform):
+class SinUSub(USub):
     """u-substitution for if sinx cosx exists in the outer product"""
 
     # TODO: generalize this in some form? to other trig fns maybe?
@@ -720,7 +695,6 @@ class SinUSub(Transform):
     # like transform D but for trigfns
     _sin: sin = None
     _cos: cos = None
-    _variable_change: Expr = None
 
     def check(self, node: Node) -> bool:
         if super().check(node) is False:
@@ -775,11 +749,7 @@ class SinUSub(Transform):
         if new_integrand.contains(node.var):
             return
         node.add_child(Node(new_integrand, intermediate, self, node))
-        self._variable_change = self._sin
-
-    def backward(self, node: Node) -> None:
-        super().backward(node)
-        node.parent.solution = replace(node.solution, node.var, self._variable_change)
+        self._u = self._sin
 
 
 class ProductToSum(Transform):
@@ -802,16 +772,26 @@ class ProductToSum(Transform):
         return False
 
     @staticmethod
-    def perform(expr: Union[Prod, Power]) -> Expr:
+    def perform(expr: Union[Prod, Power]) -> Sum:
+        """assumes that ProductToSum.condition is satisfied
+
+        also note this is used in simplify and not in this transform
+        """
         nexpr = remove_const_factor(expr)
         const = expr / nexpr
         if isinstance(nexpr, Prod):
-            return const * ProductToSum._perform_on_terms(*nexpr.terms)
+            return ProductToSum._perform_on_terms(*nexpr.terms, const=const)
 
-        return const * ProductToSum._perform_on_terms(nexpr.base, nexpr.base) ** (nexpr.exponent / 2)
+        b = ProductToSum._perform_on_terms(nexpr.base, nexpr.base, const=const)
+        if nexpr.exponent == 2:
+            return b
+        else:
+            # TODO: make this recursively apply pts till no even power
+            return Power(b, nexpr.exponent / 2).expand()
 
     @staticmethod
     def perform_opt(expr: Expr) -> Optional[Expr]:
+        """optimized for this integral transform"""
         if isinstance(expr, Prod):
             if len(expr.terms) != 2:
                 return
@@ -824,23 +804,26 @@ class ProductToSum(Transform):
             return ProductToSum._perform_on_terms(expr.base, expr.base) ** (expr.exponent / 2)
 
     @staticmethod
-    def _perform_on_terms(a: Union[sin, cos], b: Union[sin, cos]) -> Expr:
+    def _perform_on_terms(a: Union[sin, cos], b: Union[sin, cos], *, const: Optional[Expr] = None) -> Sum:
         # Dream:
         # a_, b_ = any
         # sin(a_) * sin(b_) = cos(a_-b_) - cos(a_+b_)
         # highly readable and very cool
+
+        c = Rat(1, 2) if const is None else const / 2
+
         if isinstance(a, sin) and isinstance(b, cos):
-            temp = sin(a.inner + b.inner) + sin(a.inner - b.inner)
+            temp = sin(a.inner + b.inner) * c + sin(a.inner - b.inner) * c
         elif isinstance(a, cos) and isinstance(b, sin):
-            temp = sin(a.inner + b.inner) - sin(a.inner - b.inner)
+            temp = sin(a.inner + b.inner) * c - sin(a.inner - b.inner) * c
         elif isinstance(a, cos) and isinstance(b, cos):
-            temp = cos(a.inner + b.inner) + cos(a.inner - b.inner)
+            temp = cos(a.inner + b.inner) * c + cos(a.inner - b.inner) * c
         elif isinstance(a, sin) and isinstance(b, sin):
-            temp = cos(a.inner - b.inner) - cos(a.inner + b.inner)
+            temp = cos(a.inner - b.inner) * c - cos(a.inner + b.inner) * c
         else:
             return
 
-        return temp / 2
+        return temp
 
     def check(self, node: Node) -> bool:
         if super().check(node) is False:
@@ -1097,9 +1080,8 @@ class PartialFractions(Transform):
         node.parent.solution = node.solution
 
 
-class GenericUSub(Transform):
+class GenericUSub(USub):
     _u: Expr = None
-    _variable_change: Expr = None
 
     def check(self, node: Node) -> bool:
         if super().check(node) is False:
@@ -1108,7 +1090,7 @@ class GenericUSub(Transform):
         if not isinstance(node.expr, Prod):
             return False
         for i, term in enumerate(node.expr.terms):
-            integral = _check_if_solveable(term, node.var)
+            integral = check_integral_table(term, node.var)
             if integral is None:
                 continue
             integral = remove_const_factor(integral)
@@ -1126,11 +1108,7 @@ class GenericUSub(Transform):
         du_dx = self._u.diff(node.var)
         new_integrand = replace((node.expr / du_dx), self._u, intermediate)
         node.add_child(Node(new_integrand, intermediate, self, node))
-        self._variable_change = self._u
-
-    def backward(self, node: Node) -> None:
-        super().backward(node)
-        node.parent.solution = replace(node.solution, node.var, self._variable_change)
+        self._u = self._u
 
 
 class CompleteTheSquare(Transform):
@@ -1252,15 +1230,17 @@ class Simplify(Transform):
         if super().check(node) is False:
             return False
 
-        t = _get_last_heuristic_transform(node)
-        # The point of these 2 transforms is to rewrite the expr in a not necessarily 'simpler' form.
-        if isinstance(t, (RewritePythagorean, RewriteTrig)):
-            return False
-        return pythagorean_simplification(node.expr, verbose=True)[1]
+        # t = _get_last_heuristic_transform(node)
+        # # The point of these 2 transforms is to rewrite the expr in a not necessarily 'simpler' form.
+        # if isinstance(t, (RewritePythagorean, RewriteTrig, Simplify)):
+        #     return False
+        ans, success = pythagorean_simplification(node.expr, verbose=True)
+        if success:
+            self._ans = ans
+        return success
 
     def forward(self, node: Node) -> None:
-        new = pythagorean_simplification(node.expr)
-        node.add_child(Node(new, node.var, self, node))
+        node.add_child(Node(self._ans, node.var, self, node))
 
     def backward(self, node: Node) -> None:
         super().backward(node)
@@ -1269,8 +1249,9 @@ class Simplify(Transform):
 
 # Leave RewriteTrig, InverseTrigUSub near the end bc they are deprioritized
 # and more fucky
+# Do not include Simplify because it only is needed after InverseTrigUSub, and we just manually
+# trigger it.
 HEURISTICS: List[Type[Transform]] = [
-    Simplify,
     PolynomialUSub,
     CompoundAngle,
     SinUSub,
@@ -1295,30 +1276,3 @@ SAFE_TRANSFORMS: List[Type[Transform]] = [
 
 def generate_intermediate_var() -> Symbol:
     return symbols(f"u_{random_id(10)}")
-
-
-STANDARD_TRIG_INTEGRALS: Dict[str, ExprFn] = {
-    "sin(x)": lambda x: -cos(x),
-    "cos(x)": sin,
-    "sec(x)^2": tan,  # Integration calculator says this is a standard integral. + i haven't encountered any transform that can solve this.
-    "sec(x)": lambda x: log(tan(x) + sec(x)),  # not a standard integral but it's fucked so im leaving it (unless?)
-}
-
-
-def _check_if_solveable(integrand: Expr, var: Symbol) -> Optional[Expr]:
-    if not integrand.contains(var):
-        return integrand * var
-    if isinstance(integrand, Power):
-        if integrand.base == var and not integrand.exponent.contains(var):
-            n = integrand.exponent
-            return (1 / (n + 1)) * Power(var, n + 1) if n != -1 else log(abs(integrand.base))
-        if integrand.exponent == var and not integrand.base.contains(var):
-            return 1 / log(integrand.base) * integrand
-    if isinstance(integrand, Symbol) and integrand == var:
-        return Fraction(1 / 2) * Power(var, 2)
-
-    silly_key = repr(replace(integrand, var, Symbol("x")))  # jank but does the job
-    if silly_key in STANDARD_TRIG_INTEGRALS:
-        return STANDARD_TRIG_INTEGRALS[silly_key](var)
-
-    return None
