@@ -15,6 +15,7 @@ from .expr import (
     cot,
     csc,
     log,
+    remove_const_factor,
     sec,
     sin,
     tan,
@@ -24,7 +25,8 @@ from .utils import ExprFn, count_symbols
 
 
 def expand_logs(expr: Expr, **kwargs) -> Expr:
-    return kinder_replace(expr, _log_perform, **kwargs)
+    ans = kinder_replace(expr, _log_perform, **kwargs)
+    return ans.expand() if ans.expandable() else ans
 
 
 def _log_perform(expr: Expr) -> Optional[Expr]:
@@ -248,25 +250,42 @@ def simplify(expr: Expr) -> Expr:
     This is the general one that does all heuristics & is for aesthetics (& comparisons).
     Use more specific simplification functions in integration please.
     """
-    if expr.has(TrigFunctionNotInverse):
-        expr = trig_simplify(expr)
-    if expr.has(log):
-        expr = expand_logs(expr)
+    if expr.expandable():
+        expr2 = expr.expand()
+    else:
+        expr2 = expr
+
+    # if trig simplify has hit then it's always good :thumbsup:
+    is_trig_hit = None
+    if expr2.has(TrigFunctionNotInverse):
+        expr2, is_trig_hit = trig_simplify(expr2)
+    if expr2.has(log):
+        expr2 = expand_logs(expr2)
+
+    if is_trig_hit:
+        return expr2
+
+    if is_simpler(expr2, expr):
+        return expr2
     return expr
 
 
 def trig_simplify(expr):
     # reciprocate and combine trigs is last because sometimes the pythag complex simplification will
     # generate new trigs in the num/denom that can be simplified down.
-    expr = kinder_replace_many(
+    expr, is_hit_1 = kinder_replace_many(
         expr,
         [_pythagorean_perform, _pythagorean_complex_perform, _reciprocate_trigs],
         overarching_cond=lambda x: x.has(TrigFunctionNotInverse),
+        verbose=True,
     )
-    expr = kinder_replace_many(
-        expr, [_combine_trigs, product_to_sum, sectan], overarching_cond=lambda x: x.has(TrigFunctionNotInverse)
+    expr, is_hit_2 = kinder_replace_many(
+        expr,
+        [_combine_trigs, product_to_sum, sectan],
+        overarching_cond=lambda x: x.has(TrigFunctionNotInverse),
+        verbose=True,
     )
-    return expr
+    return expr, is_hit_1 or is_hit_2
 
 
 def is_cls_squared(expr, cls) -> bool:
@@ -336,7 +355,7 @@ def sectan(sum: Expr) -> Optional[Expr]:
         return new_sum
 
 
-def product_to_sum(expr: Expr) -> Optional[Expr]:
+def product_to_sum(expr: Expr, *, always_simplify=False, const: Expr = None) -> Optional[Expr]:
     from .transforms import ProductToSum
 
     """Does applying product-to-sum on every term of a sum ... create a cancellation?
@@ -347,8 +366,47 @@ def product_to_sum(expr: Expr) -> Optional[Expr]:
     if not isinstance(expr, Sum):
         return
 
-    satisfies = [ProductToSum.condition(t) for t in expr.terms]
-    if not count(satisfies, True) >= 2:
+    def perf(expr: Expr) -> bool:
+        new_expr, const = remove_const_factor(expr, include_factor=True)
+
+        def is_valid_power(power: Power) -> bool:
+            return (
+                isinstance(power, Power)
+                and isinstance(power.base, (sin, cos))
+                and power.exponent.is_int
+                and power.exponent > 1
+            )
+
+        if isinstance(new_expr, Prod):
+            if len(new_expr.terms) == 2:
+                t1, t2 = new_expr.terms
+                if isinstance(t1, (sin, cos)) and isinstance(t2, (sin, cos)):
+                    return ProductToSum._perform_on_terms(*new_expr.terms, const=const)
+                if isinstance(t1, (sin, cos)) and is_valid_power(t2):
+                    return product_to_sum((perf(t2) * t1).expand(), always_simplify=True, const=const)
+                if isinstance(t2, (sin, cos)) and is_valid_power(t1):
+                    return product_to_sum((perf(t1) * t2).expand(), always_simplify=True, const=const)
+                if is_valid_power(t2) and is_valid_power(t1):
+                    intermediate = perf(t1) * perf(t2)
+                    return product_to_sum(intermediate.expand(), const=const, always_simplify=True)
+
+        if is_valid_power(new_expr):
+            if new_expr.exponent == 2:
+                return ProductToSum._perform_on_terms(new_expr.base, new_expr.base, const=const)
+            elif new_expr.exponent % 2 == 0:
+                breakpoint()
+                intermediate = ProductToSum._perform_on_terms(new_expr.base, new_expr.base) ** (new_expr.exponent / 2)
+                return product_to_sum(intermediate.expand(), const=const, always_simplify=True)
+            else:
+                intermediate = new_expr.base * ProductToSum._perform_on_terms(new_expr.base, new_expr.base) ** (
+                    (new_expr.exponent - 1) / 2
+                )
+                return product_to_sum(intermediate.expand(), const=const, always_simplify=True)
+
+        return False
+
+    satisfies = [perf(t) for t in expr.terms]
+    if all(s is False for s in satisfies):
         return
 
     final_terms = []
@@ -356,13 +414,19 @@ def product_to_sum(expr: Expr) -> Optional[Expr]:
         if not boool:
             final_terms.append(term)
             continue
+        if isinstance(boool, Sum):
+            final_terms.extend(boool.terms)
 
-        new = ProductToSum.perform(term)
-        final_terms.extend(new.terms)
-
+    if const is not None and const != 1:
+        final_terms = [t * const for t in final_terms]
     final = Sum(final_terms)
 
+    if always_simplify:
+        return final
+
     # If final is simpler, return final
+    if not isinstance(final, Sum):
+        return final
     if len(final.terms) < len(expr.terms):
         return final
 
@@ -371,9 +435,13 @@ def product_to_sum(expr: Expr) -> Optional[Expr]:
         return final
 
 
-def count(l: list, query: Any) -> int:
-    c = 0
-    for el in l:
-        if el == query:
-            c += 1
-    return c
+def is_simpler(e1, e2) -> bool:
+    """returns whether e1 is simpler than e2"""
+    c1 = count_symbols(e1)
+    c2 = count_symbols(e2)
+    return c1 < c2
+    # if c1 < c2:
+    #     return True
+    # if c1 == c2:
+    #     return len(repr(e1)) < len(repr(e2))
+    # return False

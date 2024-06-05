@@ -262,6 +262,10 @@ class Eq:
         if not self._is_divide:
             # You don't get to divide if we already is --- prevents inf recursion.
             one, quotient_matches = divide_anys(query, expr)
+            if one == 1:
+                join_dicts2(self._matches, quotient_matches)
+                return True
+
             if isinstance(one, Any_):
                 self._matches[one.key].append(Rat(1))
                 join_dicts2(self._matches, quotient_matches)

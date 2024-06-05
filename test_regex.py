@@ -12,6 +12,12 @@ def test_any_basic():
     assert eq(tan(2 * x) ** 2, tan(any_) ** 2)["success"]
 
 
+def test_sort_anys():
+    assert sin(any_) * sec(any_) == sec(any_) * sin(any_)
+    assert eq(sin(any_) * sec(any_), sec(x) * sin(x))
+    assert eq(sin(x) * sec(x), sec(any_) * sin(any_))
+
+
 @pytest.mark.parametrize(
     ["sum", "expected"],
     [

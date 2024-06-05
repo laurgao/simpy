@@ -1,21 +1,8 @@
-from typing import Optional, Tuple, Type, Union
+from typing import Optional, Tuple, Union
 
-from src.simpy.expr import (
-    Expr,
-    Power,
-    Rat,
-    SingleFunc,
-    Symbol,
-    TrigFunctionNotInverse,
-    cast,
-    cos,
-    debug_repr,
-    sec,
-    symbols,
-    tan,
-)
+from src.simpy.expr import Expr, Symbol, TrigFunctionNotInverse, cast, debug_repr, log, symbols
 from src.simpy.integration import integrate
-from src.simpy.regex import replace_class, replace_factory
+from src.simpy.simplify import expand_logs, trig_simplify
 
 x, y = symbols("x y")
 
@@ -47,21 +34,26 @@ def _assert_eq_plusc(a, b, *vars) -> Tuple[bool, Expr]:
     diff = a - b
     if len(diff.symbols()) == 0 or vars and all(var not in diff.symbols() for var in vars):
         return True, None
-    diff = diff.expand().simplify() if diff.expandable() else diff.simplify()
+    diff = simplify_to_same_standard(diff)
     if not vars:
         return len(diff.symbols()) == 0, diff
     else:
         return all(var not in diff.symbols() for var in vars), diff
 
 
-def _eq_value(a: Expr, b: Expr) -> Tuple[Expr, Expr]:
-    a = a.simplify()
-    b = b.simplify()
-    if a.expandable():
-        a = a.expand()
-    if b.expandable():
-        b = b.expand()
-    return a, b
+def simplify_to_same_standard(expr: Expr) -> Expr:
+    if expr.expandable():
+        expr2 = expr.expand()
+    else:
+        expr2 = expr
+
+    # if trig simplify has hit then it's always good :thumbsup:
+    if expr2.has(TrigFunctionNotInverse):
+        expr2, is_trig_hit = trig_simplify(expr2)
+    if expr2.has(log):
+        expr2 = expand_logs(expr2)
+
+    return expr2
 
 
 @cast
@@ -69,8 +61,8 @@ def assert_eq_value(a: Expr, b: Expr):
     """Tests that the values of a & b are the same in spirit, regardless of how they are represented with the Expr data structures."""
     if a == b:
         return
-    a, b = _eq_value(a, b)
-    assert a == b, f"a != b, {a} != {b}"
+    diff = simplify_to_same_standard(a - b)
+    assert diff == 0, f"a != b, {simplify_to_same_standard(a)} != {simplify_to_same_standard(b)}"
 
 
 @cast

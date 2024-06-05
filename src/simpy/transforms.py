@@ -772,24 +772,6 @@ class ProductToSum(Transform):
         return False
 
     @staticmethod
-    def perform(expr: Union[Prod, Power]) -> Sum:
-        """assumes that ProductToSum.condition is satisfied
-
-        also note this is used in simplify and not in this transform
-        """
-        nexpr = remove_const_factor(expr)
-        const = expr / nexpr
-        if isinstance(nexpr, Prod):
-            return ProductToSum._perform_on_terms(*nexpr.terms, const=const)
-
-        b = ProductToSum._perform_on_terms(nexpr.base, nexpr.base, const=const)
-        if nexpr.exponent == 2:
-            return b
-        else:
-            # TODO: make this recursively apply pts till no even power
-            return Power(b, nexpr.exponent / 2).expand()
-
-    @staticmethod
     def perform_opt(expr: Expr) -> Optional[Expr]:
         """optimized for this integral transform"""
         if isinstance(expr, Prod):

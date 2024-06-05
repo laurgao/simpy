@@ -183,7 +183,7 @@ class Expr(ABC):
             self._expandable_cache = self._expandable()
         return self._expandable_cache
 
-    def expand(self) -> bool:
+    def expand(self) -> "Expr":
         if self._expand_cache is None:
             self._expand_cache = self._expand()
         return self._expand_cache
@@ -258,6 +258,10 @@ class Expr(ABC):
     def is_subtraction(self) -> bool:
         return False
 
+    @property
+    def is_int(self) -> bool:
+        return False
+
 
 @dataclass
 class Associative:
@@ -304,14 +308,16 @@ class Associative:
             to prevent fucky reprs for things like
             1 + x^3 + 3*x^2
             """
+            from .regex import Any_, get_anys
+
             if hasattr(expr, "_nesting_without_factor"):
                 return expr._nesting_without_factor
 
             else:
                 expr2 = remove_const_factor(expr)
-                if isinstance(expr2, Symbol):
+                if isinstance(expr2, (Symbol, Any_)):
                     ans = 1
-                elif len(expr2.symbols()) == 0:
+                elif len(expr2.symbols()) == 0 and len(get_anys(expr2)) == 0:
                     ans = 0
                 else:
                     ans = 1 + max(_nesting_without_factor(sub_expr) for sub_expr in expr2.children())
@@ -328,7 +334,12 @@ class Associative:
 
             Order is first the rat and then float and then sort by nesting including
             """
-            return _symboless_nest(a) - _symboless_nest(b)
+            na = _symboless_nest(a)
+            nb = _symboless_nest(b)
+            if na != nb:
+                return na - nb
+            else:
+                return 1 if a.__repr__() > b.__repr__() else -1
 
         def _compare(a: Expr, b: Expr) -> int:
             """Returns -1 if a < b, 0 if a == b, 1 if a > b.
@@ -811,6 +822,10 @@ class Sum(Associative, Expr):
         - sort
         """
         if skip_checks:
+            if len(terms) == 0:
+                return Rat(0)
+            if len(terms) == 1:
+                return terms[0]
             return super().__new__(cls)
 
         terms = cls._flatten_terms(terms)
@@ -851,10 +866,7 @@ class Sum(Associative, Expr):
             if new_coeff == 0:
                 continue
             elif new_coeff == 1:
-                if len(non_const_factors1) == 1:
-                    non_constant_terms.append(non_const_factors1[0])
-                else:
-                    non_constant_terms.append(Prod(non_const_factors1, skip_checks=True))
+                non_constant_terms.append(Prod(non_const_factors1, skip_checks=True))
             else:
                 non_constant_terms.append(Prod([new_coeff] + non_const_factors1, skip_checks=True))
 
@@ -1103,9 +1115,11 @@ class Prod(Associative, Expr):
     @cast
     def __new__(cls, terms: List[Expr], *, skip_checks: bool = False) -> "Expr":
         if skip_checks:
-            instance = super().__new__(cls)
-            instance.terms = terms
-            return instance
+            if len(terms) == 0:
+                return Rat(1)
+            if len(terms) == 1:
+                return terms[0]
+            return super().__new__(cls)
 
         # We need to flatten BEFORE we accumulate like terms
         # ex: Prod(x, Prod(Power(x, -1), y))
@@ -1132,6 +1146,8 @@ class Prod(Associative, Expr):
         return instance
 
     def __init__(self, terms: List[Expr], *, skip_checks: bool = False):
+        if skip_checks:
+            self.terms = terms
         # terms are already set in __new__
         super().__post_init__()
 
@@ -1204,14 +1220,8 @@ class Prod(Associative, Expr):
             else:
                 numerator.append(term)
 
-        num_expr = (
-            Prod(numerator, skip_checks=True) if len(numerator) > 1 else numerator[0] if len(numerator) == 1 else Rat(1)
-        )
-        denom_expr = (
-            Prod(denominator, skip_checks=True)
-            if len(denominator) > 1
-            else denominator[0] if len(denominator) == 1 else Rat(1)
-        )
+        num_expr = Prod(numerator, skip_checks=True)
+        denom_expr = Prod(denominator, skip_checks=True)
         return [num_expr, denom_expr]
 
     @property
@@ -1605,6 +1615,7 @@ TrigStr = Literal["sin", "cos", "tan", "sec", "csc", "cot"]
 
 class TrigFunction(SingleFunc, ABC):
     is_inverse: bool  # class property
+    _fields_already_casted = True
 
     _SPECIAL_KEYS = [
         "0",
@@ -2009,19 +2020,30 @@ def diff(expr: Expr, var: Optional[Symbol]) -> Expr:
     return expr.diff(var)
 
 
-def remove_const_factor(expr: Expr) -> Expr:
+def remove_const_factor(expr: Expr, include_factor=False) -> Expr:
+    from .regex import get_anys
+
     if isinstance(expr, Prod):
-        if hasattr(expr, "_sans_const"):
-            return expr._sans_const
+        if not hasattr(expr, "_sans_const_cache"):
+            sans_const = []
+            const = []
+            for t in expr.terms:
+                if len(t.symbols()) > 0 or len(get_anys(t)) > 0:
+                    sans_const.append(t)
+                else:
+                    const.append(t)
+
+            expr._sans_const_cache = Prod(sans_const, skip_checks=True)
+            expr._const_cache = Prod(const, skip_checks=True)
+        if include_factor:
+            return expr._sans_const_cache, expr._const_cache
         else:
-            new_terms = [t for t in expr.terms if len(t.symbols()) > 0]
-            expr._sans_const = (
-                Prod(new_terms, skip_checks=True)
-                if len(new_terms) > 1
-                else new_terms[0] if len(new_terms) == 1 else Rat(1)
-            )
-            return expr._sans_const
-    return expr
+            return expr._sans_const_cache
+
+    if include_factor:
+        return expr, Rat(1)
+    else:
+        return expr
 
 
 def latex(expr: Expr) -> str:
