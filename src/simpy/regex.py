@@ -89,11 +89,20 @@ def eq(expr: Expr, query: Expr, *, up_to_factor=False, up_to_sum=False) -> EqRes
 
 def get_anys(expr: Expr) -> List[Any_]:
     """Returns a list of all Any_ objects in the expression."""
-    if isinstance(expr, Any_):
-        return [expr]
 
-    str_set = set([symbol.key for e in expr.children() for symbol in get_anys(e)])
-    return [Any_(s) for s in str_set]
+    def ga(expr):
+        if not expr.has(Any_):
+            return []
+
+        if isinstance(expr, Any_):
+            return [expr]
+
+        str_set = set([symbol.key for e in expr.children() for symbol in get_anys(e)])
+        return [Any_(s) for s in str_set]
+
+    if not hasattr(expr, "_any_cache"):
+        expr._any_cache = ga(expr)
+    return expr._any_cache
 
 
 def all_same(list_: list) -> bool:

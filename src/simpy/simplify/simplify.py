@@ -1,6 +1,6 @@
-from typing import Any, Iterable, List, Optional, Tuple, Type, Union
+from typing import Iterable, List, Optional, Tuple, Type, Union
 
-from .expr import (
+from ..expr import (
     Abs,
     Expr,
     Num,
@@ -15,13 +15,13 @@ from .expr import (
     cot,
     csc,
     log,
-    remove_const_factor,
     sec,
     sin,
     tan,
 )
-from .regex import any_, eq, general_contains, kinder_replace, kinder_replace_many, replace_class, replace_factory
-from .utils import ExprFn, count_symbols
+from ..regex import any_, eq, general_contains, kinder_replace, kinder_replace_many, replace_class, replace_factory
+from ..utils import ExprFn, count_symbols
+from .product_to_sum import product_to_sum
 
 
 def expand_logs(expr: Expr, **kwargs) -> Expr:
@@ -353,86 +353,6 @@ def sectan(sum: Expr) -> Optional[Expr]:
 
     if len(new_sum.terms) < sum.terms:
         return new_sum
-
-
-def product_to_sum(expr: Expr, *, always_simplify=False, const: Expr = None) -> Optional[Expr]:
-    from .transforms import ProductToSum
-
-    """Does applying product-to-sum on every term of a sum ... create a cancellation?
-
-    Assumes that expr.has(TrigFunctionNotInverse) == True
-    """
-
-    if not isinstance(expr, Sum):
-        return
-
-    def perf(expr: Expr) -> bool:
-        new_expr, const = remove_const_factor(expr, include_factor=True)
-
-        def is_valid_power(power: Power) -> bool:
-            return (
-                isinstance(power, Power)
-                and isinstance(power.base, (sin, cos))
-                and power.exponent.is_int
-                and power.exponent > 1
-            )
-
-        if isinstance(new_expr, Prod):
-            if len(new_expr.terms) == 2:
-                t1, t2 = new_expr.terms
-                if isinstance(t1, (sin, cos)) and isinstance(t2, (sin, cos)):
-                    return ProductToSum._perform_on_terms(*new_expr.terms, const=const)
-                if isinstance(t1, (sin, cos)) and is_valid_power(t2):
-                    return product_to_sum((perf(t2) * t1).expand(), always_simplify=True, const=const)
-                if isinstance(t2, (sin, cos)) and is_valid_power(t1):
-                    return product_to_sum((perf(t1) * t2).expand(), always_simplify=True, const=const)
-                if is_valid_power(t2) and is_valid_power(t1):
-                    intermediate = perf(t1) * perf(t2)
-                    return product_to_sum(intermediate.expand(), const=const, always_simplify=True)
-
-        if is_valid_power(new_expr):
-            if new_expr.exponent == 2:
-                return ProductToSum._perform_on_terms(new_expr.base, new_expr.base, const=const)
-            elif new_expr.exponent % 2 == 0:
-                breakpoint()
-                intermediate = ProductToSum._perform_on_terms(new_expr.base, new_expr.base) ** (new_expr.exponent / 2)
-                return product_to_sum(intermediate.expand(), const=const, always_simplify=True)
-            else:
-                intermediate = new_expr.base * ProductToSum._perform_on_terms(new_expr.base, new_expr.base) ** (
-                    (new_expr.exponent - 1) / 2
-                )
-                return product_to_sum(intermediate.expand(), const=const, always_simplify=True)
-
-        return False
-
-    satisfies = [perf(t) for t in expr.terms]
-    if all(s is False for s in satisfies):
-        return
-
-    final_terms = []
-    for boool, term in zip(satisfies, expr.terms):
-        if not boool:
-            final_terms.append(term)
-            continue
-        if isinstance(boool, Sum):
-            final_terms.extend(boool.terms)
-
-    if const is not None and const != 1:
-        final_terms = [t * const for t in final_terms]
-    final = Sum(final_terms)
-
-    if always_simplify:
-        return final
-
-    # If final is simpler, return final
-    if not isinstance(final, Sum):
-        return final
-    if len(final.terms) < len(expr.terms):
-        return final
-
-    if len(final.terms) == len(expr.terms) and count_symbols(final) < count_symbols(expr):
-        # This ensures that e.g. 2*cos(x)*sin(2*x)/3 - cos(2*x)*sin(x)/3 simplifies to -2*sin(x)**3/3 + sin(x)
-        return final
 
 
 def is_simpler(e1, e2) -> bool:

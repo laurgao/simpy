@@ -33,8 +33,9 @@ from .expr import (
 from .integral_table import check_integral_table
 from .linalg import invert
 from .polynomial import Polynomial, is_polynomial, polynomial_to_expr, rid_ending_zeros, to_const_polynomial
-from .regex import count, general_contains, kinder_replace, replace, replace_class, replace_factory
+from .regex import count, general_contains, replace, replace_class, replace_factory
 from .simplify import pythagorean_simplification
+from .simplify.product_to_sum import pts_perf
 from .utils import ExprFn, eq_with_var, random_id
 
 Number_ = Union[Fraction, int]
@@ -753,69 +754,22 @@ class SinUSub(USub):
 
 
 class ProductToSum(Transform):
-    """product to sum identities for sin & cos"""
+    """product to sum identities for sin & cos
 
-    _a: Expr = None
-    _b: Expr = None
-
-    @staticmethod
-    def condition(expr: Expr) -> bool:
-        expr = remove_const_factor(expr)
-        if isinstance(expr, Prod):
-            if len(expr.terms) == 2 and all(isinstance(term, (sin, cos)) for term in expr.terms):
-                return True
-
-        if isinstance(expr, Power):
-            if isinstance(expr.base, (sin, cos)) and isinstance(expr.exponent, Rat) and expr.exponent % 2 == 0:
-                return True
-
-        return False
-
-    @staticmethod
-    def perform_opt(expr: Expr) -> Optional[Expr]:
-        """optimized for this integral transform"""
-        if isinstance(expr, Prod):
-            if len(expr.terms) != 2:
-                return
-            return ProductToSum._perform_on_terms(*expr.terms)
-        elif isinstance(expr, Power):
-            if not isinstance(expr.base, (sin, cos)):
-                return
-            if not (isinstance(expr.exponent, Rat) and expr.exponent % 2 == 0):
-                return
-            return ProductToSum._perform_on_terms(expr.base, expr.base) ** (expr.exponent / 2)
-
-    @staticmethod
-    def _perform_on_terms(a: Union[sin, cos], b: Union[sin, cos], *, const: Optional[Expr] = None) -> Sum:
-        # Dream:
-        # a_, b_ = any
-        # sin(a_) * sin(b_) = cos(a_-b_) - cos(a_+b_)
-        # highly readable and very cool
-
-        c = Rat(1, 2) if const is None else const / 2
-
-        if isinstance(a, sin) and isinstance(b, cos):
-            temp = sin(a.inner + b.inner) * c + sin(a.inner - b.inner) * c
-        elif isinstance(a, cos) and isinstance(b, sin):
-            temp = sin(a.inner + b.inner) * c - sin(a.inner - b.inner) * c
-        elif isinstance(a, cos) and isinstance(b, cos):
-            temp = cos(a.inner + b.inner) * c + cos(a.inner - b.inner) * c
-        elif isinstance(a, sin) and isinstance(b, sin):
-            temp = cos(a.inner - b.inner) * c - cos(a.inner + b.inner) * c
-        else:
-            return
-
-        return temp
+    only works if the node.expr is a product of sin and cos
+    doesn't check nested things.
+    since when have we solved an integral that has e^{sum} where you need to apply pts on the sum anyways
+    """
 
     def check(self, node: Node) -> bool:
         if super().check(node) is False:
             return False
-
-        return general_contains(node.expr, self.condition)
+        return True
 
     def forward(self, node: Node) -> None:
-        new_integrand = kinder_replace(node.expr, self.perform_opt)
-        node.add_child(Node(new_integrand, node.var, self, node))
+        new_integrand = pts_perf(node.expr)
+        if new_integrand:
+            node.add_child(Node(new_integrand, node.var, self, node))
 
     def backward(self, node: Node) -> None:
         super().backward(node)
@@ -1169,7 +1123,7 @@ class RewritePythagorean(Transform):
 
     @staticmethod
     def perform(expr: Power) -> bool:
-        assert RewritePythagorean.condition(expr)
+        """assumes RewritePythagorean.condition(expr) == True"""
         b, x = expr.base, expr.exponent
         n = (x - 1) / 2
         d = {"sin": cos, "cos": sin}
@@ -1233,10 +1187,10 @@ class Simplify(Transform):
 # and more fucky
 # Do not include Simplify because it only is needed after InverseTrigUSub, and we just manually
 # trigger it.
+# Not including CompoundAngle because no integral has actually been solved with it (backwards is never called)
+# Not including SinUSub because it's a strict subset of GenericUSub
 HEURISTICS: List[Type[Transform]] = [
     PolynomialUSub,
-    CompoundAngle,
-    SinUSub,
     ProductToSum,
     TrigUSub2,
     ByParts,
