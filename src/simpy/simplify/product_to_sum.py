@@ -1,33 +1,47 @@
-from typing import Optional, Union
+from typing import List, Optional, Union
 
 from ..expr import Expr, Power, Prod, Rat, Sum, cos, remove_const_factor, sin
 from ..utils import count_symbols
 
 
-def perform_on_terms(a: Union[sin, cos], b: Union[sin, cos], *, const: Optional[Expr] = None) -> Sum:
+def _perform_on_terms(
+    a: Union[sin, cos], b: Union[sin, cos], *, multiplier: Optional[Expr] = None
+) -> Optional[List[Expr]]:
     # Dream:
     # a_, b_ = any
     # sin(a_) * sin(b_) = cos(a_-b_) - cos(a_+b_)
     # highly readable and very cool
 
-    c = Rat(1, 2) if const is None else const / 2
+    c = Rat(1, 2) if multiplier is None else multiplier / 2
 
     if isinstance(a, sin) and isinstance(b, cos):
-        return sin(a.inner + b.inner) * c + sin(a.inner - b.inner) * c
+        return [sin(a.inner + b.inner) * c, sin(a.inner - b.inner) * c]
     elif isinstance(a, cos) and isinstance(b, sin):
-        return sin(a.inner + b.inner) * c - sin(a.inner - b.inner) * c
+        return [sin(a.inner + b.inner) * c, -sin(a.inner - b.inner) * c]
     elif isinstance(a, cos) and isinstance(b, cos):
-        return cos(a.inner + b.inner) * c + cos(a.inner - b.inner) * c
+        return [cos(a.inner + b.inner) * c, cos(a.inner - b.inner) * c]
     elif isinstance(a, sin) and isinstance(b, sin):
-        return cos(a.inner - b.inner) * c - cos(a.inner + b.inner) * c
+        return [cos(a.inner - b.inner) * c, -cos(a.inner + b.inner) * c]
 
 
-def pts_perf(expr: Expr) -> Optional[Expr]:
+def perform_on_terms(a: Union[sin, cos], b: Union[sin, cos], *, const: Optional[Expr] = None) -> Optional[Sum]:
+    return Sum(_perform_on_terms(a, b, multiplier=const))
+
+
+def product_to_sum_unit(expr: Expr) -> Optional[Expr]:
     """Returns the result of applying product-to-sum on expr, if possible
     Where expr is the product of 2 or more trig functions
     If you want to apply pts on a sum, use product_to_sum
     """
+    result = _product_to_sum_unit(expr)
+    if result is not None:
+        return Sum(result)
+
+
+def _product_to_sum_unit(expr: Expr, *, multiplier: Expr = None) -> Optional[List[Expr]]:
     new_expr, const = remove_const_factor(expr, include_factor=True)
+    if multiplier is not None:
+        const *= multiplier
 
     def is_valid_power(power: Power) -> bool:
         return (
@@ -41,54 +55,65 @@ def pts_perf(expr: Expr) -> Optional[Expr]:
         if len(new_expr.terms) == 2:
             t1, t2 = new_expr.terms
             if isinstance(t1, (sin, cos)) and isinstance(t2, (sin, cos)):
-                return perform_on_terms(*new_expr.terms, const=const)
-            if isinstance(t1, (sin, cos)) and is_valid_power(t2):
-                return product_to_sum((pts_perf(t2) * t1).expand(), always_simplify=True, const=const)
-            if isinstance(t2, (sin, cos)) and is_valid_power(t1):
-                return product_to_sum((pts_perf(t1) * t2).expand(), always_simplify=True, const=const)
-            if is_valid_power(t2) and is_valid_power(t1):
-                intermediate = pts_perf(t1) * pts_perf(t2)
-                return product_to_sum(intermediate.expand(), const=const, always_simplify=True)
+                return _perform_on_terms(t1, t2, multiplier=const)
+            elif isinstance(t1, (sin, cos)) and is_valid_power(t2):
+                intermediate = _product_to_sum_unit(t2, multiplier=t1)
+            elif isinstance(t2, (sin, cos)) and is_valid_power(t1):
+                intermediate = _product_to_sum_unit(t1, multiplier=t2)
+            elif is_valid_power(t2) and is_valid_power(t1):
+                intermediate = (product_to_sum_unit(t1) * product_to_sum_unit(t2)).expand()
+            else:
+                return
+
+            return _product_to_sum(intermediate, multiplier=const)
 
     if is_valid_power(new_expr):
         if new_expr.exponent == 2:
-            return perform_on_terms(new_expr.base, new_expr.base, const=const)
-        elif new_expr.exponent % 2 == 0:
-            intermediate = perform_on_terms(new_expr.base, new_expr.base) ** (new_expr.exponent / 2)
-            return product_to_sum(intermediate.expand(), const=const, always_simplify=True)
+            return _perform_on_terms(new_expr.base, new_expr.base, multiplier=const)
+        elif new_expr.exponent == 3:
+            intermediate = _perform_on_terms(new_expr.base, new_expr.base, multiplier=new_expr.base)
         else:
-            intermediate = new_expr.base * perform_on_terms(new_expr.base, new_expr.base) ** (
-                (new_expr.exponent - 1) / 2
+            intermediate = _perform_on_terms(
+                new_expr.base, new_expr.base, multiplier=Power(new_expr.base, new_expr.exponent - 2, skip_checks=True)
             )
-            return product_to_sum(intermediate.expand(), const=const, always_simplify=True)
+        return _product_to_sum(intermediate, multiplier=const)
 
 
-def product_to_sum(expr: Expr, *, always_simplify=False, const: Expr = None) -> Optional[Expr]:
-    """Does applying product-to-sum on every term of a sum ... create a cancellation?
+def _product_to_sum(sum: List[Expr], *, multiplier: Expr = None) -> Optional[List[Expr]]:
+    """takes in terms and returns terms
+
+    We call this function in intermediate steps. This prevents us from creating a bunch of unnecessary exprs in between.
+    """
+    results = [_product_to_sum_unit(t) for t in sum]
+    if all(r is None for r in results):
+        return
+
+    final_terms = []
+    for result, term in zip(results, sum):
+        if not result:
+            final_terms.append(term)
+            continue
+        final_terms.extend(result)
+
+    if multiplier is not None and multiplier != 1:
+        final_terms = [t * multiplier for t in final_terms]
+
+    return final_terms
+
+
+def product_to_sum(expr: Expr) -> Optional[Expr]:
+    """The function used in simplify.
+    Does applying product-to-sum on every term of a sum ... create a cancellation?
 
     Assumes that expr.has(TrigFunctionNotInverse) == True
     """
     if not isinstance(expr, Sum):
         return
 
-    satisfies = [pts_perf(t) for t in expr.terms]
-    if all(s is None for s in satisfies):
+    final_terms = _product_to_sum(expr.terms)
+    if final_terms is None:
         return
-
-    final_terms = []
-    for boool, term in zip(satisfies, expr.terms):
-        if not boool:
-            final_terms.append(term)
-            continue
-        if isinstance(boool, Sum):
-            final_terms.extend(boool.terms)
-
-    if const is not None and const != 1:
-        final_terms = [t * const for t in final_terms]
     final = Sum(final_terms)
-
-    if always_simplify:
-        return final
 
     # If final is simpler, return final
     if not isinstance(final, Sum):

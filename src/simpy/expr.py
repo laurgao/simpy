@@ -763,9 +763,9 @@ def _accumulate_power(b: Accumulateable, x: Accumulateable) -> Optional[Expr]:
 
         ans = None
         if isint(num) and num != 1:
-            ans = Prod([Rat(num), Power(b.value.denominator, -x, skip_checks=True)], skip_checks=True)
+            ans = Prod([Rat(num), Power(b.denominator, -x, skip_checks=True)], skip_checks=True)
         elif isint(den) and den != 1:
-            ans = Prod([Rat(1, den), Power(b.value.numerator, x, skip_checks=True)], skip_checks=True)
+            ans = Prod([Rat(1, den), Power(b.numerator, x, skip_checks=True)], skip_checks=True)
         if ans:
             if x > 0:
                 return ans
@@ -1112,7 +1112,6 @@ class Prod(Associative, Expr):
     _numerator_denominator_cache = None
     _fields_already_casted = True
 
-    @cast
     def __new__(cls, terms: List[Expr], *, skip_checks: bool = False) -> "Expr":
         if skip_checks:
             if len(terms) == 0:
@@ -1123,6 +1122,7 @@ class Prod(Associative, Expr):
 
         # We need to flatten BEFORE we accumulate like terms
         # ex: Prod(x, Prod(Power(x, -1), y))
+        terms = _cast(terms)
         initial_terms = cls._flatten_terms(terms)
 
         # accumulate all like terms
@@ -1350,17 +1350,16 @@ class Power(Expr):
 
         return group(_term_latex(self.base)) + "^" + group(_term_latex(self.exponent))
 
-    @cast
     def __new__(cls, base: Expr, exponent: Expr, *, skip_checks: bool = False) -> "Expr":
-        b = base
-        x = exponent
+        if skip_checks:
+            return super().__new__(cls)
+
+        b = _cast(base)
+        x = _cast(exponent)
 
         default_return = super().__new__(cls)
         default_return.base = b
         default_return.exponent = x
-
-        if skip_checks:
-            return default_return
 
         if x == 0:
             # Ok this is up to debate, but since python does 0**0 = 1 I'm gonna do it too.
@@ -1414,6 +1413,9 @@ class Power(Expr):
         return default_return
 
     def __init__(self, base: Expr, exponent: Expr, skip_checks: bool = False):
+        if skip_checks:
+            self.base = base
+            self.exponent = exponent
         self.__post_init__()
 
     def _power_expandable(self) -> bool:

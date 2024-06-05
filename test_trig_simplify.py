@@ -99,8 +99,10 @@ def test_complex_pts():
 
 
 def test_complex_pts_2():
+    """need to have sin(2*x)^3/48 + sin(6*x)/192 - sin(2*x)/64 simplify to 0.
+    need to do expand in simplify when that makes it simpler.
+    """
+
     e1 = sin(2 * x) ** 3 / 48 + 3 * sin(4 * x) / 64 - sin(2 * x) / 4 + 5 * x / 16
     e2 = (9 * sin(4 * x) - sin(6 * x) - 45 * sin(2 * x) + 60 * x) / 192
     assert_eq_value(e1, e2)
-    # -> need to have sin(2*x)^3/48 + sin(6*x)/192 - sin(2*x)/64 simplify to 0.
-    # need to do expand in simplify when that makes it simpler.

@@ -35,7 +35,7 @@ from .linalg import invert
 from .polynomial import Polynomial, is_polynomial, polynomial_to_expr, rid_ending_zeros, to_const_polynomial
 from .regex import count, general_contains, replace, replace_class, replace_factory
 from .simplify import pythagorean_simplification
-from .simplify.product_to_sum import pts_perf
+from .simplify.product_to_sum import product_to_sum_unit
 from .utils import ExprFn, eq_with_var, random_id
 
 Number_ = Union[Fraction, int]
@@ -767,7 +767,7 @@ class ProductToSum(Transform):
         return True
 
     def forward(self, node: Node) -> None:
-        new_integrand = pts_perf(node.expr)
+        new_integrand = product_to_sum_unit(node.expr)
         if new_integrand:
             node.add_child(Node(new_integrand, node.var, self, node))
 
