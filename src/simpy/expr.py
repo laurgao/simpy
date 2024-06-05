@@ -1035,7 +1035,7 @@ def _deconstruct_prod(expr: Expr) -> Tuple[Rat, List[Expr]]:
     return expr._deconstruct_prod_cache
 
 
-def deconstruct_power(expr: Expr) -> Tuple[Expr, Rat]:
+def deconstruct_power(expr: Expr) -> Tuple[Expr, Expr]:
     # x^3 -> (x, 3). x -> (x, 1). 3 -> (3, 1)
     if hasattr(expr, "_deconstruct_power_cache"):
         return expr._deconstruct_power_cache

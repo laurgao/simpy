@@ -64,7 +64,7 @@ def test_pts():
     # applying product-to-sum makes this simpler
     e1 = 2 * cos(x) * sin(2 * x) / 3 - sin(x) * cos(2 * x) / 3
     e2 = sin(3 * x) / 6 + sin(x) / 2
-    assert_eq_value(e1, e2)
+    assert_simplified(e1, e2)
 
 
 def test_sectan():
@@ -80,10 +80,10 @@ def test_csc_squared_deriv():
     # this shit takes 2 rounds of simplification: first to -cos(x)/sin(x) then to -cot(x)
     # make sure that both rounds are done in the simplify function.
     e2 = -cot(x)
-    assert_eq_strict(e1.simplify(), e2)
+    assert_simplified(e1, e2)
 
 
-def test_complex_pts():
+def test_complicated_pts():
     # old solution of sin(x) ** 2 * cos(x) ** 3 simpy found when going 27 levels deep
     # needs to compound angle to the end or pts to the end.
     e1 = (
@@ -98,7 +98,7 @@ def test_complex_pts():
     assert_eq_value(e1, e2)
 
 
-def test_complex_pts_2():
+def test_complicated_pts_2():
     """need to have sin(2*x)^3/48 + sin(6*x)/192 - sin(2*x)/64 simplify to 0.
     need to do expand in simplify when that makes it simpler.
     """

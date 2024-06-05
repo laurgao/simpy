@@ -24,10 +24,6 @@ def _perform_on_terms(
         return [cos(a.inner - b.inner) * c, -cos(a.inner + b.inner) * c]
 
 
-def perform_on_terms(a: Union[sin, cos], b: Union[sin, cos], *, const: Optional[Expr] = None) -> Optional[Sum]:
-    return Sum(_perform_on_terms(a, b, multiplier=const))
-
-
 def product_to_sum_unit(expr: Expr) -> Optional[Expr]:
     """Returns the result of applying product-to-sum on expr, if possible
     Where expr is the product of 2 or more trig functions
