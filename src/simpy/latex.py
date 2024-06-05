@@ -6,11 +6,15 @@ from .expr import Expr, Power
 
 
 def bracketfy(expr: Expr, *, bracket="()") -> str:
-    """Conditions for putting \\left \\right:
+    """Makes expr latex with the necessary brackets
+
+    Conditions for putting \\left \\right:
     - has power
     - has frac
 
-    bracket must be a str of length 2
+    args:
+        expr: the expr to bracketfy
+        bracket: must be a str of length 2
     """
     inner_latex = expr.latex()
     b1, b2 = bracket

@@ -45,22 +45,28 @@ Number_ = Union[Fraction, int]
 class Node:
     """A node in the integration nodetree.
 
+    expr: the expression to integrate
+    var: the variable that THIS EXPR is integrated by
+    transform: the transform that led to this node
+    parent: the parent node. None for root node only.
+    type: AND, OR, UNSET, SOLUTION, FAILURE
+        - failure = can't proceed forward. not a single transform matches.
+    solution: only for SOLUTION nodes (& their parents when we go backwards)
+    is_filler: fillers are ones where the expr is not *really* the expression to integrate, and just a copy of the parents. the node exists to store info other than the expr.
+
+
     `_children` is private. do not modify it directly; only use the `add_child` or `add_children` methods. you can read from the
     `children` property.
     """
 
     expr: Expr
-    var: Symbol  # variable that THIS EXPR is integrated by.
-    transform: Optional["Transform"] = None  # the transform that led to this node
-    parent: Optional["Node"] = None  # None for root node only
+    var: Symbol
+    transform: Optional["Transform"] = None
+    parent: Optional["Node"] = None
     type: Literal["AND", "OR", "UNSET", "SOLUTION", "FAILURE"] = "UNSET"
-    solution: Optional[Expr] = None  # only for SOLUTION nodes (& their parents when we go backwards)
-    is_filler: bool = (
-        False  # fillers are ones where the expr is like; not real / a copy of the parents. the node exists to store info other than the expr. eventually i wanna just set expr to none.
-    )
-    _children: Optional[List["Node"]] = None  # smtn smtn setting it to [] by default causes errors
-
-    # failure = can't proceed forward.
+    solution: Optional[Expr] = None
+    is_filler: bool = False
+    _children: Optional[List["Node"]] = None
 
     def __post_init__(self):
         if self._children is None:
@@ -202,6 +208,8 @@ class Transform(ABC):
 
 
 class USub(Transform, ABC):
+    """Base class for u-substituion transforms."""
+
     _u: Expr = None
 
     def backward(self, node: Node) -> None:
@@ -214,6 +222,8 @@ class SafeTransform(Transform, ABC):
 
 
 class PullConstant(SafeTransform):
+    """Pulls out a constant from the integral. Linearity."""
+
     _constant: Expr = None
     _non_constant_part: Expr = None
 
@@ -243,6 +253,8 @@ class PullConstant(SafeTransform):
 
 
 class PolynomialDivision(SafeTransform):
+    """Divides a polynomial by another polynomial."""
+
     _numerator: Polynomial = None
     _denominator: Polynomial = None
 
@@ -299,6 +311,8 @@ class PolynomialDivision(SafeTransform):
 
 
 class Expand(SafeTransform):
+    """Expands the expression"""
+
     def forward(self, node: Node):
         node.add_child(Node(node.expr.expand(), node.var, self, node))
 
@@ -320,6 +334,8 @@ class Expand(SafeTransform):
 
 
 class Additivity(SafeTransform):
+    """Additivity of integrals"""
+
     def forward(self, node: Node):
         node.type = "AND"
         node.add_children([Node(e, node.var, self, node) for e in node.expr.terms])
@@ -341,6 +357,9 @@ class Additivity(SafeTransform):
 
 
 def _get_last_heuristic_transform(node: Node, tup=(PullConstant, Additivity)):
+    """Returns the last heuristic transform that was used on the node.
+    tup: tuple of transform classes to exclude from the search.
+    """
     if isinstance(node.transform, tup):
         # We'll let polynomial division go because it changes things sufficiently that
         # we actually sorta make progress towards the integral.
@@ -472,7 +491,7 @@ class InverseTrigUSub(USub):
     _key = None
 
     # {label: class, search query, dy_dx, variable_change}
-    _table: Dict[str, Tuple[ExprFn, Callable[[str], str], ExprFn, ExprFn]] = {
+    _table: Dict[str, Tuple[ExprFn, ExprFn, ExprFn, ExprFn]] = {
         "sin": (sin, lambda symbol: 1 - symbol**2, lambda var: cos(var), asin),
         "tan": (tan, lambda symbol: 1 + symbol**2, lambda var: sec(var) ** 2, atan),
     }
@@ -846,6 +865,8 @@ class ByParts(Transform):
 
 
 class PartialFractions(Transform):
+    """Integration using partial fractions"""
+
     _new_integrand: Expr = None
 
     def check(self, node: Node) -> bool:
@@ -912,6 +933,8 @@ class PartialFractions(Transform):
 
 
 class GenericUSub(USub):
+    """Generic u-substitution"""
+
     _u: Expr = None
 
     def check(self, node: Node) -> bool:
@@ -943,6 +966,8 @@ class GenericUSub(USub):
 
 
 class CompleteTheSquare(Transform):
+    """Integration via completing the square"""
+
     def check(self, node: Node) -> bool:
         if super().check(node) is False:
             return False
@@ -1057,6 +1082,8 @@ class RewritePythagorean(Transform):
 
 
 class Simplify(Transform):
+    """Simplifies using pythagorean trigonometric identities if possible"""
+
     def check(self, node: Node) -> bool:
         if super().check(node) is False:
             return False

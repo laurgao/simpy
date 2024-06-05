@@ -12,6 +12,7 @@ from .transforms import HEURISTICS, SAFE_TRANSFORMS, Node
 
 
 def _check_if_node_solvable(node: Node):
+    """checks if the node is solvable using the integral table. if it is, sets the solution."""
     answer = check_integral_table(node.expr, node.var)
     if answer is None:
         return
@@ -20,9 +21,10 @@ def _check_if_node_solvable(node: Node):
     node.solution = answer
 
 
-# a recursive function.
-# find the simplest problem to work on that makes progress.
 def _get_best_leaf(root: Node) -> Node:
+    """a recursive function.
+    find the simplest problem to work on that makes progress.
+    """
     if len(root.unfinished_children) == 1:
         return _get_best_leaf(root.unfinished_children[0])
 
@@ -38,7 +40,13 @@ def _get_best_leaf(root: Node) -> Node:
     return _get_node_with_best_nesting(childrens_best_nodes, fn)
 
 
-def _get_node_with_best_nesting(nodes: List[Node], fn: Callable[[List[Node]], Node]) -> Node:
+def _get_node_with_best_nesting(nodes: List[Node], fn: Callable[[List[int]], int]) -> Node:
+    """returns the node with the best nesting from a list of nodes
+
+    args:
+        nodes: a list of nodes
+        fn: gets the best int from a list of ints. either min or max
+    ."""
     results = [nesting(node.expr, node.var) for node in nodes]
     best_value = fn(results)
     return nodes[results.index(best_value)]
@@ -68,7 +76,7 @@ def integrate(
         Examples of valid uses:
             integrate(x**2)
             integrate(x*y, x)
-            integrate(3*x + Tan(x), (2, pi))
+            integrate(3*x + tan(x), (2, pi))
             integrate(x*y+3*x, (x, 3, 4))
 
     Returns:
@@ -204,9 +212,13 @@ class Integration:
         return ans
 
     def _check_if_depth_first_bad(self, ans: Node) -> bool:
+        """if nesting is greater than DEPTH_FIRST_MAX_NESTING, do not keep progressing.
+        like if the nesting is >5 I honestly don't see how it can be solved super easily?
+
+        also, byparts should not be depth first. byparts often makes shit more complicated.
+        only go ahead with byparts if it's the best out of all branches
+        """
         # setting this alone makes csc^2 get solved when depth first!!
-        # if nesting is greater than 5 i honestly don't see how it can get solved super easily??
-        # byparts should not be depth first.
 
         if nesting(ans.expr) >= self.DEPTH_FIRST_MAX_NESTING:
             return True
@@ -282,6 +294,9 @@ class Integration:
 
 
 def _integrate_safely(node: Node):
+    """Applies all possible safe transforms to a node..
+    If a safe transform is applied, we keep applying safe transforms to the new children.
+    """
     for transform in SAFE_TRANSFORMS:
         tr = transform()
         if tr.check(node):
@@ -292,6 +307,9 @@ def _integrate_safely(node: Node):
 
 
 def _integrate_heuristically(node: Node):
+    """Applies all possible heuristic transforms to a node.
+    If a heuristic transform is applied, we keep applying safe transforms to the new children.
+    """
     for transform in HEURISTICS:
         tr = transform()
         if tr.check(node):

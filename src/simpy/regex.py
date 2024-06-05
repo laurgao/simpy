@@ -64,7 +64,6 @@ any_ = Any_()
 EqResult = Dict[Literal["success", "factor", "rest", "matches"], Any]
 
 
-@cast
 def eq(expr: Expr, query: Expr, *, up_to_factor=False, up_to_sum=False) -> EqResult:
     """Tests if `expr` is equal to `query` when `query` contains `Any_` objects.
 
@@ -359,7 +358,6 @@ def join_dicts2(d1: MatchesInProgress, d2: MatchesInProgress) -> None:
             d1[k] = d2[k]
 
 
-@cast
 def count(expr: Expr, query: Expr) -> int:
     """Counts how many times `query` appears in `expr`. Exact matches only."""
     if isinstance(expr, query.__class__) and expr == query:

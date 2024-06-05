@@ -864,8 +864,7 @@ def _combine_like_terms_sum(terms: List[Expr]) -> List[Expr]:
             continue
 
         coeff = accumulate(*coeff)
-        if coeff == []:
-            # means coeff = 0
+        if coeff == []:  # means coeff = 0
             continue
         elif coeff == [1]:
             non_constant_terms.append(Prod(non_const_factors1, skip_checks=True))
@@ -1113,6 +1112,7 @@ def _combine_like_terms(initial_terms):
         if not i in decon:
             decon[i] = deconstruct_power(term)
         base, expo = decon[i]
+        expos = [expo]
 
         # other terms with same base
         for j in range(i + 1, len(initial_terms)):
@@ -1123,7 +1123,7 @@ def _combine_like_terms(initial_terms):
             other_base, other_expo = decon[j]
             if other_base == base:
                 is_hit = True
-                expo += other_expo
+                expos.append(other_expo)
                 initial_terms[j] = None
                 initial_terms[i] = None
 
@@ -1131,6 +1131,7 @@ def _combine_like_terms(initial_terms):
             _add_term(term)
             continue
 
+        expo = Sum(expos)
         if expo == 0:
             continue
         if expo == 1:
