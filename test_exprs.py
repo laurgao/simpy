@@ -55,8 +55,12 @@ def test_sum_combines_like_terms():
     assert_eq_strict(2 * x * y + 3 * x * y, 5 * x * y)  # like terms with multiple factors
     assert_eq_strict(0.2 * x * y + 0.8 * x * y, x * y)  # like terms with multiple factors
 
-    # not sure if we want this to be the case but wtv
+    # not sure if we want this to be the case but wtv, make sure behavior is well-defined anyways
+    # this check is useful it caught a bug when i mutated things for speed
     assert_eq_strict(2 * x + 0.2 * x, (Rat(2) + Float(0.2)) * x)
+
+    # when it sums to 1
+    assert_eq_strict(3 * x - 2 * x, x)
 
 
 def test_prod_combines_like_terms_prod():
@@ -111,7 +115,7 @@ def test_flatten():
 
 
 def test_regex():
-    assert count(2, x) == 0
+    assert count(Rat(2), x) == 0
     assert count(tan(x + 1) ** 2 - 2 * x, x) == 2
 
 
