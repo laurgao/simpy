@@ -144,6 +144,24 @@ def test_complete_the_square_integrals():
 
 def test_neg_inf():
     assert integrate(-(e**x), (-inf, 1)) == -e
+    assert integrate(e ** (-x), (0, inf)) == 1
+
+
+import pytest
+
+
+@pytest.mark.xfail
+def test_neg_inf_2():
+    # This one requires recognizing that x * e**-x at infinity is 0 because the e term goes down faster
+    # options:
+    # - auto do it (sympy does this)
+    # - make a seperate class for limits and especially evaluate a limit when one of the bounds is 0
+    #   - lwk i like this better because inf feels wonky ngl and having it as an explicit limit...
+    #   - like setting inf * e ** -inf is like lowkey fair ngl if we don't know? context?
+    # tho i do think having inf * 2 = inf always is fair or smtn. linear shit doesn't change scaling.
+    # but don't combine powers by default or something.
+    for n in range(4):
+        assert integrate(x**n * e ** (-x), (0, inf)) == math.factorial(n)
 
 
 def test_bigger_power_trig():

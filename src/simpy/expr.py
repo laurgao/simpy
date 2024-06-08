@@ -1501,8 +1501,9 @@ class Power(Expr):
             return log(self.base) * self * self.exponent.diff(var)
 
         # if both base and exponent contain var
-        new_power = Power(e, self.exponent * log(self.base))
-        return new_power.diff(var)
+        raise NotImplementedError("Power differentiation not implemented for both base and exponent containing var")
+        # new_power = Power(e, self.exponent * log(self.base))
+        # return new_power.diff(var)
 
     @property
     def is_subtraction(self) -> bool:
