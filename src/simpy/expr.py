@@ -1377,8 +1377,8 @@ class Power(Expr):
     def latex(self) -> str:
         from .latex import bracketfy, group
 
-        def _term_latex(term: Expr):
-            if isinstance(term, Sum) or isinstance(term, Prod):
+        def _base_latex(term: Expr):
+            if isinstance(term, Sum) or isinstance(term, Prod) or isfractionorneg(term) or islongsymbol(term):
                 return bracketfy(term)
             return term.latex()
 
@@ -1388,7 +1388,7 @@ class Power(Expr):
         if self.exponent == Rat(-1, 2):
             return "{\\sqrt{" + self.base.latex() + "}" + "}^{-1}"
 
-        return group(_term_latex(self.base)) + "^" + group(_term_latex(self.exponent))
+        return _base_latex(self.base) + "^" + group(self.exponent)
 
     def __new__(cls, base: Expr, exponent: Expr, *, skip_checks: bool = False) -> "Expr":
         if skip_checks:

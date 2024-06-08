@@ -15,7 +15,14 @@ def test_no_unnecessary_curly_brackets():
     assert_latex((x + 2) / 3, "\\frac{x+2}3")
 
     assert_latex(x**2, "x^2")
-    assert_latex((2 + x) ** (log(x)), "{(x+2)}^{\\ln(x)}")
+    assert_latex((2 + x) ** (log(x)), "(x+2)^{\\ln(x)}")
+
+
+def test_power_groups():
+    assert_latex(x ** (y + 3), "x^{y+3}")
+    assert_latex((2 + x) ** y, "(x+2)^y")
+    assert_latex(x ** (-3), "x^{-3}")
+    assert_latex(x ** (-e), "x^{-e}")
 
 
 def test_sum_subtraction_bug():
