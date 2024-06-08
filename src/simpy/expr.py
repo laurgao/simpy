@@ -705,7 +705,14 @@ Accumulateable = Union[Rat, Infinity, NegInfinity, Float]
 AccumulaTuple = (Rat, Infinity, NegInfinity, Float)  # because can't use Union in isinstance checks.
 
 
-def accumulate(*consts: List[Accumulateable], type_: Literal["sum", "prod"] = "sum") -> List[Expr]:
+def accumulate(*consts: List[Accumulateable], type_: Literal["sum", "prod"] = "sum") -> Optional[Expr]:
+    """Accumulate constants into a single constant.
+
+    New rule is that we're just gonna make Float * Rat = Float
+
+    If it's the identity, returns None.
+    """
+
     if type_ == "sum":
         identity = 0
         operation = sum
@@ -714,39 +721,16 @@ def accumulate(*consts: List[Accumulateable], type_: Literal["sum", "prod"] = "s
         operation = lambda terms: reduce(lambda x, y: x * y, terms, 1)
 
     if len(consts) == 1:
-        return [consts[0]] if consts[0] != identity else []
+        ans = consts[0]
+    else:
+        ans = Const(operation(c.value for c in consts))
 
-    rats = []
-    floats = []
-    for c in consts:
-        if type_ == "prod" and c == 0:
-            return [Rat(0)]
-        if isinstance(c, (Infinity, NegInfinity)):
-            return [Const(operation(c.value for c in consts))]
-        elif isinstance(c, Rat):
-            rats.append(c.value)
-        else:
-            floats.append(c.value)
-
-    result = []
-    if rats:
-        rat_result = operation(rats)
-        if rat_result != identity:
-            result.append(Rat(rat_result))
-    if floats:
-        float_result = operation(floats)
-        if float_result != identity:
-            result.append(Const(float_result))
-
-    return result
+    return ans if ans != identity else None
 
 
 def _accumulate_power(b: Accumulateable, x: Accumulateable) -> Optional[Expr]:
     """If returns None, means it cannot be simplified."""
-    if isinstance(b, Float) and isinstance(x, Float):
-        return Float(b.value**x.value)
-
-    if isinstance(b, (Infinity, NegInfinity)) or isinstance(x, (Infinity, NegInfinity)):
+    if isinstance(b, (Infinity, NegInfinity, Float)) or isinstance(x, (Infinity, NegInfinity, Float)):
         return Const(b.value**x.value)
 
     if b == 0:
@@ -840,7 +824,7 @@ def _combine_like_terms_sum(terms: List[Expr]) -> List[Expr]:
             consts.append(term)
             continue
 
-        coeff, non_const_factors1 = _deconstruct_prod(term)
+        coeffs, non_const_factors1 = _deconstruct_prod(term)
 
         # check if any later terms are the same
         for j in range(i + 1, len(terms)):
@@ -848,12 +832,12 @@ def _combine_like_terms_sum(terms: List[Expr]) -> List[Expr]:
             if term2 is None:
                 continue
 
-            coeff2, non_const_factors2 = _deconstruct_prod(term2)
+            coeffs2, non_const_factors2 = _deconstruct_prod(term2)
 
             if non_const_factors1 == non_const_factors2:
                 if not is_hit:
                     is_hit = True
-                coeff = coeff + coeff2  # use + instead of extend to not mutate the original list
+                coeffs = coeffs + coeffs2  # use + instead of extend to not mutate the original list
                 terms[j] = None
 
         # Yes you can replace the next few lines with Prod([new_coeff] + non_const_factors1)
@@ -863,19 +847,21 @@ def _combine_like_terms_sum(terms: List[Expr]) -> List[Expr]:
             non_constant_terms.append(term)
             continue
 
-        coeff = accumulate(*coeff)
-        if coeff == []:  # means coeff = 0
+        coeff = accumulate(*coeffs)
+        if coeff is None:  # means coeff = 0
             continue
-        elif coeff == [1]:
+        elif coeff == 1:
             non_constant_terms.append(Prod(non_const_factors1, skip_checks=True))
         else:
-            non_constant_terms.append(Prod([Sum(coeff, skip_checks="sort")] + non_const_factors1, skip_checks=True))
+            non_constant_terms.append(Prod([coeff] + non_const_factors1, skip_checks=True))
 
     # accumulate all constants
     if consts:
-        consts = accumulate(*consts)
+        const = accumulate(*consts)
+        if const:
+            non_constant_terms.append(const)
 
-    return consts + non_constant_terms
+    return non_constant_terms
 
 
 @dataclass
@@ -983,7 +969,7 @@ class Sum(Associative, Expr):
             """
             if isinstance(term, Prod):
                 num, terms = _deconstruct_prod(term)
-                return Prod(num), [_df(f)[1][0] for f in terms]
+                return Prod(num, skip_checks=True), [_df(f)[1][0] for f in terms]
             if isinstance(term, Power) and isinstance(term.exponent, Rat):
                 return Rat(1), [[term.base, abs(term.exponent), term.exponent.value > 0]]
             if isinstance(term, Rat):
@@ -1093,8 +1079,11 @@ isfractionorneg = lambda x: isinstance(x, Rat) and (x.value.denominator != 1 or 
 islongsymbol = lambda x: isinstance(x, Symbol) and len(x.name) > 1 or x.__class__.__name__ == "Any_" and len(x.key) > 1
 
 
-def _combine_like_terms(initial_terms):
-    """accumulates all like terms of a product."""
+def _combine_like_terms(initial_terms: List[Expr]) -> List[Expr]:
+    """accumulates all like terms of a product.
+
+    Takesin a list of terms, returns a list of terms
+    """
     consts = []
     non_constant_terms = []
     decon = {}
@@ -1141,10 +1130,12 @@ def _combine_like_terms(initial_terms):
         _add_term(Power(base, expo))
 
     if consts:
-        consts = accumulate(*consts, type_="prod")
-        if consts == [0]:
-            return consts
-    return consts + non_constant_terms
+        coeff = accumulate(*consts, type_="prod")
+        if coeff == 0:
+            return [coeff]
+        if coeff:
+            non_constant_terms.append(coeff)
+    return non_constant_terms
 
 
 @dataclass
@@ -1255,7 +1246,7 @@ class Prod(Associative, Expr):
                 continue
 
             b, x = deconstruct_power(term)
-            if isinstance(x, Rat) and x.value < 0:
+            if isinstance(x, Num) and x.value < 0:
                 denominator.append(b if x == Rat(-1) else Power(b, -x))
             else:
                 numerator.append(term)
@@ -1344,6 +1335,12 @@ def debug_repr(expr: Expr) -> str:
     if isinstance(expr, Sum):
         return "Sum(" + ", ".join([debug_repr(t) for t in expr.terms]) + ")"
         # return " + ".join([debug_repr(t) for t in expr.terms])
+    if isinstance(expr, Rat):
+        return f"Rat({expr.value})"
+    if isinstance(expr, Symbol):
+        return f"Symbol({expr.name})"
+    if isinstance(expr, Float):
+        return f"Float({expr.value})"
     else:
         return repr(expr)
 
@@ -1502,7 +1499,10 @@ class Power(Expr):
             return self.exponent * self.base ** (self.exponent - 1) * self.base.diff(var)
         if not self.base.contains(var):
             return log(self.base) * self * self.exponent.diff(var)
-        raise NotImplementedError("Power.diff not implemented for functions with var in both base and exponent.")
+
+        # if both base and exponent contain var
+        new_power = Power(e, self.exponent * log(self.base))
+        return new_power.diff(var)
 
     @property
     def is_subtraction(self) -> bool:
