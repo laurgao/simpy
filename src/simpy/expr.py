@@ -705,7 +705,7 @@ Accumulateable = Union[Rat, Infinity, NegInfinity, Float]
 AccumulaTuple = (Rat, Infinity, NegInfinity, Float)  # because can't use Union in isinstance checks.
 
 
-def accumulate(*consts: List[Accumulateable], type_: Literal["sum", "prod"] = "sum") -> Optional[Expr]:
+def accumulate(*consts: List[Accumulateable], type_: Literal["sum", "prod"] = "sum") -> Accumulateable:
     """Accumulate constants into a single constant.
 
     New rule is that we're just gonna make Float * Rat = Float
@@ -714,18 +714,14 @@ def accumulate(*consts: List[Accumulateable], type_: Literal["sum", "prod"] = "s
     """
 
     if type_ == "sum":
-        identity = 0
         operation = sum
     elif type_ == "prod":
-        identity = 1
         operation = lambda terms: reduce(lambda x, y: x * y, terms, 1)
 
     if len(consts) == 1:
-        ans = consts[0]
+        return consts[0]
     else:
-        ans = Const(operation(c.value for c in consts))
-
-    return ans if ans != identity else None
+        return Const(operation(c.value for c in consts))
 
 
 def _accumulate_power(b: Accumulateable, x: Accumulateable) -> Optional[Expr]:
@@ -848,7 +844,7 @@ def _combine_like_terms_sum(terms: List[Expr]) -> List[Expr]:
             continue
 
         coeff = accumulate(*coeffs)
-        if coeff is None:  # means coeff = 0
+        if coeff == 0:
             continue
         elif coeff == 1:
             non_constant_terms.append(Prod(non_const_factors1, skip_checks=True))
@@ -858,7 +854,7 @@ def _combine_like_terms_sum(terms: List[Expr]) -> List[Expr]:
     # accumulate all constants
     if consts:
         const = accumulate(*consts)
-        if const:
+        if const != 0:
             non_constant_terms.append(const)
 
     return non_constant_terms
@@ -1133,7 +1129,7 @@ def _combine_like_terms(initial_terms: List[Expr]) -> List[Expr]:
         coeff = accumulate(*consts, type_="prod")
         if coeff == 0:
             return [coeff]
-        if coeff:
+        if coeff != 1:
             non_constant_terms.append(coeff)
     return non_constant_terms
 
