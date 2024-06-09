@@ -1097,7 +1097,6 @@ def _combine_like_terms(initial_terms: List[Expr]) -> List[Expr]:
         if not i in decon:
             decon[i] = deconstruct_power(term)
         base, expo = decon[i]
-        expos = [expo]
 
         # other terms with same base
         for j in range(i + 1, len(initial_terms)):
@@ -1108,7 +1107,7 @@ def _combine_like_terms(initial_terms: List[Expr]) -> List[Expr]:
             other_base, other_expo = decon[j]
             if other_base == base:
                 is_hit = True
-                expos.append(other_expo)
+                expo += other_expo
                 initial_terms[j] = None
                 initial_terms[i] = None
 
@@ -1116,7 +1115,6 @@ def _combine_like_terms(initial_terms: List[Expr]) -> List[Expr]:
             _add_term(term)
             continue
 
-        expo = Sum(expos)
         if expo == 0:
             continue
         if expo == 1:
