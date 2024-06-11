@@ -10,6 +10,7 @@ ExprCondition = Callable[[Expr], bool]
 
 
 def random_id(length):
+    """Generates a random string of length `length` using ascii letters and digits."""
     # Define the pool of characters you can choose from
     characters = string.ascii_letters + string.digits
     # Use random.choices() to pick characters at random, then join them into a string
@@ -44,6 +45,7 @@ def eq_with_var(a: Tuple[Expr, Symbol], b: Tuple[Expr, Symbol]) -> bool:
 
 
 def count_symbols(expr: Expr) -> int:
+    """Counts the number of symbols in an expression."""
     from .regex import general_count
 
     return general_count(expr, lambda x: isinstance(x, Symbol))

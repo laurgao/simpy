@@ -64,7 +64,6 @@ any_ = Any_()
 EqResult = Dict[Literal["success", "factor", "rest", "matches"], Any]
 
 
-@cast
 def eq(expr: Expr, query: Expr, *, up_to_factor=False, up_to_sum=False) -> EqResult:
     """Tests if `expr` is equal to `query` when `query` contains `Any_` objects.
 
@@ -89,11 +88,20 @@ def eq(expr: Expr, query: Expr, *, up_to_factor=False, up_to_sum=False) -> EqRes
 
 def get_anys(expr: Expr) -> List[Any_]:
     """Returns a list of all Any_ objects in the expression."""
-    if isinstance(expr, Any_):
-        return [expr]
 
-    str_set = set([symbol.key for e in expr.children() for symbol in get_anys(e)])
-    return [Any_(s) for s in str_set]
+    def ga(expr):
+        if not expr.has(Any_):
+            return []
+
+        if isinstance(expr, Any_):
+            return [expr]
+
+        str_set = set([symbol.key for e in expr.children() for symbol in get_anys(e)])
+        return [Any_(s) for s in str_set]
+
+    if not hasattr(expr, "_any_cache"):
+        expr._any_cache = ga(expr)
+    return expr._any_cache
 
 
 def all_same(list_: list) -> bool:
@@ -262,6 +270,10 @@ class Eq:
         if not self._is_divide:
             # You don't get to divide if we already is --- prevents inf recursion.
             one, quotient_matches = divide_anys(query, expr)
+            if one == 1:
+                join_dicts2(self._matches, quotient_matches)
+                return True
+
             if isinstance(one, Any_):
                 self._matches[one.key].append(Rat(1))
                 join_dicts2(self._matches, quotient_matches)
@@ -346,7 +358,6 @@ def join_dicts2(d1: MatchesInProgress, d2: MatchesInProgress) -> None:
             d1[k] = d2[k]
 
 
-@cast
 def count(expr: Expr, query: Expr) -> int:
     """Counts how many times `query` appears in `expr`. Exact matches only."""
     if isinstance(expr, query.__class__) and expr == query:

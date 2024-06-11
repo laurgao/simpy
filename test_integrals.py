@@ -130,3 +130,8 @@ def test_area_between():
     bounds = (pi / 6, 5 * pi / 6)
     ans = integrate_polar(r1, theta, *bounds) - integrate_polar(r2, theta, *bounds)
     assert_eq_value(ans, pi)
+
+
+def test_multiterm_pts():
+    expr = sin(x) * cos(2 * x) * sin(2 * x)
+    assert_integral(expr, 2 * sin(x) ** 3 / 3 - 4 * sin(x) ** 5 / 5)

@@ -32,3 +32,11 @@ def test_kh_derivatives():
     assert_diff(sin(x) / e**x, (cos(x) - sin(x)) / e**x)
 
     assert_diff(sec(y**3 * pi) / 4, 0)
+
+
+import pytest
+
+
+@pytest.mark.xfail
+def test_power_with_var_in_base_and_exp():
+    assert_diff(x**x, e**x * (1 + log(x)))

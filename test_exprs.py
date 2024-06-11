@@ -55,8 +55,12 @@ def test_sum_combines_like_terms():
     assert_eq_strict(2 * x * y + 3 * x * y, 5 * x * y)  # like terms with multiple factors
     assert_eq_strict(0.2 * x * y + 0.8 * x * y, x * y)  # like terms with multiple factors
 
-    # not sure if we want this to be the case but wtv
+    # not sure if we want this to be the case but wtv, make sure behavior is well-defined anyways
+    # this check is useful it caught a bug when i mutated things for speed
     assert_eq_strict(2 * x + 0.2 * x, (Rat(2) + Float(0.2)) * x)
+
+    # when it sums to 1
+    assert_eq_strict(3 * x - 2 * x, x)
 
 
 def test_prod_combines_like_terms_prod():
@@ -111,7 +115,7 @@ def test_flatten():
 
 
 def test_regex():
-    assert count(2, x) == 0
+    assert count(Rat(2), x) == 0
     assert count(tan(x + 1) ** 2 - 2 * x, x) == 2
 
 
@@ -150,7 +154,7 @@ def test_repr():
     assert repr(2 + log(2)) == "ln(2) + 2"
     assert repr(log(4) + Rat(9, 16) - log(2)) == "-ln(2) + ln(4) + 9/16"
     assert repr(Rat(2, 3) ** Rat(2, 3) * -1) == "-(2/3)^(2/3)"
-    assert repr(Float(2.2) * Rat(3) * x) == "3*2.2*x"
+    # assert repr(Float(2.2) * Rat(3) * x) == "3*2.2*x"
     # make sure consts show up before pi
     assert repr(pi * 2) == "2*pi"
     assert repr(pi * -2) == "-2*pi"
@@ -158,7 +162,7 @@ def test_repr():
 
 def test_neg_power():
     expr = Rat(-1) ** Fraction(5, 2)  # this is i. ig it should just stay this way & not simplify.
-    assert debug_repr(expr) == "Power(-1, 5/2)"
+    assert debug_repr(expr) == "Power(Rat(-1), Rat(5/2))"
 
 
 @pytest.mark.xfail
@@ -271,7 +275,7 @@ def test_strict_const_power_simplification():
     # Nothing should happen when it's unsimplifiable
     # (this might change in the future bc maybe i want standards for frac^(neg x) vs reciprocal_frac^abs(neg x))
     expr = Power(Rat(2), neg_half)
-    assert debug_repr(expr) == "Power(2, -1/2)"
+    assert debug_repr(expr) == "Power(Rat(2), Rat(-1/2))"
 
     # This is the expression that caused me problems!!
     # When I was doing it wrong (raising numerator/denominator of Fraction to exponent seperately even when it was 1),

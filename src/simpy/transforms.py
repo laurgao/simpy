@@ -33,8 +33,9 @@ from .expr import (
 from .integral_table import check_integral_table
 from .linalg import invert
 from .polynomial import Polynomial, is_polynomial, polynomial_to_expr, rid_ending_zeros, to_const_polynomial
-from .regex import count, general_contains, kinder_replace, replace, replace_class, replace_factory
+from .regex import count, general_contains, replace, replace_class, replace_factory
 from .simplify import pythagorean_simplification
+from .simplify.product_to_sum import product_to_sum_unit
 from .utils import ExprFn, eq_with_var, random_id
 
 Number_ = Union[Fraction, int]
@@ -44,22 +45,28 @@ Number_ = Union[Fraction, int]
 class Node:
     """A node in the integration nodetree.
 
+    expr: the expression to integrate
+    var: the variable that THIS EXPR is integrated by
+    transform: the transform that led to this node
+    parent: the parent node. None for root node only.
+    type: AND, OR, UNSET, SOLUTION, FAILURE
+        - failure = can't proceed forward. not a single transform matches.
+    solution: only for SOLUTION nodes (& their parents when we go backwards)
+    is_filler: fillers are ones where the expr is not *really* the expression to integrate, and just a copy of the parents. the node exists to store info other than the expr.
+
+
     `_children` is private. do not modify it directly; only use the `add_child` or `add_children` methods. you can read from the
     `children` property.
     """
 
     expr: Expr
-    var: Symbol  # variable that THIS EXPR is integrated by.
-    transform: Optional["Transform"] = None  # the transform that led to this node
-    parent: Optional["Node"] = None  # None for root node only
+    var: Symbol
+    transform: Optional["Transform"] = None
+    parent: Optional["Node"] = None
     type: Literal["AND", "OR", "UNSET", "SOLUTION", "FAILURE"] = "UNSET"
-    solution: Optional[Expr] = None  # only for SOLUTION nodes (& their parents when we go backwards)
-    is_filler: bool = (
-        False  # fillers are ones where the expr is like; not real / a copy of the parents. the node exists to store info other than the expr. eventually i wanna just set expr to none.
-    )
-    _children: Optional[List["Node"]] = None  # smtn smtn setting it to [] by default causes errors
-
-    # failure = can't proceed forward.
+    solution: Optional[Expr] = None
+    is_filler: bool = False
+    _children: Optional[List["Node"]] = None
 
     def __post_init__(self):
         if self._children is None:
@@ -201,6 +208,8 @@ class Transform(ABC):
 
 
 class USub(Transform, ABC):
+    """Base class for u-substituion transforms."""
+
     _u: Expr = None
 
     def backward(self, node: Node) -> None:
@@ -213,6 +222,8 @@ class SafeTransform(Transform, ABC):
 
 
 class PullConstant(SafeTransform):
+    """Pulls out a constant from the integral. Linearity."""
+
     _constant: Expr = None
     _non_constant_part: Expr = None
 
@@ -242,6 +253,8 @@ class PullConstant(SafeTransform):
 
 
 class PolynomialDivision(SafeTransform):
+    """Divides a polynomial by another polynomial."""
+
     _numerator: Polynomial = None
     _denominator: Polynomial = None
 
@@ -298,6 +311,8 @@ class PolynomialDivision(SafeTransform):
 
 
 class Expand(SafeTransform):
+    """Expands the expression"""
+
     def forward(self, node: Node):
         node.add_child(Node(node.expr.expand(), node.var, self, node))
 
@@ -319,6 +334,8 @@ class Expand(SafeTransform):
 
 
 class Additivity(SafeTransform):
+    """Additivity of integrals"""
+
     def forward(self, node: Node):
         node.type = "AND"
         node.add_children([Node(e, node.var, self, node) for e in node.expr.terms])
@@ -340,6 +357,9 @@ class Additivity(SafeTransform):
 
 
 def _get_last_heuristic_transform(node: Node, tup=(PullConstant, Additivity)):
+    """Returns the last heuristic transform that was used on the node.
+    tup: tuple of transform classes to exclude from the search.
+    """
     if isinstance(node.transform, tup):
         # We'll let polynomial division go because it changes things sufficiently that
         # we actually sorta make progress towards the integral.
@@ -471,7 +491,7 @@ class InverseTrigUSub(USub):
     _key = None
 
     # {label: class, search query, dy_dx, variable_change}
-    _table: Dict[str, Tuple[ExprFn, Callable[[str], str], ExprFn, ExprFn]] = {
+    _table: Dict[str, Tuple[ExprFn, ExprFn, ExprFn, ExprFn]] = {
         "sin": (sin, lambda symbol: 1 - symbol**2, lambda var: cos(var), asin),
         "tan": (tan, lambda symbol: 1 + symbol**2, lambda var: sec(var) ** 2, atan),
     }
@@ -647,193 +667,23 @@ class LinearUSub(USub):
         node.add_child(Node(new_integrand, intermediate, self, node))
 
 
-class CompoundAngle(Transform):
-    """Compound angle formulae"""
-
-    def check(self, node: Node) -> bool:
-        if super().check(node) is False:
-            return False
-
-        def _check(e: Expr) -> bool:
-            if (
-                isinstance(e, (sin, cos))
-                and isinstance(e.inner, Sum)
-                and len(e.inner.terms) == 2  # for now lets j do 2 terms
-            ):
-                return True
-            else:
-                return any(_check(child) for child in e.children())
-
-        return _check(node.expr)
-
-    def forward(self, node: Node) -> None:
-        condition = (
-            lambda expr: isinstance(expr, (sin, cos)) and isinstance(expr.inner, Sum) and len(expr.inner.terms) == 2
-        )
-
-        def _perform(expr: Union[sin, cos]) -> Expr:
-            a, b = expr.inner.terms
-            if isinstance(expr, sin):
-                return sin(a) * cos(b) + cos(a) * sin(b)
-            elif isinstance(expr, cos):
-                return cos(a) * cos(b) - sin(a) * sin(b)
-
-        new_integrand = replace_factory(condition, _perform)(node.expr)
-
-        node.add_child(Node(new_integrand, node.var, self, node))
-
-    def backward(self, node: Node) -> None:
-        super().backward(node)
-        node.parent.solution = node.solution
-
-
-class SinUSub(USub):
-    """u-substitution for if sinx cosx exists in the outer product"""
-
-    # TODO: generalize this in some form? to other trig fns maybe?
-    # - generalize to if the sin is in a power but the cos is under no power.
-    # like transform D but for trigfns
-    _sin: sin = None
-    _cos: cos = None
-
-    def check(self, node: Node) -> bool:
-        if super().check(node) is False:
-            return False
-
-        if not isinstance(node.expr, Prod):
-            return False
-
-        def is_constant_product_of_var(expr, var):
-            if expr == var:
-                return True
-            if not (expr / var).contains(var):
-                return True
-            return False
-
-        # sins = [term.inner for term in node.expr.terms if isinstance(term, Sin)]
-        # coses = [term.inner for term in node.expr.terms if isinstance(term, Cos)]
-        sins: List[sin] = []
-        coses: List[cos] = []
-        for term in node.expr.terms:
-            if isinstance(term, sin):
-                if not is_constant_product_of_var(term.inner, node.var):
-                    continue
-
-                sins.append(term)
-
-                for cos_expr in coses:
-                    if term.inner == cos_expr.inner:
-                        self._sin = term
-                        self._cos = cos_expr
-                        return True
-
-            if isinstance(term, cos):
-                if not is_constant_product_of_var(term.inner, node.var):
-                    continue
-
-                coses.append(term)
-
-                for sin_expr in sins:
-                    if term.inner == sin_expr.inner:
-                        self._sin = sin_expr
-                        self._cos = term
-                        return True
-
-        return False
-
-    def forward(self, node: Node) -> None:
-        intermediate = generate_intermediate_var()
-        dy_dx = self._sin.diff(node.var)
-        new_integrand = replace(node.expr, self._sin, intermediate) / dy_dx
-        # should be done in check, here is a patch.
-        if new_integrand.contains(node.var):
-            return
-        node.add_child(Node(new_integrand, intermediate, self, node))
-        self._u = self._sin
-
-
 class ProductToSum(Transform):
-    """product to sum identities for sin & cos"""
+    """product to sum identities for sin & cos
 
-    _a: Expr = None
-    _b: Expr = None
-
-    @staticmethod
-    def condition(expr: Expr) -> bool:
-        expr = remove_const_factor(expr)
-        if isinstance(expr, Prod):
-            if len(expr.terms) == 2 and all(isinstance(term, (sin, cos)) for term in expr.terms):
-                return True
-
-        if isinstance(expr, Power):
-            if isinstance(expr.base, (sin, cos)) and isinstance(expr.exponent, Rat) and expr.exponent % 2 == 0:
-                return True
-
-        return False
-
-    @staticmethod
-    def perform(expr: Union[Prod, Power]) -> Sum:
-        """assumes that ProductToSum.condition is satisfied
-
-        also note this is used in simplify and not in this transform
-        """
-        nexpr = remove_const_factor(expr)
-        const = expr / nexpr
-        if isinstance(nexpr, Prod):
-            return ProductToSum._perform_on_terms(*nexpr.terms, const=const)
-
-        b = ProductToSum._perform_on_terms(nexpr.base, nexpr.base, const=const)
-        if nexpr.exponent == 2:
-            return b
-        else:
-            # TODO: make this recursively apply pts till no even power
-            return Power(b, nexpr.exponent / 2).expand()
-
-    @staticmethod
-    def perform_opt(expr: Expr) -> Optional[Expr]:
-        """optimized for this integral transform"""
-        if isinstance(expr, Prod):
-            if len(expr.terms) != 2:
-                return
-            return ProductToSum._perform_on_terms(*expr.terms)
-        elif isinstance(expr, Power):
-            if not isinstance(expr.base, (sin, cos)):
-                return
-            if not (isinstance(expr.exponent, Rat) and expr.exponent % 2 == 0):
-                return
-            return ProductToSum._perform_on_terms(expr.base, expr.base) ** (expr.exponent / 2)
-
-    @staticmethod
-    def _perform_on_terms(a: Union[sin, cos], b: Union[sin, cos], *, const: Optional[Expr] = None) -> Sum:
-        # Dream:
-        # a_, b_ = any
-        # sin(a_) * sin(b_) = cos(a_-b_) - cos(a_+b_)
-        # highly readable and very cool
-
-        c = Rat(1, 2) if const is None else const / 2
-
-        if isinstance(a, sin) and isinstance(b, cos):
-            temp = sin(a.inner + b.inner) * c + sin(a.inner - b.inner) * c
-        elif isinstance(a, cos) and isinstance(b, sin):
-            temp = sin(a.inner + b.inner) * c - sin(a.inner - b.inner) * c
-        elif isinstance(a, cos) and isinstance(b, cos):
-            temp = cos(a.inner + b.inner) * c + cos(a.inner - b.inner) * c
-        elif isinstance(a, sin) and isinstance(b, sin):
-            temp = cos(a.inner - b.inner) * c - cos(a.inner + b.inner) * c
-        else:
-            return
-
-        return temp
+    only works if the node.expr is a product of sin and cos
+    doesn't check nested things.
+    since when have we solved an integral that has e^{sum} where you need to apply pts on the sum anyways
+    """
 
     def check(self, node: Node) -> bool:
         if super().check(node) is False:
             return False
-
-        return general_contains(node.expr, self.condition)
+        return True
 
     def forward(self, node: Node) -> None:
-        new_integrand = kinder_replace(node.expr, self.perform_opt)
-        node.add_child(Node(new_integrand, node.var, self, node))
+        new_integrand = product_to_sum_unit(node.expr)
+        if new_integrand:
+            node.add_child(Node(new_integrand, node.var, self, node))
 
     def backward(self, node: Node) -> None:
         super().backward(node)
@@ -1015,6 +865,8 @@ class ByParts(Transform):
 
 
 class PartialFractions(Transform):
+    """Integration using partial fractions"""
+
     _new_integrand: Expr = None
 
     def check(self, node: Node) -> bool:
@@ -1081,6 +933,8 @@ class PartialFractions(Transform):
 
 
 class GenericUSub(USub):
+    """Generic u-substitution"""
+
     _u: Expr = None
 
     def check(self, node: Node) -> bool:
@@ -1112,6 +966,8 @@ class GenericUSub(USub):
 
 
 class CompleteTheSquare(Transform):
+    """Integration via completing the square"""
+
     def check(self, node: Node) -> bool:
         if super().check(node) is False:
             return False
@@ -1187,7 +1043,7 @@ class RewritePythagorean(Transform):
 
     @staticmethod
     def perform(expr: Power) -> bool:
-        assert RewritePythagorean.condition(expr)
+        """assumes RewritePythagorean.condition(expr) == True"""
         b, x = expr.base, expr.exponent
         n = (x - 1) / 2
         d = {"sin": cos, "cos": sin}
@@ -1226,6 +1082,8 @@ class RewritePythagorean(Transform):
 
 
 class Simplify(Transform):
+    """Simplifies using pythagorean trigonometric identities if possible"""
+
     def check(self, node: Node) -> bool:
         if super().check(node) is False:
             return False
@@ -1251,10 +1109,10 @@ class Simplify(Transform):
 # and more fucky
 # Do not include Simplify because it only is needed after InverseTrigUSub, and we just manually
 # trigger it.
+# Not including CompoundAngle because no integral has actually been solved with it (backwards is never called)
+# Not including SinUSub because it's a strict subset of GenericUSub
 HEURISTICS: List[Type[Transform]] = [
     PolynomialUSub,
-    CompoundAngle,
-    SinUSub,
     ProductToSum,
     TrigUSub2,
     ByParts,

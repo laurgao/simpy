@@ -1,6 +1,6 @@
-from typing import Any, Iterable, List, Optional, Tuple, Type, Union
+from typing import Iterable, List, Optional, Tuple, Type, Union
 
-from .expr import (
+from ..expr import (
     Abs,
     Expr,
     Num,
@@ -19,12 +19,14 @@ from .expr import (
     sin,
     tan,
 )
-from .regex import any_, eq, general_contains, kinder_replace, kinder_replace_many, replace_class, replace_factory
-from .utils import ExprFn, count_symbols
+from ..regex import any_, eq, general_contains, kinder_replace, kinder_replace_many, replace_class, replace_factory
+from ..utils import ExprFn, count_symbols
+from .product_to_sum import product_to_sum
 
 
 def expand_logs(expr: Expr, **kwargs) -> Expr:
-    return kinder_replace(expr, _log_perform, **kwargs)
+    ans = kinder_replace(expr, _log_perform, **kwargs)
+    return ans.expand() if ans.expandable() else ans
 
 
 def _log_perform(expr: Expr) -> Optional[Expr]:
@@ -248,25 +250,42 @@ def simplify(expr: Expr) -> Expr:
     This is the general one that does all heuristics & is for aesthetics (& comparisons).
     Use more specific simplification functions in integration please.
     """
-    if expr.has(TrigFunctionNotInverse):
-        expr = trig_simplify(expr)
-    if expr.has(log):
-        expr = expand_logs(expr)
+    if expr.expandable():
+        expr2 = expr.expand()
+    else:
+        expr2 = expr
+
+    # if trig simplify has hit then it's always good :thumbsup:
+    is_trig_hit = None
+    if expr2.has(TrigFunctionNotInverse):
+        expr2, is_trig_hit = trig_simplify(expr2)
+    if expr2.has(log):
+        expr2 = expand_logs(expr2)
+
+    if is_trig_hit:
+        return expr2
+
+    if is_simpler(expr2, expr):
+        return expr2
     return expr
 
 
 def trig_simplify(expr):
     # reciprocate and combine trigs is last because sometimes the pythag complex simplification will
     # generate new trigs in the num/denom that can be simplified down.
-    expr = kinder_replace_many(
+    expr, is_hit_1 = kinder_replace_many(
         expr,
         [_pythagorean_perform, _pythagorean_complex_perform, _reciprocate_trigs],
         overarching_cond=lambda x: x.has(TrigFunctionNotInverse),
+        verbose=True,
     )
-    expr = kinder_replace_many(
-        expr, [_combine_trigs, product_to_sum, sectan], overarching_cond=lambda x: x.has(TrigFunctionNotInverse)
+    expr, is_hit_2 = kinder_replace_many(
+        expr,
+        [_combine_trigs, product_to_sum, sectan],
+        overarching_cond=lambda x: x.has(TrigFunctionNotInverse),
+        verbose=True,
     )
-    return expr
+    return expr, is_hit_1 or is_hit_2
 
 
 def is_cls_squared(expr, cls) -> bool:
@@ -336,44 +355,13 @@ def sectan(sum: Expr) -> Optional[Expr]:
         return new_sum
 
 
-def product_to_sum(expr: Expr) -> Optional[Expr]:
-    from .transforms import ProductToSum
-
-    """Does applying product-to-sum on every term of a sum ... create a cancellation?
-
-    Assumes that expr.has(TrigFunctionNotInverse) == True
-    """
-
-    if not isinstance(expr, Sum):
-        return
-
-    satisfies = [ProductToSum.condition(t) for t in expr.terms]
-    if not count(satisfies, True) >= 2:
-        return
-
-    final_terms = []
-    for boool, term in zip(satisfies, expr.terms):
-        if not boool:
-            final_terms.append(term)
-            continue
-
-        new = ProductToSum.perform(term)
-        final_terms.extend(new.terms)
-
-    final = Sum(final_terms)
-
-    # If final is simpler, return final
-    if len(final.terms) < len(expr.terms):
-        return final
-
-    if len(final.terms) == len(expr.terms) and count_symbols(final) < count_symbols(expr):
-        # This ensures that e.g. 2*cos(x)*sin(2*x)/3 - cos(2*x)*sin(x)/3 simplifies to -2*sin(x)**3/3 + sin(x)
-        return final
-
-
-def count(l: list, query: Any) -> int:
-    c = 0
-    for el in l:
-        if el == query:
-            c += 1
-    return c
+def is_simpler(e1, e2) -> bool:
+    """returns whether e1 is simpler than e2"""
+    c1 = count_symbols(e1)
+    c2 = count_symbols(e2)
+    return c1 < c2
+    # if c1 < c2:
+    #     return True
+    # if c1 == c2:
+    #     return len(repr(e1)) < len(repr(e2))
+    # return False
