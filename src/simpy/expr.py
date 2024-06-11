@@ -590,7 +590,9 @@ class Rat(Num, Expr):
 
     @cast
     def __floordiv__(self, other) -> "Rat":
-        return Rat(self.value // other.value)
+        if isinstance(other, Rat):
+            return Rat(self.value // other.value)
+        return NotImplemented
 
     def latex(self) -> str:
         from .latex import group
