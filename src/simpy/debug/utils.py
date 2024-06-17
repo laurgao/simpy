@@ -6,7 +6,7 @@ from ..regex import replace, replace_factory
 from ..transforms import Node
 
 
-def print_tree(root: Node, show_stale=True, show_failures=True, show_solution=False, _vardict=None) -> None:
+def print_tree(root: Node, show_stale=True, show_failures=True, show_solution=False, _vardict=None, func=print) -> None:
     if _vardict is None:
         _vardict = defaultdict(str)
 
@@ -60,12 +60,12 @@ def print_tree(root: Node, show_stale=True, show_failures=True, show_solution=Fa
     solution = _wrap(repr(_exprify(root.solution)), 50) if (show_solution and root.is_solved) else ""
     distance = _wrap(f"[{root.distance_from_root}]", 4)
 
-    print(f"{distance} {n} {repr_expr}  {solution}  ({root.transform.__class__.__name__}){x}{varchange}{ending}")
+    func(f"{distance} {n} {repr_expr}  {solution}  ({root.transform.__class__.__name__}){x}{varchange}{ending}")
     if not root.children:
-        print("")
+        func("")
         return
     for child in root.children:
-        print_tree(child, show_stale, show_failures, show_solution, _vardict=_vardict)
+        print_tree(child, show_stale, show_failures, show_solution, _vardict=_vardict, func=func)
 
 
 def _replaceall(expr: Expr, vardict: Dict[str, Symbol]) -> Expr:
@@ -82,5 +82,5 @@ def print_success_tree(root: Node) -> None:
     print_tree(root, False, False)
 
 
-def print_solution_tree(root: Node) -> None:
-    print_tree(root, False, False, show_solution=True)
+def print_solution_tree(root: Node, func=print) -> None:
+    print_tree(root, False, False, show_solution=True, func=func)
