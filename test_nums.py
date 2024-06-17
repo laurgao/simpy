@@ -34,7 +34,7 @@ def test_nums():
 
 def test_combine_float_rat():
     assert Rat(1, 2) + 0.5 == 1
-    assert debug_repr(0.5 + Rat(1, 2)) == debug_repr(Float(1.0))
+    assert debug_repr(0.5 + Rat(1, 2), pedantic="always") == debug_repr(Float(1.0), pedantic="always")
     assert Rat(1, 3) * 0.2 == 0.2 / 3
 
 

@@ -1318,8 +1318,11 @@ class Prod(Associative, Expr):
         return Sum([Prod([diff(e, var)] + [t for t in self.terms if t is not e]) for e in self.terms])
 
 
-def debug_repr(expr: Expr) -> str:
-    """Not designed to look pretty; designed to show the structure of the expr."""
+def debug_repr(expr: Expr, *, pedantic: Literal["always", "moderate"] = "moderate") -> str:
+    """Not designed to look pretty; designed to show the structure of the expr.
+
+    pedantic = "always" will show the non-children classes of numbers and symbols
+    """
     if isinstance(expr, Power):
         return f"Power({debug_repr(expr.base)}, {debug_repr(expr.exponent)})"
         # return f'({debug_repr(expr.base)})^{debug_repr(expr.exponent)}'
@@ -1329,14 +1332,16 @@ def debug_repr(expr: Expr) -> str:
     if isinstance(expr, Sum):
         return "Sum(" + ", ".join([debug_repr(t) for t in expr.terms]) + ")"
         # return " + ".join([debug_repr(t) for t in expr.terms])
-    if isinstance(expr, Rat):
-        return f"Rat({expr.value})"
-    if isinstance(expr, Symbol):
-        return f"Symbol({expr.name})"
-    if isinstance(expr, Float):
-        return f"Float({expr.value})"
-    else:
-        return repr(expr)
+
+    if pedantic == "always":
+        if isinstance(expr, Rat):
+            return f"Rat({expr.value})"
+        if isinstance(expr, Symbol):
+            return f"Symbol({expr.name})"
+        if isinstance(expr, Float):
+            return f"Float({expr.value})"
+
+    return repr(expr)
 
 
 @dataclass
