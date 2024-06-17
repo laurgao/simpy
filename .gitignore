@@ -8,3 +8,4 @@ benchmark*
 
 # from pip install -e .
 *.egg-info/
+build/
