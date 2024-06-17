@@ -16,7 +16,8 @@ setup(
     ],
     extras_require={
         "dev": [
-            "pytest>=5.2",  # Dependencies for testing
+            "pytest>=5.2",  # Dependencies for development and testing
+            "matplotlib",
         ],
     },
     python_requires=">=3.8",
