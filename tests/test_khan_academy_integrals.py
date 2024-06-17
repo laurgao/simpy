@@ -3,9 +3,10 @@ LOL im gonna take a bunch of integral questions from https://www.khanacademy.org
 and make sure simpy can do them
 """
 
-from src.simpy.expr import *
-from src.simpy.integration import *
 from test_utils import assert_definite_integral, assert_eq_plusc, assert_eq_value, assert_integral, x, y
+
+from simpy.expr import *
+from simpy.integration import *
 
 
 def test_ex():

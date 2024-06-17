@@ -1,5 +1,6 @@
-from src.simpy.expr import *
 from test_utils import *
+
+from simpy.expr import *
 
 
 def eq_float(e1: Expr, e2: Expr, atol=1e-6):

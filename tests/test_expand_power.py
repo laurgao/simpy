@@ -1,6 +1,7 @@
-from src.simpy.combinatorics import generate_permutations
-from src.simpy.expr import Prod, Sum, symbols
 from test_utils import assert_eq_strict, unhashable_set_eq
+
+from simpy.combinatorics import generate_permutations
+from simpy.expr import Prod, Sum, symbols
 
 
 def test_expand_power():

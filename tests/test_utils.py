@@ -1,8 +1,8 @@
 from typing import Optional, Tuple, Union
 
-from src.simpy.expr import Expr, Symbol, TrigFunctionNotInverse, cast, debug_repr, log, symbols
-from src.simpy.integration import integrate
-from src.simpy.simplify import expand_logs, trig_simplify
+from simpy.expr import Expr, Symbol, TrigFunctionNotInverse, cast, debug_repr, log, symbols
+from simpy.integration import integrate
+from simpy.simplify import expand_logs, trig_simplify
 
 x, y = symbols("x y")
 

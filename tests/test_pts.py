@@ -1,6 +1,7 @@
-from src.simpy import *
-from src.simpy.simplify.product_to_sum import *
 from test_utils import *
+
+from simpy import *
+from simpy.simplify.product_to_sum import *
 
 
 def test_sin_x_3():
