@@ -7,6 +7,7 @@ from ..utils import count_symbols
 def _perform_on_terms(
     a: Union[sin, cos], b: Union[sin, cos], *, multiplier: Optional[Expr] = None
 ) -> Optional[List[Expr]]:
+    """Returns the result of applying product-to-sum on a and b, if possible"""
     # Dream:
     # a_, b_ = any
     # sin(a_) * sin(b_) = cos(a_-b_) - cos(a_+b_)
@@ -24,7 +25,7 @@ def _perform_on_terms(
         return [cos(a.inner - b.inner) * c, -cos(a.inner + b.inner) * c]
 
 
-def product_to_sum_unit(expr: Expr) -> Optional[Expr]:
+def product_to_sum_unit(expr: Expr) -> Optional[Sum]:
     """Returns the result of applying product-to-sum on expr, if possible
     Where expr is the product of 2 or more trig functions
     If you want to apply pts on a sum, use product_to_sum
@@ -35,6 +36,11 @@ def product_to_sum_unit(expr: Expr) -> Optional[Expr]:
 
 
 def _product_to_sum_unit(expr: Expr, *, multiplier: Expr = None) -> Optional[List[Expr]]:
+    """Returns the result of applying product-to-sum on expr, if possible.
+    expr is the product of 2 or more trig functions. it can be a Prod or Power
+    Returns None if expr is not a product of sin and cos.
+    Otherwise, returns a list of terms of a sum. This function is used in intermediate steps.
+    """
     new_expr, const = remove_const_factor(expr, include_factor=True)
     if multiplier is not None:
         const *= multiplier
@@ -63,6 +69,17 @@ def _product_to_sum_unit(expr: Expr, *, multiplier: Expr = None) -> Optional[Lis
 
             return _product_to_sum(intermediate, multiplier=const)
 
+        if not all(isinstance(t, (sin, cos)) or is_valid_power(t) for t in new_expr.terms):
+            return
+
+        if any(not isinstance(t, (sin, cos)) for t in new_expr.terms):
+            new_terms = [product_to_sum_unit(t) for t in new_expr.terms if not isinstance(t, (sin, cos))]
+            return _product_to_sum(Prod(new_terms).expand().terms, multiplier=const)
+
+        return _perform_on_terms(
+            new_expr.terms[0], new_expr.terms[1], multiplier=Prod(new_expr.terms[2:], skip_checks=True) * const
+        )
+
     if is_valid_power(new_expr):
         if new_expr.exponent == 2:
             return _perform_on_terms(new_expr.base, new_expr.base, multiplier=const)
@@ -76,8 +93,8 @@ def _product_to_sum_unit(expr: Expr, *, multiplier: Expr = None) -> Optional[Lis
 
 
 def _product_to_sum(sum: List[Expr], *, multiplier: Expr = None) -> Optional[List[Expr]]:
-    """takes in terms and returns terms
-
+    """takes in terms of a sum and returns terms of a sum after applying product-to-sum on each applicable term.
+    If no terms are changed, returns None
     We call this function in intermediate steps. This prevents us from creating a bunch of unnecessary exprs in between.
     """
     results = [_product_to_sum_unit(t) for t in sum]
