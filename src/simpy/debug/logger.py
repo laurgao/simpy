@@ -3,7 +3,7 @@ from typing import Dict, NamedTuple
 
 from ..expr import Expr
 from ..transforms import Node
-from .utils import print_solution_tree, print_tree
+from .tree import print_solution_tree, print_tree
 
 
 class Datum(NamedTuple):

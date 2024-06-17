@@ -3,6 +3,7 @@ from fractions import Fraction
 import pytest
 from test_utils import assert_eq_strict, unhashable_set_eq, x, y
 
+from simpy.debug.utils import debug_repr
 from simpy.expr import *
 from simpy.integration import *
 from simpy.regex import count

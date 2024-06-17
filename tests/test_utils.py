@@ -1,6 +1,7 @@
 from typing import Optional, Tuple, Union
 
-from simpy.expr import Expr, Symbol, TrigFunctionNotInverse, cast, debug_repr, log, symbols
+from simpy.debug.utils import debug_repr
+from simpy.expr import Expr, Symbol, TrigFunctionNotInverse, cast, log, symbols
 from simpy.integration import integrate
 from simpy.simplify import expand_logs, trig_simplify
 

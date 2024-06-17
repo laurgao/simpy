@@ -3,9 +3,9 @@
 
 import time
 import warnings
-from typing import Callable, Dict, List, Literal, NamedTuple, Tuple, Union
+from typing import Callable, List, Literal, Tuple, Union
 
-from .debug.utils import print_solution_tree, print_tree
+from .debug.tree import print_solution_tree, print_tree
 from .expr import Expr, Optional, Symbol, cast, nesting
 from .integral_table import check_integral_table
 from .transforms import HEURISTICS, SAFE_TRANSFORMS, Node
