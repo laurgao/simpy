@@ -6,7 +6,7 @@ Current version can do algebraic & trigonometric simplifications, perform differ
 
 ## Quick start
 
-Real installation instructions are coming soon! For now, just clone the repo and `pip install requirements.txt`. You can run `pytest .` in the root directory to run my tests. Look at `test_integrals.py` and `test_khan_academy_integrals.py` to see some sample integrals we can do :)
+Clone the repo and `pip install .`. You can run `pytest .` in the root directory to run my tests. Look at `test_integrals.py` and `test_khan_academy_integrals.py` to see some sample integrals we can do :)
 
 For example, these integrals:
 
@@ -25,7 +25,7 @@ $$
 Can be done like so:
 
 ```python
-from src import simpy as sp
+import simpy as sp
 from fractions import Fraction as F
 
 x = sp.symbols("x")
@@ -37,6 +37,10 @@ ans4 = sp.integrate((F(1, 15) - F(1, 360) * (x-6))*(1 - (40-x)**2/875), (x, 15, 
 
 print(ans1, ans2, ans3, ans4, sep="\n")
 ```
+
+## Development
+
+Run `pip install -e .[dev]` to get the dev dependencies as well as making the install editable.
 
 ## Please make issues!
 
