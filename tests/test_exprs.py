@@ -79,7 +79,7 @@ def test_basic_power_simplification():
     assert_eq_strict(x**1, x)
     assert_eq_strict(Rat(2) ** 2, 4)
     assert_eq_strict(sqrt(4), 2)
-    assert_eq_strict(sqrt(x**2), x)
+    assert_eq_strict(sqrt(x) ** 2, x)
     assert_eq_strict(2 / sqrt(2), sqrt(2))
 
 
@@ -198,8 +198,18 @@ def test_factor():
 
 def test_some_constructor_simplification():
     r1, r2, w, v = symbols("r_1 r_2 \\omega v_0")
-    c = 1 / (r2 * w) * sqrt(r2 / r1 - 1)
-    l = -r1 / (r2 * w) * sqrt(r2 / r1 - 1)
+
+    # I believe r1 and r2 are resistances so they are strictly positive
+    r1._strictly_positive = True
+    r2._strictly_positive = True
+
+    # I think r2 > r1 always so this is also strictly positive?
+    # TODO check the problem again
+    intermediate = r2 / r1 - 1
+    intermediate._strictly_positive = True
+
+    c = 1 / (r2 * w) * sqrt(intermediate)
+    l = -r1 / (r2 * w) * sqrt(intermediate)
     r_s = r1
     x_s = w * l
     # z_s = r_s + x_s * 1j

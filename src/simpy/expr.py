@@ -122,6 +122,9 @@ class Expr(ABC):
 
         self._nesting_cache = {}
 
+        # Experimental & not guaranteed to be robust so it's private API for now.
+        self._strictly_positive = False
+
     def simplify(self) -> "Expr":
         from .simplify import simplify
 
@@ -2027,6 +2030,10 @@ class Abs(SingleFunc):
             for t in inner.terms:
                 if isinstance(inner, Num):
                     return Abs(inner / t) * Abs(t)
+
+        if _is_strictly_positive(inner):
+            return inner
+
         return super().__new__(cls)
 
     def diff(self, var) -> Expr:
@@ -2035,6 +2042,20 @@ class Abs(SingleFunc):
 
     def _evalf(self, subs: Dict[str, Expr]) -> Expr:
         return Abs(self.inner._evalf(subs))
+
+
+def _is_strictly_positive(expr: Expr) -> bool:
+    if expr._strictly_positive:
+        return True
+    if isinstance(expr, (Prod, Sum)):
+        return all(_is_strictly_positive(t) for t in expr.terms)
+    if isinstance(expr, Power):
+        # if base is positive then the power is always positive right
+        return _is_strictly_positive(expr.base)
+    if isinstance(expr, Num):
+        return expr >= 0
+
+    return False
 
 
 def symbols(symbols: str) -> Union[Symbol, List[Symbol]]:
