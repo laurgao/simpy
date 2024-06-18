@@ -1,8 +1,8 @@
 import pytest
-
-from src.simpy.expr import *
-from src.simpy.regex import Any_, any_, eq
 from test_utils import x, y
+
+from simpy.expr import *
+from simpy.regex import Any_, any_, eq
 
 
 def test_any_basic():

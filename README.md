@@ -6,26 +6,26 @@ Current version can do algebraic & trigonometric simplifications, perform differ
 
 ## Quick start
 
-Real installation instructions are coming soon! For now, just clone the repo and `pip install requirements.txt`. You can run `pytest .` in the root directory to run my tests. Look at `test_integrals.py` and `test_khan_academy_integrals.py` to see some sample integrals we can do :)
+Clone the repo and `pip install .`. You can run `pytest .` in the root directory to run my tests. Look at `test_integrals.py` and `test_khan_academy_integrals.py` to see some sample integrals we can do :)
 
 For example, these integrals:
 
 $$
 \begin{aligned}
-&\int \tan^{-1}(x) dx = -\frac{\ln \left( \left| x^2 + 1 \right| \right)}2 + x \cdot \tan^{-1} (x)
+&\int \tan^{-1}(x) \,dx = -\frac{\ln \left( \left| x^2 + 1 \right| \right)}2 + x \cdot \tan^{-1} (x)
 \\
-&\int \frac{x - 5}{-2x + 2} = 2 \cdot \ln(|-x + 1|) - \frac{x}{2}
+&\int \frac{x - 5}{-2x + 2} \,dx = 2 \cdot \ln(|-x + 1|) - \frac{x}{2}
 \\
-&\int_{0}^{\pi/6} \sec\left(2x\right) \cdot \tan\left(2x\right) = \frac12
+&\int_{0}^{\pi/6} \sec\left(2x\right) \cdot \tan\left(2x\right) \,dx = \frac12
 \\
-&\int_{15}^{30} \left(\frac{1}{15} - \frac{1}{360} \cdot (x-6)\right) \cdot \left(1 - \frac{(40-x)^2}{875}\right) dx = \frac{37}{224}
+&\int_{15}^{30} \left(\frac{1}{15} - \frac{1}{360} \cdot (x-6)\right) \cdot \left(1 - \frac{(40-x)^2}{875}\right) \,dx = \frac{37}{224}
 \end{aligned}
 $$
 
 Can be done like so:
 
 ```python
-from src import simpy as sp
+import simpy as sp
 from fractions import Fraction as F
 
 x = sp.symbols("x")
@@ -37,6 +37,10 @@ ans4 = sp.integrate((F(1, 15) - F(1, 360) * (x-6))*(1 - (40-x)**2/875), (x, 15, 
 
 print(ans1, ans2, ans3, ans4, sep="\n")
 ```
+
+## Development
+
+Run `pip install -e .[dev]` to get the dev dependencies as well as making the install editable.
 
 ## Please make issues!
 

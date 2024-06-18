@@ -1,5 +1,6 @@
-from src.simpy.expr import *
 from test_utils import *
+
+from simpy.expr import *
 
 
 def eq_float(e1: Expr, e2: Expr, atol=1e-6):
@@ -34,7 +35,7 @@ def test_nums():
 
 def test_combine_float_rat():
     assert Rat(1, 2) + 0.5 == 1
-    assert debug_repr(0.5 + Rat(1, 2)) == debug_repr(Float(1.0))
+    assert debug_repr(0.5 + Rat(1, 2), pedantic="always") == debug_repr(Float(1.0), pedantic="always")
     assert Rat(1, 3) * 0.2 == 0.2 / 3
 
 

@@ -1,5 +1,6 @@
-from src.simpy.expr import *
 from test_utils import assert_eq_strict, assert_eq_value, x, y
+
+from simpy.expr import *
 
 
 def assert_diff(a: Expr, b: Expr):

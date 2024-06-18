@@ -5,7 +5,7 @@ import time
 import warnings
 from typing import Callable, List, Literal, Tuple, Union
 
-from .debug.utils import print_solution_tree, print_tree
+from .debug.tree import print_solution_tree, print_tree
 from .expr import Expr, Optional, Symbol, cast, nesting
 from .integral_table import check_integral_table
 from .transforms import HEURISTICS, SAFE_TRANSFORMS, Node
@@ -108,6 +108,8 @@ class Integration:
     """
     Keeps track of integration work as we go
     """
+
+    logger = None
 
     # tweakable params
     DEPTH_FIRST_MAX_NESTING = 7  # chosen somewhat-arbitarily: on may 10th, it lead to lowest time spent on my tests.
@@ -248,6 +250,9 @@ class Integration:
                 curr_node = self._get_next_node_post_heuristic_breadth_first(root)
             else:
                 curr_node = answer
+
+        if self.logger is not None:
+            self.logger.log(integrand, current - start, root)
 
         if not root.is_solved:
             message = f"Failed to integrate {integrand} wrt {var}"

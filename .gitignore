@@ -3,4 +3,8 @@ __pycache__/
 venv*/
 .coverage
 coverage.xml
-benchmark*
+
+
+# from pip install -e .
+*.egg-info/
+build/

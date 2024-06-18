@@ -2,12 +2,12 @@
 
 style:
 	@echo "Running isort..."
-	isort src
+	isort src tests
 	@echo "Running black..."
-	black src
+	black src tests
 
 check-style:
 	@echo "Checking isort..."
-	isort --check-only src
+	isort --check-only src tests
 	@echo "Checking black..."
-	black --check src
+	black --check src tests

@@ -1,11 +1,12 @@
 from fractions import Fraction
 
 import pytest
-
-from src.simpy.expr import *
-from src.simpy.integration import *
-from src.simpy.regex import count
 from test_utils import assert_eq_strict, unhashable_set_eq, x, y
+
+from simpy.debug.utils import debug_repr
+from simpy.expr import *
+from simpy.integration import *
+from simpy.regex import count
 
 
 def test_equality():
@@ -78,7 +79,7 @@ def test_basic_power_simplification():
     assert_eq_strict(x**1, x)
     assert_eq_strict(Rat(2) ** 2, 4)
     assert_eq_strict(sqrt(4), 2)
-    assert_eq_strict(sqrt(x**2), x)
+    assert_eq_strict(sqrt(x) ** 2, x)
     assert_eq_strict(2 / sqrt(2), sqrt(2))
 
 
@@ -162,7 +163,7 @@ def test_repr():
 
 def test_neg_power():
     expr = Rat(-1) ** Fraction(5, 2)  # this is i. ig it should just stay this way & not simplify.
-    assert debug_repr(expr) == "Power(Rat(-1), Rat(5/2))"
+    assert debug_repr(expr) == "Power(-1, 5/2)"
 
 
 @pytest.mark.xfail
@@ -197,8 +198,18 @@ def test_factor():
 
 def test_some_constructor_simplification():
     r1, r2, w, v = symbols("r_1 r_2 \\omega v_0")
-    c = 1 / (r2 * w) * sqrt(r2 / r1 - 1)
-    l = -r1 / (r2 * w) * sqrt(r2 / r1 - 1)
+
+    # I believe r1 and r2 are resistances so they are strictly positive
+    r1._strictly_positive = True
+    r2._strictly_positive = True
+
+    # I think r2 > r1 always so this is also strictly positive?
+    # TODO check the problem again
+    intermediate = r2 / r1 - 1
+    intermediate._strictly_positive = True
+
+    c = 1 / (r2 * w) * sqrt(intermediate)
+    l = -r1 / (r2 * w) * sqrt(intermediate)
     r_s = r1
     x_s = w * l
     # z_s = r_s + x_s * 1j
@@ -275,7 +286,7 @@ def test_strict_const_power_simplification():
     # Nothing should happen when it's unsimplifiable
     # (this might change in the future bc maybe i want standards for frac^(neg x) vs reciprocal_frac^abs(neg x))
     expr = Power(Rat(2), neg_half)
-    assert debug_repr(expr) == "Power(Rat(2), Rat(-1/2))"
+    assert debug_repr(expr) == "Power(2, -1/2)"
 
     # This is the expression that caused me problems!!
     # When I was doing it wrong (raising numerator/denominator of Fraction to exponent seperately even when it was 1),
@@ -384,3 +395,10 @@ def test_is_subtraction():
     assert (Rat(Fraction(-3, 2)) ** Fraction(1, 3)).is_subtraction is True
     assert (Rat(Fraction(-3, 2)) ** Fraction(-2, 3)).is_subtraction is True
     assert (Rat(Fraction(-3, 2)) ** Fraction(1, 2)).is_subtraction is False
+
+
+def test_power_abs():
+    assert sqrt(x**2) == abs(x)
+    assert sqrt(x) ** 2 == x
+    assert (x**6) ** Rat(1, 6) == abs(x)
+    assert (x**3) ** Rat(1, 3) == x

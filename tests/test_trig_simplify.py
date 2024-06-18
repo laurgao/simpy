@@ -1,5 +1,6 @@
-from src.simpy import *
 from test_utils import *
+
+from simpy import *
 
 
 def assert_simplified(e1: Expr, e2: Expr):

@@ -1,5 +1,3 @@
-from src.simpy.expr import *
-from src.simpy.integration import *
 from test_utils import (
     assert_definite_integral,
     assert_eq_plusc,
@@ -9,6 +7,9 @@ from test_utils import (
     x,
     y,
 )
+
+from simpy.expr import *
+from simpy.integration import *
 
 F = Fraction
 x = symbols("x")
