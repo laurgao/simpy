@@ -1322,6 +1322,24 @@ class Prod(Associative, Expr):
         return Sum([Prod([diff(e, var)] + [t for t in self.terms if t is not e]) for e in self.terms])
 
 
+def _multiply_exponents(b: Expr, x1: Expr, x2: Expr) -> Expr:
+    """(b^x1)^x2 -> b^(x1*x2)
+
+    But if it's like sqrt(b^2), where the base 'b' has a radical expression
+    and the exponent outside the radical is even (like 2 in this example),
+    it should return abs(b). This is because raising a number with an even
+    exponent inside a radical to another even exponent cancels out the radical
+    and results in the absolute value of the base.
+    """
+    # TODO: this is not exhausitve, like when x1 and x2 aren't exactly reciprocals.
+    # but i'm fine with this for now.
+    if isinstance(x1, Rat) and x1 % 2 == 0:
+        if isinstance(x2, Rat) and x1 == x2.reciprocal():
+            return Abs(b)
+
+    return b ** (x1 * x2)
+
+
 @dataclass
 class Power(Expr):
     base: Expr
@@ -1391,7 +1409,7 @@ class Power(Expr):
         if isinstance(b, Power):
             # Have to call the class here. In the case that x*b.exponent = 1, this will have to re-simplfiy
             # through calling the constructor.
-            return Power(b.base, x * b.exponent)
+            return _multiply_exponents(b.base, b.exponent, x)
         if isinstance(b, Prod) and not b.is_subtraction:
             # when you construct this new power entity you have to simplify it.
             # because what if the term raised to this exponent can be simplified?

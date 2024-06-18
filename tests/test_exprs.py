@@ -385,3 +385,10 @@ def test_is_subtraction():
     assert (Rat(Fraction(-3, 2)) ** Fraction(1, 3)).is_subtraction is True
     assert (Rat(Fraction(-3, 2)) ** Fraction(-2, 3)).is_subtraction is True
     assert (Rat(Fraction(-3, 2)) ** Fraction(1, 2)).is_subtraction is False
+
+
+def test_power_abs():
+    assert sqrt(x**2) == abs(x)
+    assert sqrt(x) ** 2 == x
+    assert (x**6) ** Rat(1, 6) == abs(x)
+    assert (x**3) ** Rat(1, 3) == x
