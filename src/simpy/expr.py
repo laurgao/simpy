@@ -1875,7 +1875,7 @@ class sin(TrigFunctionNotInverse):
         if isinstance(new.inner, Sum):
             for t in new.inner.terms:
                 if t == pi or t == -pi:
-                    return sin(new.inner - t)
+                    return -sin(new.inner - t)
 
         return new
 

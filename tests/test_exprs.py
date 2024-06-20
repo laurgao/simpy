@@ -402,3 +402,10 @@ def test_power_abs():
     assert sqrt(x) ** 2 == x
     assert (x**6) ** Rat(1, 6) == abs(x)
     assert (x**3) ** Rat(1, 3) == x
+
+
+def test_trigfunctions_plusminuspi():
+    assert sin(x + pi) == -sin(x)
+    assert cos(x + pi) == -cos(x)
+    assert sin(x - pi) == -sin(x)
+    assert cos(x - pi) == -cos(x)

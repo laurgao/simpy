@@ -1,4 +1,6 @@
-# finding the fourier series of various fucking functions
+"""finding the (symbolic, non-discrete) fourier series of various functions"""
+
+import random
 from typing import Literal
 
 import simpy as sp
@@ -70,8 +72,9 @@ def test_q3():
     expected_bn = 2 * a * sp.sin(2 * a * n) / (sp.pi**2 - (2 * a * n) ** 2)
 
     for i in range(1, 5):
-        assert eq_float(a_n.evalf({"n": i}), expected_an.evalf({"n": i}))
-        assert eq_float(b_n.evalf({"n": i}), expected_bn.evalf({"n": i}))
+        subs = {"n": i, "a": random.random()}
+        assert eq_float(a_n.evalf(subs), expected_an.evalf(subs))
+        assert eq_float(b_n.evalf(subs), expected_bn.evalf(subs))
 
     # T = sp.pi
     # fp = sp.expr.Piecewise((f, 0, a))
@@ -101,3 +104,4 @@ def test_even_function():
     expected_an = 8 * sp.sin(n * sp.pi / 4) ** 2 / (n * sp.pi) ** 2
     for i in range(1, 5):
         assert eq_float(an.evalf({"n": i}), expected_an.evalf({"n": i}))
+        assert eq_float(bn.evalf({"n": i}), sp.expr.Float(0.0))
