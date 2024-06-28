@@ -94,11 +94,17 @@ def test_misc():
     assert_integral(3 * x**5 - x**3 + 6, 6 * x - x**4 / 4 + x**6 / 2)
     assert_integral(x**3 * e ** (x**4), (e ** (x**4) / 4))
 
+    assert_definite_integral(8 * x / sqrt(1 - 4 * x**2), (0, Fraction(1, 4)), 2 - sqrt(3))
+    assert_definite_integral(sin(4 * x), (0, pi / 4), Fraction(1, 2))
+    assert_integral(exp(x) / (1 + exp(2 * x)), atan(exp(x)))
+
+
+def test_usub():
     # Uses generic u-sub
     assert_definite_integral(e**x / (1 + e**x), (log(2), log(8)), log(9) - log(3))
 
-    assert_definite_integral(8 * x / sqrt(1 - 4 * x**2), (0, Fraction(1, 4)), 2 - sqrt(3))
-    assert_definite_integral(sin(4 * x), (0, pi / 4), Fraction(1, 2))
+    # ideally have this work with just log(x)
+    assert_definite_integral(log(abs(x)) ** 2 / x, bounds=(1, e), expected=Rat(1, 3))
 
 
 def test_csc_x_squared():
@@ -140,6 +146,8 @@ def test_complete_the_square_integrals():
     assert_integral(1 / (3 * x**2 + 6 * x + 78), atan((1 + x) / 5) / 15)
     assert_integral(1 / (x**2 - 8 * x + 65), atan((-4 + x) / 7) / 7)
     assert_integral(1 / sqrt(-(x**2) - 6 * x + 40), asin((3 + x) / 7))
+
+    assert_definite_integral(1 / (1 + 9 * x**2), (-Rat(1, 3), Rat(1, 3)), expected=pi / 6)
 
 
 def test_neg_inf():

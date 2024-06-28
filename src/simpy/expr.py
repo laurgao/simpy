@@ -277,7 +277,7 @@ class Expr(ABC):
     @property
     def symbolless(self) -> bool:
         return len(self.symbols()) == 0
-    
+
     def as_terms(self):
         if isinstance(self, Sum):
             return self.terms
@@ -1359,6 +1359,10 @@ def _multiply_exponents(b: Expr, x1: Expr, x2: Expr) -> Expr:
     return b ** (x1 * x2)
 
 
+def exp(x: Expr) -> Expr:
+    return e**x
+
+
 @dataclass
 class Power(Expr):
     base: Expr
@@ -1673,6 +1677,8 @@ TrigStr = Literal["sin", "cos", "tan", "sec", "csc", "cot"]
 class TrigFunction(SingleFunc, ABC):
     is_inverse: bool  # class property
     _fields_already_casted = True
+    _odd = False
+    _even = False
 
     _SPECIAL_KEYS = [
         "0",
@@ -1777,6 +1783,12 @@ class TrigFunction(SingleFunc, ABC):
                             instance.inner = inner - t
                             return instance
 
+        # Odd and even shit
+        if cls._odd and inner.is_subtraction:
+            return -cls(-inner)
+        if cls._even and inner.is_subtraction:
+            return cls(-inner)
+
         # 2. Check if inner is trigfunction
         # things like sin(cos(x)) cannot be more simplified.
         if isinstance(inner, TrigFunction) and inner.is_inverse != cls.is_inverse:
@@ -1842,6 +1854,7 @@ class TrigFunctionNotInverse(TrigFunction, ABC):
 class sin(TrigFunctionNotInverse):
     func = "sin"
     _func = math.sin
+    _odd = True
 
     @classproperty
     def reciprocal_class(cls):
@@ -1876,12 +1889,14 @@ class sin(TrigFunctionNotInverse):
         new = super().__new__(cls, inner)
         if not isinstance(new, sin):
             return new
-        if new.inner.is_subtraction:
-            return -sin(-new.inner)
         if isinstance(new.inner, Sum):
             for t in new.inner.terms:
                 if t == pi or t == -pi:
                     return -sin(new.inner - t)
+
+        # sin(n * pi) = 0
+        if new.inner.has(Pi) and (new.inner / pi)._is_int:
+            return Rat(0)
 
         return new
 
@@ -1889,6 +1904,7 @@ class sin(TrigFunctionNotInverse):
 class cos(TrigFunctionNotInverse):
     func = "cos"
     _func = math.cos
+    _even = True
 
     @classproperty
     def reciprocal_class(cls):
@@ -1925,8 +1941,6 @@ class cos(TrigFunctionNotInverse):
         new = super().__new__(cls, inner)
         if not isinstance(new, cos):
             return new
-        if new.inner.is_subtraction:
-            new.inner = -inner
         if isinstance(new.inner, Sum):
             for t in new.inner.terms:
                 if t == pi or t == -pi:
@@ -1938,16 +1952,11 @@ class tan(TrigFunctionNotInverse):
     func = "tan"
     _func = math.tan
     _period = 1
+    _odd = True
 
     @classproperty
     def reciprocal_class(cls):
         return cot
-
-    @cast
-    def __new__(cls, inner: Expr) -> Expr:
-        if inner.is_subtraction:
-            return -tan(-inner)
-        return super().__new__(cls, inner)
 
     @classproperty
     def _special_values(cls):
@@ -1961,6 +1970,7 @@ class csc(TrigFunctionNotInverse):
     func = "csc"
     _func = lambda x: 1 / math.sin(x)
     reciprocal_class = sin
+    _odd = True
 
     @classproperty
     def _special_values(cls):
@@ -1974,6 +1984,7 @@ class sec(TrigFunctionNotInverse):
     func = "sec"
     _func = lambda x: 1 / math.cos(x)
     reciprocal_class = cos
+    _even = True
 
     @classproperty
     def _special_values(cls):
@@ -1988,6 +1999,7 @@ class cot(TrigFunctionNotInverse):
     func = "cot"
     _func = lambda x: 1 / math.tan(x)
     _period = 1
+    _odd = True
 
     @classproperty
     def _special_values(cls):
@@ -2001,6 +2013,7 @@ class asin(TrigFunction):
     func = "sin"
     is_inverse = True
     _func = math.asin
+    _odd = True
 
     def diff(self, var):
         return 1 / sqrt(1 - self.inner**2) * self.inner.diff(var)
@@ -2027,6 +2040,14 @@ class atan(TrigFunction):
     func = "tan"
     is_inverse = True
     _func = math.atan
+    _odd = True
+
+    def __new__(cls, inner):
+        # TODO: standardize special value for inverse trig functions
+        if inner == 1:
+            return pi / 4
+
+        return super().__new__(cls, inner)
 
     def diff(self, var):
         return 1 / (1 + self.inner**2) * self.inner.diff(var)
