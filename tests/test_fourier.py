@@ -1,14 +1,19 @@
 """finding the (symbolic, non-discrete) fourier series of various functions"""
 
 import random
-from typing import Literal
+from typing import Literal, Union
 
 import simpy as sp
 from simpy.debug.test_utils import eq_float
 
 
+@sp.expr.cast
 def get_fourier_series(
-    f: sp.expr.Expr, T: sp.expr.Expr, x: sp.expr.Symbol, *, settings: Literal["center", "right"] = "right"
+    f: sp.expr.Expr,
+    T: sp.expr.Expr,
+    x: sp.expr.Symbol,
+    *,
+    settings: Union[Literal["center", "right"], sp.expr.Expr] = "right"
 ):
     """gets the fourier series of a 1d function
 
@@ -32,7 +37,12 @@ def get_fourier_series(
     c_n = sp.cos(2 * sp.pi * n * x / T)
     s_n = sp.sin(2 * sp.pi * n * x / T)
 
-    bounds = (x, 0, T) if settings == "right" else (x, -T / 2, T / 2)
+    if settings == "center":
+        bounds = (x, -T / 2, T / 2)
+    elif settings == "right":
+        bounds = (x, 0, T)
+    else:
+        bounds = (x, settings, T + settings)
 
     a_0 = sp.integrate(f, bounds) / T
     a_n = 2 * sp.integrate(c_n * f, bounds) / T
@@ -65,7 +75,6 @@ def test_q3():
     a_n = 2 / sp.pi * sp.integrate(c_n * f, (x, 0, a))
     b_n = 2 / sp.pi * sp.integrate(s_n * f, (x, 0, a))
 
-    # for some reason a_n is negative the one from class notes idk why
     assert a_0 == 2 * a / sp.pi**2
 
     expected_an = 2 * a * (1 + sp.cos(2 * a * n)) / (sp.pi**2 - (2 * a * n) ** 2)
@@ -105,3 +114,38 @@ def test_even_function():
     for i in range(1, 5):
         assert eq_float(an.evalf({"n": i}), expected_an.evalf({"n": i}))
         assert eq_float(bn.evalf({"n": i}), sp.expr.Float(0.0))
+
+
+def test_x_plus_x_squared():
+    """Exam 2 q3"""
+    f = x + x**2
+    T = 1
+    a0, an, bn, summation = get_fourier_series(f, T, x)
+    assert a0 == sp.expr.Rat(5, 6)
+    assert an == 1 / (n**2 * sp.pi**2)
+    assert bn == -2 / (n * sp.pi)
+
+
+def test_x_plus_x_squared_even():
+    """Exam 2 q3"""
+    f = x + x**2
+    f_neg = (-x) + (-x) ** 2
+    f_tilde = sp.expr.Piecewise((f, 0, 1), (f_neg, -1, 0), var=x)
+    T = 2
+    a0, an, bn, summation = get_fourier_series(f_tilde, T, x, settings="center")
+    assert a0 == sp.expr.Rat(5, 6)
+    assert bn == 0
+    assert an == ((6 * sp.cos(n * sp.pi) - 2) / (n**2 * sp.pi**2)).expand()
+
+
+def test_parseval():
+    """idk why but the dot product with itself is 1 or smtn ?? idk i forget
+
+    the dot product of a function with itself is 1
+    why do we * 2 then?
+
+    anyways i forget exactly what this was, but if you want to check, it's from q4 on exam 2.
+    """
+    expr = sp.cos(3 * x / 2) ** 2
+    ans = sp.integrate(expr, (x, 0, sp.pi)) * 2 / sp.pi
+    assert ans == 1
