@@ -6,7 +6,8 @@ import warnings
 from typing import Callable, List, Literal, Tuple, Union
 
 from .debug.tree import print_solution_tree, print_tree
-from .expr import Expr, Optional, Piece, Piecewise, Sum, Symbol, cast, nesting
+from .equation import Equation, solve
+from .expr import Abs, Expr, Optional, Piece, Piecewise, Sum, Symbol, cast, nesting
 from .integral_table import check_integral_table
 from .transforms import HEURISTICS, SAFE_TRANSFORMS, Node
 
@@ -141,6 +142,24 @@ class Integration:
                 total.append(ans)
 
             return Sum(total)
+
+        if isinstance(expr, Abs):
+            # it's tricky because you have to identify the x-value where expr.inner = 0
+            # and then split the integral at that point.
+            critical_x_value = solve(Equation(expr.inner, 0), x)
+            assert a.symbolless
+            assert b.symbolless
+            assert critical_x_value.symbolless
+
+            # ok this assumes a < b
+            if critical_x_value <= a:
+                return self.integrate_bounds(expr.inner, (x, a, b))
+            if critical_x_value >= b:
+                return self.integrate_bounds(-expr.inner, (x, a, b))
+
+            return self.integrate_bounds(expr.inner, (x, a, critical_x_value)) + self.integrate_bounds(
+                -expr.inner, (x, critical_x_value, b)
+            )
 
         integral = self.integrate(expr, bounds[0], final=False)
         if integral is None:

@@ -277,6 +277,11 @@ class Expr(ABC):
     @property
     def symbolless(self) -> bool:
         return len(self.symbols()) == 0
+    
+    def as_terms(self):
+        if isinstance(self, Sum):
+            return self.terms
+        return [self]
 
 
 @dataclass
@@ -484,6 +489,7 @@ class Float(Num, Expr):
 
     def __init__(self, value):
         self.value = value
+        super().__post_init__()
 
     def latex(self):
         return repr(self)

@@ -201,3 +201,19 @@ def test_more_complicated_trig():
     expr = tan(x) ** 5 * sec(x) ** 4
     expected_ans = tan(x) ** 6 / 6 + tan(x) ** 8 / 8
     assert_integral(expr, expected_ans)
+
+
+def test_abs():
+    expr = abs(-2 * x + 4)
+    assert_definite_integral(expr, bounds=(-2, 4), expected=20)
+
+
+def test_piecewise():
+    expr = Piecewise((9 * sqrt(x), 0, inf), (-2 * x, -inf, 0), var=x)
+    assert_definite_integral(expr, bounds=(-3, 1), expected=15)
+
+    expr = Piecewise((3 * x**2 - 1, 0, inf), (6 * x - 1, -inf, 0), var=x)
+    assert_definite_integral(expr, bounds=(-1, 1), expected=-4)
+
+    expr = Piecewise((1 / x, 1, inf), (x, -inf, 1), var=x)
+    assert_definite_integral(expr, bounds=(0, 3), expected=log(3) + Rat(1, 2))
