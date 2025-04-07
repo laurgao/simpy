@@ -2,7 +2,7 @@
 
 _A worse version of [sympy](https://www.sympy.org)_
 
-Current version can do algebraic & trigonometric simplifications, perform differentiation, and can perform ALMOST ALL AP calc integrals including polynomials, rational functions, trig functions, logs, exponentials, and combinations of them.
+Current version can do algebraic & trigonometric simplifications, perform differentiation, and can perform *almost all* AP calc integrals including polynomials, rational functions, trig functions, logs, exponentials, and combinations of them.
 
 ## Quick start
 
