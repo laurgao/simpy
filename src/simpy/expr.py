@@ -70,7 +70,7 @@ def __nesting(e, v) -> int:
 def _cast(x):
     """Cast x to an Expr if possible."""
     # Check simple cases first and return immediately if possible
-    if x is None or x is True or x is False or isinstance(x, Expr):
+    if x is None or x is True or x is False or isinstance(x, Expr) or isinstance(x, str):
         return x
 
     # Check for numerical types, reuse constant instances if possible
@@ -1532,11 +1532,12 @@ class Power(Expr):
 @dataclass
 class SingleFunc(Expr):
     inner: Expr
+    _even: bool = False  # todo: make this do smtn
+    _odd: bool = False
 
     @property
-    @abstractmethod
     def _label(self) -> str:
-        raise NotImplementedError("Label not implemented")
+        return self.__class__.__name__
 
     def children(self) -> List["Expr"]:
         return [self.inner]
@@ -2110,10 +2111,18 @@ def _is_strictly_positive(expr: Expr) -> bool:
     return False
 
 
-def symbols(symbols: str) -> Union[Symbol, List[Symbol]]:
+def symbols(
+    symbols: str, *, integer: bool = False, positive: bool = False, function: bool = False, latex: str = None
+) -> Union[Symbol, List[Symbol]]:
     """Creates symbols from a string of symbol names seperated by spaces."""
-    symbols = [Symbol(name=s) for s in symbols.split(" ")]
-    return symbols if len(symbols) > 1 else symbols[0]
+    syms = [Symbol(name=s) for s in symbols.split(" ")]
+    if integer:
+        for s in syms:
+            s._is_int = True
+    if positive:
+        for s in syms:
+            s._strictly_positive = True
+    return syms if len(syms) > 1 else syms[0]
 
 
 @cast
@@ -2284,3 +2293,29 @@ class Piecewise(Expr):
 
     def __ne__(self, other: Expr) -> bool:
         return not self == other
+
+
+class sinh(SingleFunc):
+    _odd = True
+
+    def diff(self, var) -> Expr:
+        return cosh(self.inner) * self.inner.diff(var)
+
+    def _evalf(self, subs: Dict[str, Expr]) -> Expr:
+        return math.sinh(self.inner._evalf(subs))
+
+    def latex(self) -> str:
+        return "\\sinh(" + self.inner.latex() + ")"
+
+
+class cosh(SingleFunc):
+    _even = True
+
+    def diff(self, var) -> Expr:
+        return sinh(self.inner) * self.inner.diff(var)
+
+    def _evalf(self, subs: Dict[str, Expr]) -> Expr:
+        return math.cosh(self.inner._evalf(subs))
+
+    def latex(self) -> str:
+        return "\\cosh(" + self.inner.latex() + ")"

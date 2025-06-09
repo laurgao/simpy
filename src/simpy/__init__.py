@@ -1,2 +1,25 @@
-from .expr import Rat, acos, asin, atan, cos, cot, csc, diff, e, latex, log, pi, sec, sin, sqrt, symbols, tan
+# will import Expr for typing sp.Expr
+from .expr import (
+    Expr,
+    Rat,
+    acos,
+    asin,
+    atan,
+    cos,
+    cosh,
+    cot,
+    csc,
+    diff,
+    e,
+    exp,
+    latex,
+    log,
+    pi,
+    sec,
+    sin,
+    sinh,
+    sqrt,
+    symbols,
+    tan,
+)
 from .integration import integrate
