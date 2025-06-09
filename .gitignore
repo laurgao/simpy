@@ -3,6 +3,7 @@ __pycache__/
 venv*/
 .coverage
 coverage.xml
+sandbox/
 
 
 # from pip install -e .
