@@ -1,5 +1,4 @@
-"""Transversing integration tree logic.
-"""
+"""Transversing integration tree logic."""
 
 import time
 import warnings
