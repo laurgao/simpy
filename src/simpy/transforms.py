@@ -176,6 +176,7 @@ class Node:
 
 class Transform(ABC):
     "An integral transform -- base class"
+
     # forward and backward modify the nodetree directly. check is a pure function
 
     def __init__(self):
