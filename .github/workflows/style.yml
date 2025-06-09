@@ -25,4 +25,5 @@ jobs:
 
             - name: Check code style
               run: |
+                  black --version
                   make check-style
