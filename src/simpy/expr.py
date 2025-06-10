@@ -326,9 +326,11 @@ class Associative:
 
             else:
                 expr2 = remove_const_factor(expr)
-                if isinstance(expr2, (Symbol, Any_)):
+                if isinstance(expr2, Symbol) or isinstance(expr2, Any_) and not expr2.is_constant:
                     ans = 1
-                elif len(expr2.symbols()) == 0 and len(get_anys(expr2)) == 0:
+                elif len(expr2.symbols()) == 0 and (
+                    len(get_anys(expr2)) == 0 or all([a.is_constant for a in get_anys(expr2)])
+                ):
                     ans = 0
                 else:
                     ans = 1 + max(_nesting_without_factor(sub_expr) for sub_expr in expr2.children())

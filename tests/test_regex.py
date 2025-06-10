@@ -2,7 +2,7 @@ import pytest
 from test_utils import x, y
 
 from simpy.expr import *
-from simpy.regex import Any_, any_, eq
+from simpy.regex import Any_, any_, any_constant, eq
 
 
 def test_any_basic():
@@ -95,3 +95,26 @@ def test_cofounder():
     query = -sin(any_) ** 2 + 1
     out = eq(expr, query, up_to_factor=True, up_to_sum=True)
     assert out["success"] is False
+
+
+def test_any_constant():
+    # Tests that any_constant matches constants.
+    expr = 2 * x + 3
+    query = 2 * x + any_constant
+    out = eq(expr, query)
+    assert out["success"]
+    assert out["matches"] == 3
+
+    expr = 2 * x + 5 * y
+    query = 2 * x + any_constant * y
+    out = eq(expr, query)
+    assert out["success"]
+    assert out["matches"] == 5
+
+
+def test_any_constant_fail():
+    # Tests that any_constant does not match variables.
+    expr = 2 * x + y
+    query = 2 * x + any_constant
+    out = eq(expr, query)
+    assert not out["success"]
