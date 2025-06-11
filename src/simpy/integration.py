@@ -126,9 +126,12 @@ class Integration:
         x, a, b = bounds
 
         if isinstance(expr, Piecewise):
-            assert a.symbolless
-            assert b.symbolless
-            assert all(p.lower_bound.value.symbolless and p.upper_bound.value.symbolless for p in expr.pieces)
+            if not a.symbolless:
+                raise ValueError("Lower bound 'a' must be symbolless for integration.")
+            if not b.symbolless:
+                raise ValueError("Upper bound 'b' must be symbolless for integration.")
+            if not all(p.lower_bound.value.symbolless and p.upper_bound.value.symbolless for p in expr.pieces):
+                raise ValueError("All piecewise bounds must be symbolless for integration.")
 
             total = []
             for piece in expr.pieces:
