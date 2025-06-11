@@ -14,7 +14,7 @@ x, w, phi = symbols("x w phi")
 BENCHMARKING_SUITE = [
     -5 * x**4 / (1 - x**2) ** Rat(5, 2),
     x**2 / sqrt(1 - x**3),
-    (Rat(1, 15) - Rat(1, 360) * (x - 6)) * (1 - (40 - x) ** 2 / 875),
+    # (Rat(1, 15) - Rat(1, 360) * (x - 6)) * (1 - (40 - x) ** 2 / 875), # looks too ugly on the plot
     cos(w * x - phi) * cos(w * x),
     sin(2 * x) / cos(2 * x),
     cos(x) ** 2,
