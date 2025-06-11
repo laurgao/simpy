@@ -33,7 +33,7 @@ from .expr import (
 from .integral_table import check_integral_table
 from .linalg import invert
 from .polynomial import Polynomial, is_polynomial, polynomial_to_expr, rid_ending_zeros, to_const_polynomial
-from .regex import count, general_contains, replace, replace_class, replace_factory
+from .regex import Any_, contains, count, general_contains, replace, replace_class, replace_factory
 from .simplify import pythagorean_simplification
 from .simplify.product_to_sum import product_to_sum_unit
 from .utils import ExprFn, eq_with_var, random_id
@@ -211,6 +211,7 @@ class Transform(ABC):
 class USub(Transform, ABC):
     """Base class for u-substituion transforms."""
 
+    # u (new var) written in terms of x (old var)
     _u: Expr = None
 
     def backward(self, node: Node) -> None:
@@ -377,8 +378,6 @@ def _get_last_heuristic_transform(node: Node, tup=(PullConstant, Additivity)):
     return node.transform
 
 
-# Let's just add all the transforms we've used for now.
-# and we will make this shit good and generalized later.
 class TrigUSub2(USub):
     """
     u-sub of a trig function
@@ -410,8 +409,8 @@ class TrigUSub2(USub):
         if super().check(node) is False:
             return False
 
-        # Since B and C essentially undo each other, we want to make sure that the last
-        # heuristic transform wasn't C.
+        # Since TrigUSub2 and InverseTrigUSub essentially undo each other, we want to make sure that the last
+        # heuristic transform wasn't InverseTrigUSub.
 
         t = _get_last_heuristic_transform(node)
         if isinstance(t, InverseTrigUSub):
@@ -966,6 +965,67 @@ class GenericUSub(USub):
         self._u = self._u
 
 
+class TrigUSub(USub):
+    """This is the substitution of the form x = 4*cos(theta) (TODO: write better descrip later)"""
+
+    _a: Rat = None  # constant in the square root
+    _exponent: Rat = None  # exponent of the square root (includes the square root, is a fraction w denom = 2)
+    _case: int = None  # 0 for sqrt(a^2 - x^2), 1 for sqrt(a^2 + x^2), 2 for sqrt(-a^2 + x^2)
+
+    def check(self, node: Node):
+        """Check if node.expr contains sqrt(a^2-x^2) or sqrt(a^2+x^2) where a is a constant."""
+        if super().check(node) is False:
+            return False
+
+        # check if any instance of sqrt(a^2 - x^2) or sqrt(a^2 + x^2) or sqrt(-a^2 + x^2) appears.
+        def squared_integer_condition(expr: Expr) -> bool:
+            return isinstance(expr, Rat) and isinstance(sqrt(expr), Rat)
+
+        a_squared = Any_("squared_integer", squared_integer_condition, is_constant=True)
+        any_square_root_exponent = Any_(
+            "square_root_exponent", lambda expr: isinstance(expr, Rat) and expr.denominator == 2, is_constant=True
+        )
+        queries = [
+            (a_squared - node.var**2) ** any_square_root_exponent,
+            (node.var**2 - a_squared) ** any_square_root_exponent,
+            (node.var**2 + a_squared) ** any_square_root_exponent,
+        ]
+        for i, query in enumerate(queries):
+            out = contains(node.expr, query)
+            if out["success"]:
+                self._a = sqrt(out["matches"]["squared_integer"])
+                self._exponent = out["matches"]["square_root_exponent"]
+                self._case = i
+                return True
+
+        return False
+
+    def forward(self, node: Node) -> None:
+        if self._case == 0:
+            # in the case of sqrt(a^2 - x^2):
+            # x = a * sin(theta)
+            # dx = a * cos(theta) d(theta)
+            theta = generate_intermediate_var()
+            dx_dtheta = self._a * cos(theta)
+
+            # so we replace x = a * sin(theta), this effectively leads to
+            # replacing sqrt(a^2 - x^2) = a * cos^2(theta)
+            theta_expr = replace(
+                node.expr,
+                (self._a**2 - node.var**2) ** self._exponent,
+                (self._a * cos(theta)) ** self._exponent.numerator,
+            )
+            if theta_expr.contains(node.var):
+                theta_expr = replace(theta_expr, node.var, self._a * sin(theta))
+
+            new_integrand = theta_expr * dx_dtheta
+            node.add_child(Node(new_integrand, theta, self, node))
+
+            self._u = asin(node.var / self._a)  # theta in terms of x
+
+        return NotImplemented
+
+
 class CompleteTheSquare(Transform):
     """Integration via completing the square"""
 
@@ -1120,6 +1180,7 @@ HEURISTICS: List[Type[Transform]] = [
     RewriteTrig,
     RewritePythagorean,
     InverseTrigUSub,
+    TrigUSub,
     CompleteTheSquare,
     GenericUSub,
 ]

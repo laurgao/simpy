@@ -45,6 +45,7 @@ def test_polynomial_division():
 
     tr.forward(test_node)
     ans = test_node.children[0].expr
+    assert_eq_strict(ans, -x + x / (-(x**2) + 1))
 
 
 def test_complete_the_square():

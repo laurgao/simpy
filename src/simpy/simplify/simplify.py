@@ -15,6 +15,7 @@ from ..expr import (
     cot,
     csc,
     log,
+    nesting,
     sec,
     sin,
     tan,
@@ -128,6 +129,10 @@ def _pythagorean_perform(sum: Expr) -> Optional[Expr]:
             rest = result["rest"]
             return factor * perform(inner) + rest
 
+    # right now we are doing the sec/tan simplification in a separate function because its implementation is a bit more
+    # complex?
+    # but i feel like maybe ideally it should be in this function along with cos^2(x) + sin^2(x) = 1 and we can have
+    # them both done together with more advanced regex. but for now, this is fine!
     # other_table = [
     #     (r"^sec\((.+)\)\^2$", r"^-tan\((.+)\)\^2$", Const(1)),
     # ]
@@ -247,7 +252,7 @@ def reciprocate_trigs(expr: Expr, **kwargs) -> Expr:
 def simplify(expr: Expr) -> Expr:
     """Simplifies an expression.
 
-    This is the general one that does all heuristics & is for aesthetics (& comparisons).
+    This is the general simplification function that does all heuristics & is for aesthetics (& comparisons).
     Use more specific simplification functions in integration please.
     """
     if expr.expandable():
@@ -342,7 +347,7 @@ def sectan(sum: Expr) -> Optional[Expr]:
 
     for s in secs:
         new = replace_factory(condition, perform)(s)
-        new = new.expand() if new.expandable() else s
+        new = new.expand() if new.expandable() else new
         assert isinstance(new, Sum)
         tans.extend(new.terms)
 
@@ -351,17 +356,21 @@ def sectan(sum: Expr) -> Optional[Expr]:
         # This must mean that we simplified the sum into one term
         return new_sum
 
-    if len(new_sum.terms) < sum.terms:
+    if is_simpler(new_sum, sum):
         return new_sum
+
+    # if we didn't simplify, return original
+    return sum
 
 
 def is_simpler(e1, e2) -> bool:
     """returns whether e1 is simpler than e2"""
     c1 = count_symbols(e1)
     c2 = count_symbols(e2)
-    return c1 < c2
-    # if c1 < c2:
-    #     return True
-    # if c1 == c2:
-    #     return len(repr(e1)) < len(repr(e2))
-    # return False
+    if c1 < c2:
+        return True
+
+    if c1 == c2:
+        return nesting(e1) < nesting(e2)
+
+    return False

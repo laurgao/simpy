@@ -228,6 +228,11 @@ class Expr(ABC):
     def children(self) -> List["Expr"]:
         raise NotImplementedError(f"Cannot get children of {self.__class__.__name__}")
 
+    @property
+    def childless(self) -> bool:
+        """Returns True if it's a basic element like a symbol or a number that doesn't have any subcomponents at all."""
+        return len(self.children()) == 0
+
     def contains(self: "Expr", var: "Symbol") -> bool:
         is_var = isinstance(self, Symbol) and self.name == var.name
         return is_var or any(e.contains(var) for e in self.children())
@@ -326,9 +331,11 @@ class Associative:
 
             else:
                 expr2 = remove_const_factor(expr)
-                if isinstance(expr2, (Symbol, Any_)):
+                if isinstance(expr2, Symbol) or isinstance(expr2, Any_) and not expr2.is_constant:
                     ans = 1
-                elif len(expr2.symbols()) == 0 and len(get_anys(expr2)) == 0:
+                elif len(expr2.symbols()) == 0 and (
+                    len(get_anys(expr2)) == 0 or all([a.is_constant for a in get_anys(expr2)])
+                ):
                     ans = 0
                 else:
                     ans = 1 + max(_nesting_without_factor(sub_expr) for sub_expr in expr2.children())

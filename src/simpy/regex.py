@@ -1,24 +1,41 @@
-"""Custom library for checking what shit exists. Replaces searching the repr with regex.
+"""Custom library for checking what exists within exprs. Replaces searching the repr with regex.
 
 This module is currently still developmental. It does the job often but is not promised to be robust
 outside of the cases it is currently used for. Use with caution.
+
+TODO: write a regex quickstart guide. Maybe spin this off into a subfolder and make the outward facing API more
+intuitive. Perhaps make it similar to the regex library.
++ Unit testing with comprehensively thought-out cases.
 """
 
 from collections import defaultdict
 from dataclasses import dataclass, fields
 from typing import Any, Callable, Dict, Iterable, List, Literal, Optional, Tuple, Type
 
-from .expr import Expr, Power, Prod, Rat, SingleFunc, Sum, Symbol, cast, log
+from .expr import Expr, Num, Power, Prod, Rat, SingleFunc, Sum, Symbol, cast, log
 from .utils import ExprCondition, ExprFn, OptionalExprFn, random_id
 
 
 class Any_(Expr):
     _fields_already_casted = True
 
-    def __init__(self, key=None, *, is_multiple_terms=False):
+    def __init__(
+        self, key: str = None, condition: Callable[[Expr], bool] = None, *, is_constant=False, is_multiple_terms=False
+    ):
+        """
+        key: unique identifier of each Any_ instance.
+            this is used for if we want each Any_ object match to be the same thing.
+        condition: a condition for if sth matches an Any_? by default it's nothing.
+        is_constant: a decorator actually only for sorting purposes. if True, this Any_ object will be considered a
+            constant for sorting purposes. for matching purposes, pls specify in the condition callable.
+        """
         if not key:
             key = random_id(10)
+        if condition is None:
+            condition = lambda e: True  # default condition is always true
         self._key = key
+        self._condition = condition
+        self._is_constant = is_constant
         self._is_multiple_terms = is_multiple_terms
         super().__post_init__()
 
@@ -27,15 +44,20 @@ class Any_(Expr):
         return self._key
 
     @property
+    def condition(self) -> Callable[[Expr], bool]:
+        return self._condition
+
+    @property
+    def is_constant(self) -> bool:
+        return self._is_constant
+
+    @property
     def is_multiple_terms(self) -> bool:
         return self._is_multiple_terms
 
     def __eq__(self, other):
         if isinstance(other, Any_):
             return self.key == other.key
-        # if isinstance(other, Expr):
-        #     return True
-        # return NotImplemented
         return False
 
     def __repr__(self) -> str:
@@ -59,6 +81,9 @@ class Any_(Expr):
 
 
 any_ = Any_()
+any_constant = Any_(
+    key="constant", condition=lambda e: isinstance(e, Num), is_constant=True
+)  # matches any numerical constant.
 
 # smallTODO: make this a namedtuple
 EqResult = Dict[Literal["success", "factor", "rest", "matches"], Any]
@@ -253,6 +278,11 @@ class Eq:
         return self._result
 
     def _eq(self, expr: Any, query: Any) -> bool:
+        """Recursively checks if `expr` matches `query` one-for-one, no up to factors/sums.
+        This method is the recursed component.
+        """
+
+        ## base cases ##
         if isinstance(expr, list):
             if not (isinstance(query, list) and len(expr) == len(query)):
                 return False
@@ -262,6 +292,8 @@ class Eq:
         if not isinstance(expr, Expr) or not isinstance(query, Expr):
             return False
         if isinstance(query, Any_):
+            if not query.condition(expr):
+                return False
             self._matches[query.key].append(expr)
             return True
         if not query.has(Any_):
@@ -292,6 +324,8 @@ class Eq:
 
         if not expr.__class__ == query.__class__:
             return False
+
+        ## and here we recurse. ##
         return all(self._eq(getattr(expr, field.name), getattr(query, field.name)) for field in fields(expr))
 
 
@@ -365,6 +399,28 @@ def count(expr: Expr, query: Expr) -> int:
     return sum(count(e, query) for e in expr.children())
 
 
+def contains(expr: Expr, query: Expr) -> EqResult:
+    """Checks if `query` appears in `expr`. Assumes query contains Any_ objects.
+    Exact any-matches only, no up to factor or sum.
+    Returns a results dictionary like eq() does. with `success` and `matches` keys.
+    """
+    ## base cases ##
+    eq_output = eq(expr, query)
+    if eq_output["success"]:
+        return eq_output
+    if expr.childless:
+        return {"success": False}
+
+    ## recursive cases ##
+    # this isn't super sophisticated for dupes but it's fine for now.
+    for e in expr.children():
+        eq_output_ = contains(e, query)
+        if eq_output_["success"]:
+            return eq_output_
+
+    return {"success": False}
+
+
 def contains_cls(expr: Expr, cls: Type[Expr]) -> bool:
     if isinstance(expr, cls):
         return True
@@ -382,6 +438,10 @@ def general_count(expr: Expr, condition: ExprCondition) -> int:
 
 
 def general_contains(expr: Expr, condition: ExprCondition) -> bool:
+    """contains with a condition function instead of any.
+
+    this is sorta-legacy --- i think we should use contains instead; it's cuter. any-matches are cute.
+    """
     if condition(expr):
         return True
     return any(general_contains(e, condition) for e in expr.children())

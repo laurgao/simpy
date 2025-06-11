@@ -20,3 +20,7 @@ The output would look something like this:
       142    0.000    0.000    0.374    0.003 integration.py:147(_cycle)
 
 ```
+
+## Logging
+
+`benchmark-profiler.py` also keeps track of the time it takes for each integral to run and creates a plot of it. See `integration_log.png` for the bar chart; see `integration_log.txt` for some more detailed numerical breakdowns.
