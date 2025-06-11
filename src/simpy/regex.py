@@ -1,7 +1,11 @@
-"""Custom library for checking what shit exists. Replaces searching the repr with regex.
+"""Custom library for checking what exists within exprs. Replaces searching the repr with regex.
 
 This module is currently still developmental. It does the job often but is not promised to be robust
 outside of the cases it is currently used for. Use with caution.
+
+TODO: write a regex quickstart guide. Maybe spin this off into a subfolder and make the outward facing API more
+intuitive. Perhaps make it similar to the regex library.
++ Unit testing with comprehensively thought-out cases.
 """
 
 from collections import defaultdict
@@ -395,6 +399,28 @@ def count(expr: Expr, query: Expr) -> int:
     return sum(count(e, query) for e in expr.children())
 
 
+def contains(expr: Expr, query: Expr) -> EqResult:
+    """Checks if `query` appears in `expr`. Assumes query contains Any_ objects.
+    Exact any-matches only, no up to factor or sum.
+    Returns a results dictionary like eq() does. with `success` and `matches` keys.
+    """
+    ## base cases ##
+    eq_output = eq(expr, query)
+    if eq_output["success"]:
+        return eq_output
+    if expr.childless:
+        return {"success": False}
+
+    ## recursive cases ##
+    # this isn't super sophisticated for dupes but it's fine for now.
+    for e in expr.children():
+        eq_output_ = contains(e, query)
+        if eq_output_["success"]:
+            return eq_output_
+
+    return {"success": False}
+
+
 def contains_cls(expr: Expr, cls: Type[Expr]) -> bool:
     if isinstance(expr, cls):
         return True
@@ -412,6 +438,10 @@ def general_count(expr: Expr, condition: ExprCondition) -> int:
 
 
 def general_contains(expr: Expr, condition: ExprCondition) -> bool:
+    """contains with a condition function instead of any.
+
+    this is sorta-legacy --- i think we should use contains instead; it's cuter. any-matches are cute.
+    """
     if condition(expr):
         return True
     return any(general_contains(e, condition) for e in expr.children())

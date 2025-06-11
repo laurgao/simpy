@@ -228,6 +228,11 @@ class Expr(ABC):
     def children(self) -> List["Expr"]:
         raise NotImplementedError(f"Cannot get children of {self.__class__.__name__}")
 
+    @property
+    def childless(self) -> bool:
+        """Returns True if it's a basic element like a symbol or a number that doesn't have any subcomponents at all."""
+        return len(self.children()) == 0
+
     def contains(self: "Expr", var: "Symbol") -> bool:
         is_var = isinstance(self, Symbol) and self.name == var.name
         return is_var or any(e.contains(var) for e in self.children())
