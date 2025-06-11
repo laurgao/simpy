@@ -54,9 +54,6 @@ class Any_(Expr):
     def __eq__(self, other):
         if isinstance(other, Any_):
             return self.key == other.key
-        # if isinstance(other, Expr):
-        #     return True
-        # return NotImplemented
         return False
 
     def __repr__(self) -> str:
