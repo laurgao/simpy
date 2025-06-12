@@ -207,6 +207,6 @@ def test_more_complicated_trig():
 def test_trigonometric_substitution():
     # that's this one: https://www.khanacademy.org/math/integral-calculus/ic-integration/ic-trig-substitution/e/integration-using-trigonometric-substitution
     expr = (4 - x**2) ** Fraction(3, 2)
-    expected_ans = sin(4 * asin(x / 2)) / 2 + 4 * sin(2 * asin(x / 2)) + 6 * asin(x / 2)  # TODO: simplify this
+    expected_ans = 5 * x * sqrt(1 - x**2 / 4) - x**3 * sqrt(1 - x**2 / 4) / 2 + 6 * asin(x / 2)
     ans = integrate(expr)
     assert_eq_plusc(expected_ans, ans)

@@ -1,7 +1,9 @@
 from typing import List, Optional, Union
 
-from ..expr import Expr, Power, Prod, Rat, Sum, cos, remove_const_factor, sin
+from ..expr import Expr, Power, Prod, Rat, Sum, TrigFunctionNotInverse, cos, nesting, remove_const_factor, sin
+from ..regex import Any_, any_, eq
 from ..utils import count_symbols
+from .utils import is_simpler
 
 
 def _perform_on_terms(
@@ -136,4 +138,50 @@ def product_to_sum(expr: Expr) -> Optional[Expr]:
 
     if len(final.terms) == len(expr.terms) and count_symbols(final) < count_symbols(expr):
         # This ensures that e.g. 2*cos(x)*sin(2*x)/3 - cos(2*x)*sin(x)/3 simplifies to -2*sin(x)**3/3 + sin(x)
+        return final
+
+
+def double_angle(expr: Expr) -> Optional[Expr]:
+    """Applies double angle
+    Used in simplify
+
+    Assumes that expr.has(TrigFunctionNotInverse) == True
+    """
+
+    if not isinstance(expr, (sin, cos)):
+        return
+
+    any_even_number = Any_(
+        "even_number", lambda expr: isinstance(expr, Rat) and expr.denominator == 1 and expr % 2 == 0, is_constant=True
+    )
+    query = any_even_number * any_
+    out = eq(expr.inner, query)
+
+    if not out["success"]:
+        return
+
+    x = out["matches"][any_.key]
+    num = out["matches"]["even_number"]
+
+    if isinstance(expr, sin):
+        if num == 2:
+            final = 2 * sin(x) * cos(x)
+        elif num == 4:
+            final = 4 * sin(x) * cos(x) - 8 * sin(x) ** 3 * cos(x)
+        else:
+            return
+            # raise NotImplementedError("Double angle for sin with num > 4 is not implemented")
+    else:
+        return
+        # raise NotImplementedError("Double angle for cos is not implemented")
+
+    if not final.has(TrigFunctionNotInverse) or is_simpler(final, expr):
+        # If final doesn't have any trig functions, it's definitely simpler.
+        # this can def be ... improved lol.
+        # currently im basing it off of the
+        # sin(4*asin(x/2)) -> 2*x*sqrt(-x^2/4 + 1) - x^3*sqrt(-x^2/4 + 1)
+        # case.
+        # like that shit is not simpler by any other metric other than it doesn't have the sin(asin) nesting yk.
+        # nesting of 2 trig funcs is always ugllyyyyyy. maybe the most robust metric should just rid those ugly
+        # nests.
         return final

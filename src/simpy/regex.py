@@ -299,6 +299,8 @@ class Eq:
         if not query.has(Any_):
             return False
 
+        # ok bro idk why i did this i kinda hate it.
+        # like what if we just check if both query and expr are products and have special handling for that?
         if not self._is_divide:
             # You don't get to divide if we already is --- prevents inf recursion.
             one, quotient_matches = divide_anys(query, expr)
@@ -349,8 +351,8 @@ def divide_anys(num: Expr, denom: Expr) -> Tuple[Expr, MatchesInProgress]:
                 anys.append(t)
             else:
                 terms.append(t)
-        if len([t for t in expr.terms if isinstance(t, Any_)]) > 1:
-            raise NotImplementedError(f"{expr} is ambiguous")
+        # if len([t for t in expr.terms if isinstance(t, Any_)]) > 1:
+        #     raise NotImplementedError(f"{expr} is ambiguous")
         if len(anys) > 0:
             terms.extend(anys)
         if len(any_factors) > 0:
@@ -360,6 +362,9 @@ def divide_anys(num: Expr, denom: Expr) -> Tuple[Expr, MatchesInProgress]:
     numfactors = _make_factors_list(num)
     denfactors = _make_factors_list(denom)
     matches = defaultdict(list)
+
+    # For every factor in the numerator, try to find a matching factor in the denominator.
+    # If a match is found, remove both factors from their respective lists. And add the match to the matches dict.
     for i in range(len(numfactors)):
         f = numfactors[i]
         for j in range(len(denfactors)):
