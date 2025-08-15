@@ -6,7 +6,7 @@ Symbolic algebra and integration system built from scratch. Here are some integr
 
 ![integrals](./benchmark/integration_log.png)
 
-Current version can do algebraic & trigonometric simplifications, perform differentiation, and can perform ALMOST ALL AP calc integrals including polynomials, rational functions, trig functions, logs, exponentials, and combinations of them.
+Current version can do algebraic & trigonometric simplifications, perform differentiation, and can perform *almost all* AP calc integrals including polynomials, rational functions, trig functions, logs, exponentials, and combinations of them.
 
 ## Quick start
 
