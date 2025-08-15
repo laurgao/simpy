@@ -2,6 +2,10 @@
 
 _A worse version of [sympy](https://www.sympy.org)_
 
+Symbolic algebra and integration system built from scratch. Here are some integrals it can solve!
+
+![integrals](./benchmark/integration_log.png)
+
 Current version can do algebraic & trigonometric simplifications, perform differentiation, and can perform *almost all* AP calc integrals including polynomials, rational functions, trig functions, logs, exponentials, and combinations of them.
 
 ## Quick start
