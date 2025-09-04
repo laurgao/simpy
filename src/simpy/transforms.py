@@ -17,6 +17,7 @@ from .expr import (
     Symbol,
     TrigFunction,
     TrigFunctionNotInverse,
+    acos,
     asin,
     atan,
     cos,
@@ -965,19 +966,29 @@ class GenericUSub(USub):
         self._u = self._u
 
 
+asec = lambda x: acos(1 / x)
+
+
 class TrigUSub(USub):
-    """This is the substitution of the form x = 4*cos(theta) (TODO: write better descrip later)"""
+    """This is the substitution of the form x = 4*cos(theta)
+
+    If the integrand contains sqrt(a^2 - x^2), sqrt(a^2 + x^2), or sqrt(-a^2 + x^2),
+    you can do this trig sub.
+    3 cases:
+    1. sqrt(a^2 - x^2): x = a*sin(theta)
+    2. sqrt(a^2 + x^2): x = a*tan(theta)
+    3. sqrt(-a^2 + x^2): x = a*sec(theta)
+    """
 
     _a: Rat = None  # constant in the square root
     _exponent: Rat = None  # exponent of the square root (includes the square root, is a fraction w denom = 2)
     _case: int = None  # 0 for sqrt(a^2 - x^2), 1 for sqrt(a^2 + x^2), 2 for sqrt(-a^2 + x^2)
 
     def check(self, node: Node):
-        """Check if node.expr contains sqrt(a^2-x^2) or sqrt(a^2+x^2) where a is a constant."""
+        """Check if node.expr contains sqrt(a^2 - x^2) or sqrt(a^2 + x^2) or sqrt(-a^2 + x^2) where a is a constant."""
         if super().check(node) is False:
             return False
 
-        # check if any instance of sqrt(a^2 - x^2) or sqrt(a^2 + x^2) or sqrt(-a^2 + x^2) appears.
         def squared_integer_condition(expr: Expr) -> bool:
             return isinstance(expr, Rat) and isinstance(sqrt(expr), Rat)
 
@@ -987,8 +998,8 @@ class TrigUSub(USub):
         )
         queries = [
             (a_squared - node.var**2) ** any_square_root_exponent,
-            (node.var**2 - a_squared) ** any_square_root_exponent,
             (node.var**2 + a_squared) ** any_square_root_exponent,
+            (node.var**2 - a_squared) ** any_square_root_exponent,
         ]
         for i, query in enumerate(queries):
             out = contains(node.expr, query)
@@ -1001,29 +1012,57 @@ class TrigUSub(USub):
         return False
 
     def forward(self, node: Node) -> None:
+        theta = generate_intermediate_var()
+        a = self._a
+        x = node.var
         if self._case == 0:
             # in the case of sqrt(a^2 - x^2):
             # x = a * sin(theta)
             # dx = a * cos(theta) d(theta)
-            theta = generate_intermediate_var()
-            dx_dtheta = self._a * cos(theta)
+            dx_dtheta = a * cos(theta)
 
             # so we replace x = a * sin(theta), this effectively leads to
             # replacing sqrt(a^2 - x^2) = a * cos^2(theta)
             theta_expr = replace(
                 node.expr,
-                (self._a**2 - node.var**2) ** self._exponent,
-                (self._a * cos(theta)) ** self._exponent.numerator,
+                (a**2 - x**2) ** self._exponent,
+                (a * cos(theta)) ** self._exponent.numerator,
+            )
+            if theta_expr.contains(x):
+                theta_expr = replace(theta_expr, x, a * sin(theta))
+            self._u = asin(x / a)  # theta in terms of x
+
+        elif self._case == 1:
+            # in th cas of sqrt(a^2 + x^2)
+            # x = a * tan(theta)
+            # dx = a * sec(theta) ** 2 * d(theta)
+            dx_dtheta = self._a * sec(theta) ** 2
+
+            # sqrt(a^2 + x^2) = a * sec(theta)
+            theta_expr = replace(
+                node.expr,
+                (a**2 + x**2) ** self._exponent,
+                (a * sec(theta)) ** self._exponent.numerator,
             )
             if theta_expr.contains(node.var):
-                theta_expr = replace(theta_expr, node.var, self._a * sin(theta))
+                theta_expr = replace(theta_expr, x, a * tan(theta))
+            self._u = atan(x / a)  # theta in terms of x
 
-            new_integrand = theta_expr * dx_dtheta
-            node.add_child(Node(new_integrand, theta, self, node))
+        else:
+            # x = a * sec(theta)
+            dx_dtheta = a * sec(theta) * tan(theta)
+            # sqrt(a^2 + x^2) = a * tan(theta)
+            theta_expr = replace(
+                node.expr,
+                (-(a**2) + x**2) ** self._exponent,
+                (a * tan(theta)) ** self._exponent.numerator,
+            )
+            if theta_expr.contains(x):
+                theta_expr = replace(theta_expr, x, a * sec(theta))
+            self._u = asec(x / a)  # theta in terms of x
 
-            self._u = asin(node.var / self._a)  # theta in terms of x
-
-        return NotImplemented
+        new_integrand = theta_expr * dx_dtheta
+        node.add_child(Node(new_integrand, theta, self, node))
 
 
 class CompleteTheSquare(Transform):
