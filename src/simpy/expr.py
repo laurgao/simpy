@@ -2072,7 +2072,7 @@ def symbols(symbols: str) -> Union[Symbol, List[Symbol]]:
 
 
 @cast
-def diff(expr: Expr, var: Optional[Symbol]) -> Expr:
+def diff(expr: Expr, var: Optional[Symbol] = None) -> Expr:
     """Takes the derivative of expr relative to var. If expr has only one symbol in it, var doesn't need to be specified."""
     if not hasattr(expr, "diff"):
         raise NotImplementedError(f"Differentiation of {expr} not implemented")

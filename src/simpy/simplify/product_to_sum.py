@@ -164,10 +164,13 @@ def double_angle(expr: Expr) -> Optional[Expr]:
     num = out["matches"]["even_number"]
 
     if isinstance(expr, sin):
+        # TODO: make this robust through iteration or recursion
         if num == 2:
             final = 2 * sin(x) * cos(x)
         elif num == 4:
             final = 4 * sin(x) * cos(x) - 8 * sin(x) ** 3 * cos(x)
+        elif num == 6:
+            final = 6 * sin(x) * cos(x) - 32 * sin(x) ** 3 * cos(x) + 32 * sin(x) ** 5 * cos(x)
         else:
             return
             # raise NotImplementedError("Double angle for sin with num > 4 is not implemented")

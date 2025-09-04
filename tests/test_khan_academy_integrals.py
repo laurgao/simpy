@@ -217,3 +217,17 @@ def test_trigonometric_substitution_tan_sub():
     ans = integrate(expr)
     expected_ans = x / (8 * sqrt(x**2 / 4 + 1))
     assert_eq_plusc(expected_ans, ans)
+
+
+def test_trig_sub_sec_sub():
+    # this one is not from KH
+    # perhaps I should stop sorting tests using KH or not but through transform or smtn.
+    expr = 3 * (25 - x**2) ** Fraction(5 / 2)
+    ans = integrate(expr)
+    expected_ans = (
+        5 * x**5 * sqrt(-(x**2) / 25 + 1) / 2
+        + 103125 * x * sqrt(-(x**2) / 25 + 1) / 16
+        - 1625 * x**3 * sqrt(-(x**2) / 25 + 1) / 8
+        + 234375 * asin(x / 5) / 16
+    )
+    assert_eq_plusc(ans, expected_ans)
