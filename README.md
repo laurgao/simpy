@@ -1,7 +1,5 @@
 # simpy
 
-_A worse version of [sympy](https://www.sympy.org)_
-
 Symbolic algebra and integration system built from scratch. Here are some integrals it can solve!
 
 ![integrals](./benchmark/integration_log.png)
