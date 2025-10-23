@@ -141,6 +141,27 @@ def product_to_sum(expr: Expr) -> Optional[Expr]:
         return final
 
 
+# these two private functions are inter recursive.
+def _double_angle_sin(num: Expr, x: Expr) -> Expr:
+    if num == 2:
+        final = 2 * sin(x) * cos(x)
+    elif num == 4:
+        final = 4 * sin(x) * cos(x) - 8 * sin(x) ** 3 * cos(x)
+    elif num == 6:
+        final = 6 * sin(x) * cos(x) - 32 * sin(x) ** 3 * cos(x) + 32 * sin(x) ** 5 * cos(x)
+    elif num >= 8:
+        final = 2 * _double_angle_sin(num / 2, x) * _double_angle_cos(num / 2 * x)
+    else:
+        breakpoint()
+    return final
+
+
+def _double_angle_cos(num: Expr, x: Expr) -> Expr:
+    if num == 2:
+        return 1 - 2 * sin(x) ** 2
+    return 1 - 2 * _double_angle_sin(num=num / 2, x=x)
+
+
 def double_angle(expr: Expr) -> Optional[Expr]:
     """Applies double angle
     Used in simplify
@@ -163,28 +184,22 @@ def double_angle(expr: Expr) -> Optional[Expr]:
     x = out["matches"][any_.key]
     num = out["matches"]["even_number"]
 
+    # Using these identities:
+    # sin(2x) = 2sin(x)cos(x)
+    # cos(2x) = 1 - 2 * sin^2(x)
+
     if isinstance(expr, sin):
-        # TODO: make this robust through iteration or recursion
-        if num == 2:
-            final = 2 * sin(x) * cos(x)
-        elif num == 4:
-            final = 4 * sin(x) * cos(x) - 8 * sin(x) ** 3 * cos(x)
-        elif num == 6:
-            final = 6 * sin(x) * cos(x) - 32 * sin(x) ** 3 * cos(x) + 32 * sin(x) ** 5 * cos(x)
-        else:
-            return
-            # raise NotImplementedError("Double angle for sin with num > 4 is not implemented")
+        final = _double_angle_sin(num=num, x=x)
     else:
-        return
-        # raise NotImplementedError("Double angle for cos is not implemented")
+        final = _double_angle_cos(num=num, x=x)
 
     if not final.has(TrigFunctionNotInverse) or is_simpler(final, expr):
         # If final doesn't have any trig functions, it's definitely simpler.
-        # this can def be ... improved lol.
+        # this condition can def be ... improved.
         # currently im basing it off of the
         # sin(4*asin(x/2)) -> 2*x*sqrt(-x^2/4 + 1) - x^3*sqrt(-x^2/4 + 1)
         # case.
-        # like that shit is not simpler by any other metric other than it doesn't have the sin(asin) nesting yk.
-        # nesting of 2 trig funcs is always ugllyyyyyy. maybe the most robust metric should just rid those ugly
+        # that is not simpler by any other metric other than it doesn't have the sin(asin) nesting.
+        # nesting of 2 trig funcs is always ugly. maybe the most robust metric should just rid those ugly
         # nests.
         return final

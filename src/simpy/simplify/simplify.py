@@ -15,7 +15,6 @@ from ..expr import (
     cot,
     csc,
     log,
-    nesting,
     sec,
     sin,
     tan,

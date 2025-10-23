@@ -221,7 +221,7 @@ def test_trigonometric_substitution_tan_sub():
 
 def test_trig_sub_sec_sub():
     # this one is not from KH
-    # perhaps I should stop sorting tests using KH or not but through transform or smtn.
+    # perhaps I should stop sorting tests using KH or not but through transform.
     expr = 3 * (25 - x**2) ** Fraction(5 / 2)
     ans = integrate(expr)
     expected_ans = (

@@ -9,10 +9,10 @@ intuitive. Perhaps make it similar to the regex library.
 """
 
 from collections import defaultdict
-from dataclasses import dataclass, fields
+from dataclasses import fields
 from typing import Any, Callable, Dict, Iterable, List, Literal, Optional, Tuple, Type
 
-from .expr import Expr, Num, Power, Prod, Rat, SingleFunc, Sum, Symbol, cast, log
+from .expr import Expr, Num, Power, Prod, Rat, SingleFunc, Sum, Symbol, log
 from .utils import ExprCondition, ExprFn, OptionalExprFn, random_id
 
 
