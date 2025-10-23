@@ -153,6 +153,7 @@ def _double_angle_sin(num: Expr, x: Expr) -> Expr:
         final = 2 * _double_angle_sin(num / 2, x) * _double_angle_cos(num / 2 * x)
     else:
         breakpoint()
+        raise ValueError(f"Should only get even whole numbers to double angle, got {num}")
     return final
 
 

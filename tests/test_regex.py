@@ -146,3 +146,21 @@ def test_contains_fail():
     query = log(sin(any_) ** 2 + cos(any_) ** 2)
     expr = (log(sin(x) ** 2 + cos(x) ** 3) + 3) ** 2 + 1
     assert not contains(expr, query)["success"]
+
+
+def test_any_even_condition():
+    expr = x + y
+    any_even_number = Any_(
+        "even_number", lambda expr: isinstance(expr, Rat) and expr.denominator == 1 and expr % 2 == 0, is_constant=True
+    )
+    query = any_even_number * any_
+    out = eq(expr, query)
+    assert out["success"] is False
+
+
+def test_any_symbol_condition():
+    expr = x + 2
+    any_symbol = Any_("symbol", lambda expr: isinstance(expr, Symbol))
+    query = any_symbol * any_
+    out = eq(expr, query)
+    assert out["success"] is False

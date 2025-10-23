@@ -309,6 +309,8 @@ class Eq:
                 return True
 
             if isinstance(one, Any_):
+                if not one.condition(1):
+                    return False
                 self._matches[one.key].append(Rat(1))
                 join_dicts2(self._matches, quotient_matches)
                 return True
