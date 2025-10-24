@@ -225,9 +225,11 @@ def test_trig_sub_sec_sub():
     expr = 3 * (25 - x**2) ** Fraction(5 / 2)
     ans = integrate(expr)
     expected_ans = (
-        5 * x**5 * sqrt(-(x**2) / 25 + 1) / 2
-        + 103125 * x * sqrt(-(x**2) / 25 + 1) / 16
-        - 1625 * x**3 * sqrt(-(x**2) / 25 + 1) / 8
+        9375 * x * (-(x**2) / 25 + 1) ** (3 / 2) / 8
+        + 84375 * x * sqrt(-(x**2) / 25 + 1) / 16
+        - 375 * x**3 * sqrt(-(x**2) / 25 + 1) / 4
+        - 125 * x**3 * (-(x**2) / 25 + 1) ** (3 / 2) / 2
         + 234375 * asin(x / 5) / 16
     )
+    # not the simplest answer, butfurther simplifications are currently beyond the scope of SimPy.
     assert_eq_plusc(ans, expected_ans)

@@ -145,27 +145,40 @@ def product_to_sum(expr: Expr) -> Optional[Expr]:
 def _double_angle_sin(num: Expr, x: Expr) -> Expr:
     if num == 2:
         final = 2 * sin(x) * cos(x)
+    elif num == 3:
+        final = 3 * sin(x) - 4 * sin(x) ** 3
     elif num == 4:
         final = 4 * sin(x) * cos(x) - 8 * sin(x) ** 3 * cos(x)
-    elif num == 6:
-        final = 6 * sin(x) * cos(x) - 32 * sin(x) ** 3 * cos(x) + 32 * sin(x) ** 5 * cos(x)
-    elif num >= 8:
-        final = 2 * _double_angle_sin(num / 2, x) * _double_angle_cos(num / 2 * x)
+    elif num % 2 == 0:
+        final = 2 * _double_angle_sin(num / 2, x) * _double_angle_cos(num / 2, x)
+    elif num % 3 == 0:
+        t = _double_angle_sin(num / 3, x)
+        final = 3 * t - 4 * t**3
     else:
-        breakpoint()
-        raise ValueError(f"Should only get even whole numbers to double angle, got {num}")
+        return sin(num * x)
     return final
 
 
 def _double_angle_cos(num: Expr, x: Expr) -> Expr:
     if num == 2:
         return 1 - 2 * sin(x) ** 2
-    return 1 - 2 * _double_angle_sin(num=num / 2, x=x)
+    if num % 2 == 0:
+        return 1 - 2 * _double_angle_sin(num=num / 2, x=x)
+    if num == 3:
+        return -3 * cos(x) + 4 * cos(x) ** 3
+    if num % 3 == 0:
+        t = _double_angle_cos(num / 3, x)
+        return -3 * t + 4 * t**3
+    return cos(num * x)
 
 
 def double_angle(expr: Expr) -> Optional[Expr]:
     """Applies double angle
     Used in simplify
+
+    Using these identities:
+    sin(2x) = 2sin(x)cos(x)
+    cos(2x) = 1 - 2 * sin^2(x)
 
     Assumes that expr.has(TrigFunctionNotInverse) == True
     """
@@ -184,10 +197,6 @@ def double_angle(expr: Expr) -> Optional[Expr]:
 
     x = out["matches"][any_.key]
     num = out["matches"]["even_number"]
-
-    # Using these identities:
-    # sin(2x) = 2sin(x)cos(x)
-    # cos(2x) = 1 - 2 * sin^2(x)
 
     if isinstance(expr, sin):
         final = _double_angle_sin(num=num, x=x)
