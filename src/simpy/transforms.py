@@ -149,7 +149,7 @@ class Node:
             return True
 
         if not self.children:
-            # if it has no children and it's not "FAILURE", it means this node is an unfinished leaf (or a solution).
+            # If this node has no children and it's not "FAILURE", it is an unfinished leaf (or a solution).
             return False
 
         if self.type == "OR":
@@ -176,9 +176,10 @@ class Node:
 
 
 class Transform(ABC):
-    "An integral transform -- base class"
+    """An integral transform -- base class
 
-    # forward and backward modify the nodetree directly. check is a pure function
+    The methods forward and backward modify the nodetree directly; check is a pure function.
+    """
 
     def __init__(self):
         pass
@@ -364,17 +365,11 @@ def _get_last_heuristic_transform(node: Node, tup=(PullConstant, Additivity)):
     tup: tuple of transform classes to exclude from the search.
     """
     if isinstance(node.transform, tup):
-        # We'll let polynomial division go because it changes things sufficiently that
-        # we actually sorta make progress towards the integral.
-        # PullConstant and Additivity are like fake, they dont make any substantial changes.
-        # Expand is also like, idk, if we do A and then expand we dont rlly wanna do A again.
+        # We're not including PolynomialDivision because it changes the structure of exprs sufficiently.
+        # PullConstant and Additivity are fake; they dont make any substantial changes.
 
-        # Alternatively, we could just make sure that the last transform didnt have the same
-        # key. (but no the lecture example has B tan then polydiv then C tan)
-
-        # Idk this thing rn is a lil messy and there might be a better way to do it.
-
-        # 05/13/2024: no more expand bc it's not even a "safe transform" anymore lwk.
+        # 05/13/2024: We're not including expand because it's not a "safe transform" anymore.
+        # (See note at bottom of this file.)
         return _get_last_heuristic_transform(node.parent, tup)
     return node.transform
 
@@ -471,9 +466,9 @@ class RewriteTrig(Transform):
         if super().check(node) is False:
             return False
 
-        # make sure that this node didn't get here by this transform
-        # lots of time, rewriting trig would make it naturally expand.
-        # without this including expand, csc^2 did not get solved depth-first.
+        # make sure that this node didn't get here by RewriteTrig
+        # oftentimes, rewriting trig would make expr naturally expand.
+        # without this including Expand, csc^2 did not get solved depth-first.
         t = _get_last_heuristic_transform(node, (Additivity, PullConstant, Expand))
         if isinstance(t, RewriteTrig):
             return False
@@ -506,8 +501,8 @@ class InverseTrigUSub(USub):
         node.add_child(new_node)
         self._u = var_change(node.var)
 
-        # I feel like you already know that it's gonna be pythagorean-simplified so why not just tack
-        # that on right now
+        # We already know that the end result will have to be pythagorean-simplified, so why not just tack
+        # that on right now?
         second_transform = Simplify()
         if second_transform.check(new_node):
             second_transform.forward(new_node)
@@ -518,8 +513,7 @@ class InverseTrigUSub(USub):
 
         t = _get_last_heuristic_transform(node)
         if isinstance(t, TrigUSub2):
-            # If it just went through B, C is guaranteed to have a match.
-            # going through C will just undo B.
+            # going through InverseTrigUSub will just undo TrigUSub2.
             return False
 
         for k, v in self._table.items():
@@ -638,8 +632,7 @@ class LinearUSub(USub):
                 self._u = u
 
                 # If u_inverse exists, set it.
-                # it must be the same as any prev u_inverse because the same u implies the same
-                # u_inverse
+                # it must be the same as any prev u_inverse because the same u implies the same u_inverse
                 if u_inverse is not None:
                     self._inverse_var_change = u_inverse
                 return True
@@ -733,7 +726,6 @@ class ByParts(Transform):
             return False
 
         # check for more layers above -- if any of the integrands is the same, factor = 1 and it's a nogo.
-        # honestly this is a bit sad; why don't we just always check that a node doesn't appear in its parents?
         byparts_parents = ByParts._get_all_byparts_parents(node)
         old_byparts_integrands = [node.expr for node in byparts_parents]
         if integrand2 in old_byparts_integrands:
@@ -817,7 +809,6 @@ class ByParts(Transform):
             ###
 
             ### special case: when parent is same as you 2 layers above
-            # this isnt the most elegant but it works lol
             parent_byparts = self._get_last_byparts_parent(node)
             if parent_byparts:
                 second_factor = integrand2 / parent_byparts.expr
@@ -901,8 +892,7 @@ class PartialFractions(Transform):
                 return False
             denom = new
 
-        # ok im stupid so im gonna only do the case for 2 factors for now
-        # shouldnt be hard to generalize
+        # I'm gonna only do the case for 2 factors for now
         if len(denom.terms) != 2:
             return False
 
@@ -1084,7 +1074,7 @@ class CompleteTheSquare(Transform):
         # 1 / quadratic
         # 1 / sqrt(quadratic)
         def condition(expr: Expr) -> bool:
-            # 1 / xyz should be epxressed as a power so i omit prod check
+            # 1 / xyz should be expressed as a power so I omit Prod check
             if not isinstance(expr, Power):
                 return False
             if expr.exponent != Fraction(-1, 2) and expr.exponent != -1:
@@ -1094,8 +1084,7 @@ class CompleteTheSquare(Transform):
             except AssertionError:
                 return False
 
-            # hmm completing the square could work on non-quadratics in some cases no?
-            # but I'll just limit it to quadratics for now
+            # I'll limit it to quadratics for now
             return poly.size == 3 and poly[1] != 0
             # poly[1] = 0 implies that there's no bx term
             # which means that there's no square to complete.
@@ -1212,8 +1201,8 @@ class Simplify(Transform):
         node.parent.solution = node.solution
 
 
-# Leave RewriteTrig, InverseTrigUSub near the end bc they are deprioritized
-# and more fucky
+# Leave RewriteTrig, InverseTrigUSub near the end because they are deprioritized
+# and more funky
 # Do not include Simplify because it only is needed after InverseTrigUSub, and we just manually
 # trigger it.
 # Not including CompoundAngle because no integral has actually been solved with it (backwards is never called)
@@ -1235,7 +1224,7 @@ SAFE_TRANSFORMS: List[Type[Transform]] = [
     PullConstant,
     PartialFractions,
     PolynomialDivision,
-    Expand,  # expanding a fraction is not safe bc it destroys partialfractions. but if you put it after polynomial division & partial fractions, it doesn't cause any issues. more robust solution is to refactor & put expanding a fraction seperately as a heuristic transform, but idt this is necessary right now.
+    Expand,  # expanding a fraction is not safe because it destroys PartialFractions. But if you put Expand after PolynomialDivision & PartialFractions, it doesn't cause any issues.
     LinearUSub,
 ]
 
