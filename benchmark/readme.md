@@ -1,8 +1,13 @@
 ## Benchmarking
 
-I have a benchmarking suite in `benchmark.py`. As of this current commit (June 9th, 2025), the time taken is **0.19s** averaged across 100 runs with stdev 0.01. This is after doing a bunch of rote speed optimizations so it's probably the quickest I'd get for a while.
+I have a benchmarking suite in `benchmark.py`. As of this current commit (June 9th, 2025), the time taken is **0.19s** averaged across 100 runs with stdev 0.01.
 
-I want to have this here so that I can ensure that the time does not massively balloon with future modifications.
+History:
+
+- May 31, 2026: 0.21s. TrigUSub transform introduced. Its check is a bit expensive, at 0.039 cumtime in cprofile, but less expensive than InverseTrigSub's 0.041.
+- June 9, 2025: 0.19s. Benchmarking suite introduced. This is after doing two weeks of nitpicked, minute, rote speed optimizations, so it's probably the quickest I'd get for a while.
+
+I developed this benchmarking module here so that I can ensure that the time does not massively balloon with future modifications.
 
 ## Profiling
 

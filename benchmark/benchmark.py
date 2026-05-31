@@ -61,5 +61,5 @@ for _ in range(100):
 
 
 print(
-    f"Time taken: {statistics.mean(time_taken)}, averaged across {len(time_taken)} runs with stdev {statistics.stdev(time_taken)}"
+    f"Time taken: {statistics.mean(time_taken):.3f}, averaged across {len(time_taken)} runs with stdev {statistics.stdev(time_taken):.3f}"
 )
