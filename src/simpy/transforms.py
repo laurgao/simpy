@@ -989,6 +989,13 @@ class TrigUSub(USub):
         if super().check(node) is False:
             return False
 
+        # If there's no square root, we just abort. This should kill the majority of things tbh.
+        if not general_contains(
+            node.expr,
+            lambda expr: isinstance(expr, Power) and isinstance(expr.exponent, Rat) and expr.exponent.denominator == 2,
+        ):
+            return False
+
         def squared_integer_condition(expr: Expr) -> bool:
             return isinstance(expr, Rat) and isinstance(sqrt(expr), Rat)
 
