@@ -5,7 +5,7 @@ with open("README.md", encoding="utf-8") as f:
 
 setup(
     name="simpy",  # Replace with your package name
-    version="0.1.0",
+    version="1.1.0",
     packages=find_packages(where="src"),  # Tells setuptools to look for packages in the 'src' directory
     package_dir={"": "src"},  # Sets the root of packages to 'src'
     description="Computer algebra system & symbolic calculus",
