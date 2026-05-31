@@ -202,3 +202,34 @@ def test_more_complicated_trig():
     expr = tan(x) ** 5 * sec(x) ** 4
     expected_ans = tan(x) ** 6 / 6 + tan(x) ** 8 / 8
     assert_integral(expr, expected_ans)
+
+
+def test_trigonometric_substitution():
+    # that's this one: https://www.khanacademy.org/math/integral-calculus/ic-integration/ic-trig-substitution/e/integration-using-trigonometric-substitution
+    expr = (4 - x**2) ** Fraction(3, 2)
+    expected_ans = 5 * x * sqrt(1 - x**2 / 4) - x**3 * sqrt(1 - x**2 / 4) / 2 + 6 * asin(x / 2)
+    ans = integrate(expr)
+    assert_eq_plusc(expected_ans, ans)
+
+
+def test_trigonometric_substitution_tan_sub():
+    expr = 1 / (x**2 + 4) ** Fraction(3, 2)
+    ans = integrate(expr)
+    expected_ans = x / (8 * sqrt(x**2 / 4 + 1))
+    assert_eq_plusc(expected_ans, ans)
+
+
+def test_trig_sub_sec_sub():
+    # this one is not from KH
+    # perhaps I should stop sorting tests using KH or not but through transform.
+    expr = 3 * (25 - x**2) ** Fraction(5 / 2)
+    ans = integrate(expr)
+    expected_ans = (
+        9375 * x * (-(x**2) / 25 + 1) ** (3 / 2) / 8
+        + 84375 * x * sqrt(-(x**2) / 25 + 1) / 16
+        - 375 * x**3 * sqrt(-(x**2) / 25 + 1) / 4
+        - 125 * x**3 * (-(x**2) / 25 + 1) ** (3 / 2) / 2
+        + 234375 * asin(x / 5) / 16
+    )
+    # not the simplest answer, butfurther simplifications are currently beyond the scope of SimPy.
+    assert_eq_plusc(ans, expected_ans)

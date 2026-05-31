@@ -5,6 +5,8 @@ venv*/
 coverage.xml
 sandbox/
 
+# working benchmark directory
+b/
 
 # from pip install -e .
 *.egg-info/

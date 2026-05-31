@@ -1,7 +1,9 @@
 from typing import List, Optional, Union
 
-from ..expr import Expr, Power, Prod, Rat, Sum, cos, remove_const_factor, sin
+from ..expr import Expr, Power, Prod, Rat, Sum, TrigFunctionNotInverse, cos, nesting, remove_const_factor, sin
+from ..regex import Any_, any_, eq
 from ..utils import count_symbols
+from .utils import is_simpler
 
 
 def _perform_on_terms(
@@ -136,4 +138,78 @@ def product_to_sum(expr: Expr) -> Optional[Expr]:
 
     if len(final.terms) == len(expr.terms) and count_symbols(final) < count_symbols(expr):
         # This ensures that e.g. 2*cos(x)*sin(2*x)/3 - cos(2*x)*sin(x)/3 simplifies to -2*sin(x)**3/3 + sin(x)
+        return final
+
+
+# these two private functions are inter recursive.
+def _double_angle_sin(num: Expr, x: Expr) -> Expr:
+    if num == 2:
+        final = 2 * sin(x) * cos(x)
+    elif num == 3:
+        final = 3 * sin(x) - 4 * sin(x) ** 3
+    elif num == 4:
+        final = 4 * sin(x) * cos(x) - 8 * sin(x) ** 3 * cos(x)
+    elif num % 2 == 0:
+        final = 2 * _double_angle_sin(num / 2, x) * _double_angle_cos(num / 2, x)
+    elif num % 3 == 0:
+        t = _double_angle_sin(num / 3, x)
+        final = 3 * t - 4 * t**3
+    else:
+        return sin(num * x)
+    return final
+
+
+def _double_angle_cos(num: Expr, x: Expr) -> Expr:
+    if num == 2:
+        return 1 - 2 * sin(x) ** 2
+    if num % 2 == 0:
+        return 1 - 2 * _double_angle_sin(num=num / 2, x=x)
+    if num == 3:
+        return -3 * cos(x) + 4 * cos(x) ** 3
+    if num % 3 == 0:
+        t = _double_angle_cos(num / 3, x)
+        return -3 * t + 4 * t**3
+    return cos(num * x)
+
+
+def double_angle(expr: Expr) -> Optional[Expr]:
+    """Applies double angle
+    Used in simplify
+
+    Using these identities:
+    sin(2x) = 2sin(x)cos(x)
+    cos(2x) = 1 - 2 * sin^2(x)
+
+    Assumes that expr.has(TrigFunctionNotInverse) == True
+    """
+
+    if not isinstance(expr, (sin, cos)):
+        return
+
+    any_even_number = Any_(
+        "even_number", lambda expr: isinstance(expr, Rat) and expr.denominator == 1 and expr % 2 == 0, is_constant=True
+    )
+    query = any_even_number * any_
+    out = eq(expr.inner, query)
+
+    if not out["success"]:
+        return
+
+    x = out["matches"][any_.key]
+    num = out["matches"]["even_number"]
+
+    if isinstance(expr, sin):
+        final = _double_angle_sin(num=num, x=x)
+    else:
+        final = _double_angle_cos(num=num, x=x)
+
+    if not final.has(TrigFunctionNotInverse) or is_simpler(final, expr):
+        # If final doesn't have any trig functions, it's definitely simpler.
+        # this condition can def be ... improved.
+        # currently im basing it off of the
+        # sin(4*asin(x/2)) -> 2*x*sqrt(-x^2/4 + 1) - x^3*sqrt(-x^2/4 + 1)
+        # case.
+        # that is not simpler by any other metric other than it doesn't have the sin(asin) nesting.
+        # nesting of 2 trig funcs is always ugly. maybe the most robust metric should just rid those ugly
+        # nests.
         return final

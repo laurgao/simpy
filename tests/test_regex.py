@@ -2,7 +2,7 @@ import pytest
 from test_utils import x, y
 
 from simpy.expr import *
-from simpy.regex import Any_, any_, eq
+from simpy.regex import Any_, any_, any_constant, contains, eq
 
 
 def test_any_basic():
@@ -16,6 +16,14 @@ def test_sort_anys():
     assert sin(any_) * sec(any_) == sec(any_) * sin(any_)
     assert eq(sin(any_) * sec(any_), sec(x) * sin(x))
     assert eq(sin(x) * sec(x), sec(any_) * sin(any_))
+
+
+def test_eq_with_different_anys():
+    any2 = Any_()
+    expr = sin(x) + cos(y)
+    query = sin(any_) + cos(any2)
+    out = eq(expr, query)
+    assert out["success"]
 
 
 @pytest.mark.parametrize(
@@ -94,4 +102,65 @@ def test_cofounder():
     expr = -sin(t * w) ** 2 - cos(t * w) ** 2
     query = -sin(any_) ** 2 + 1
     out = eq(expr, query, up_to_factor=True, up_to_sum=True)
+    assert out["success"] is False
+
+
+def test_any_constant():
+    # Tests that any_constant matches constants.
+    expr = 2 * x + 3
+    query = 2 * x + any_constant
+    out = eq(expr, query)
+    assert out["success"]
+    assert out["matches"] == 3
+
+    expr = 2 * x + 5 * y
+    query = 2 * x + any_constant * y
+    out = eq(expr, query)
+    assert out["success"]
+    assert out["matches"] == 5
+
+
+def test_any_constant_fail():
+    # Tests that any_constant does not match variables.
+    expr = 2 * x + y
+    query = 2 * x + any_constant
+    out = eq(expr, query)
+    assert not out["success"]
+
+
+def test_any_constant_with_multiple_anys():
+    expr = 2 * x + 3
+    query = 2 * any_ + any_constant
+    out = eq(expr, query)
+    assert out["success"]
+
+
+def test_contains():
+    query = log(sin(any_) ** 2 + cos(any_) ** 2)
+    expr = (log(sin(x) ** 2 + cos(x) ** 2) + 3) ** 2
+    assert contains(expr, query)["success"]
+    assert contains(expr, query)["matches"] == x
+
+
+def test_contains_fail():
+    query = log(sin(any_) ** 2 + cos(any_) ** 2)
+    expr = (log(sin(x) ** 2 + cos(x) ** 3) + 3) ** 2 + 1
+    assert not contains(expr, query)["success"]
+
+
+def test_any_even_condition():
+    expr = x + y
+    any_even_number = Any_(
+        "even_number", lambda expr: isinstance(expr, Rat) and expr.denominator == 1 and expr % 2 == 0, is_constant=True
+    )
+    query = any_even_number * any_
+    out = eq(expr, query)
+    assert out["success"] is False
+
+
+def test_any_symbol_condition():
+    expr = x + 2
+    any_symbol = Any_("symbol", lambda expr: isinstance(expr, Symbol))
+    query = any_symbol * any_
+    out = eq(expr, query)
     assert out["success"] is False

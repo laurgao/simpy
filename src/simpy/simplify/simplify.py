@@ -20,8 +20,9 @@ from ..expr import (
     tan,
 )
 from ..regex import any_, eq, general_contains, kinder_replace, kinder_replace_many, replace_class, replace_factory
-from ..utils import ExprFn, count_symbols
-from .product_to_sum import product_to_sum
+from ..utils import ExprFn
+from .product_to_sum import double_angle, product_to_sum
+from .utils import is_simpler
 
 
 def expand_logs(expr: Expr, **kwargs) -> Expr:
@@ -127,10 +128,6 @@ def _pythagorean_perform(sum: Expr) -> Optional[Expr]:
             inner = result["matches"]
             rest = result["rest"]
             return factor * perform(inner) + rest
-
-    # other_table = [
-    #     (r"^sec\((.+)\)\^2$", r"^-tan\((.+)\)\^2$", Const(1)),
-    # ]
 
 
 def _pythagorean_complex_perform(sum: Expr) -> Optional[Expr]:
@@ -247,7 +244,7 @@ def reciprocate_trigs(expr: Expr, **kwargs) -> Expr:
 def simplify(expr: Expr) -> Expr:
     """Simplifies an expression.
 
-    This is the general one that does all heuristics & is for aesthetics (& comparisons).
+    This is the general simplification function that does all heuristics & is for aesthetics (& comparisons).
     Use more specific simplification functions in integration please.
     """
     if expr.expandable():
@@ -270,7 +267,7 @@ def simplify(expr: Expr) -> Expr:
     return expr
 
 
-def trig_simplify(expr):
+def trig_simplify(expr: Expr) -> Tuple[Expr, bool]:
     # reciprocate and combine trigs is last because sometimes the pythag complex simplification will
     # generate new trigs in the num/denom that can be simplified down.
     expr, is_hit_1 = kinder_replace_many(
@@ -281,10 +278,15 @@ def trig_simplify(expr):
     )
     expr, is_hit_2 = kinder_replace_many(
         expr,
-        [_combine_trigs, product_to_sum, sectan],
+        [_combine_trigs, product_to_sum, double_angle, sectan],
         overarching_cond=lambda x: x.has(TrigFunctionNotInverse),
         verbose=True,
     )
+    # sometimes, the double angle will change a non-sum to a sum, so we need to check again for possible expanding.
+    if is_hit_2 and expr.expandable():
+        # q: should we check that the expanded stuff is simpler? for now im not doing that.
+        # because it is a bit expensive and we can do that later if we want.
+        expr = expr.expand()
     return expr, is_hit_1 or is_hit_2
 
 
@@ -342,7 +344,7 @@ def sectan(sum: Expr) -> Optional[Expr]:
 
     for s in secs:
         new = replace_factory(condition, perform)(s)
-        new = new.expand() if new.expandable() else s
+        new = new.expand() if new.expandable() else new
         assert isinstance(new, Sum)
         tans.extend(new.terms)
 
@@ -351,17 +353,8 @@ def sectan(sum: Expr) -> Optional[Expr]:
         # This must mean that we simplified the sum into one term
         return new_sum
 
-    if len(new_sum.terms) < sum.terms:
+    if is_simpler(new_sum, sum):
         return new_sum
 
-
-def is_simpler(e1, e2) -> bool:
-    """returns whether e1 is simpler than e2"""
-    c1 = count_symbols(e1)
-    c2 = count_symbols(e2)
-    return c1 < c2
-    # if c1 < c2:
-    #     return True
-    # if c1 == c2:
-    #     return len(repr(e1)) < len(repr(e2))
-    # return False
+    # if we didn't simplify, return original
+    return sum

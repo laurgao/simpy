@@ -68,6 +68,19 @@ def test_pts():
     assert_simplified(e1, e2)
 
 
+def test_sectan_simple():
+    expr = sec(x) ** 2 - tan(x) ** 2
+    assert_simplified(expr, 1)
+
+
+def test_sectan_plus():
+    # this one shouldn't be simplified to 1
+    # but it can be rewritten to 1 + 2 * tan(x) ** 2
+    # the fact that we replace sec^2(x) with tan^2(x) + 1 instead of the other way around is kinda arbitrary.
+    expr2 = sec(x) ** 2 + tan(x) ** 2
+    assert_simplified(expr2, 1 + 2 * tan(x) ** 2)
+
+
 def test_sectan():
     # need to replace sec^2(x) with tan^2(x) + 1
     e1 = 1 / (4 * cos(x) ** 4) - 1 / (3 * cos(x) ** 6) + 1 / (8 * cos(x) ** 8)

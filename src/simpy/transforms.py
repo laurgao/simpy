@@ -17,6 +17,7 @@ from .expr import (
     Symbol,
     TrigFunction,
     TrigFunctionNotInverse,
+    acos,
     asin,
     atan,
     cos,
@@ -33,7 +34,7 @@ from .expr import (
 from .integral_table import check_integral_table
 from .linalg import invert
 from .polynomial import Polynomial, is_polynomial, polynomial_to_expr, rid_ending_zeros, to_const_polynomial
-from .regex import count, general_contains, replace, replace_class, replace_factory
+from .regex import Any_, contains, count, general_contains, replace, replace_class, replace_factory
 from .simplify import pythagorean_simplification
 from .simplify.product_to_sum import product_to_sum_unit
 from .utils import ExprFn, eq_with_var, random_id
@@ -148,7 +149,7 @@ class Node:
             return True
 
         if not self.children:
-            # if it has no children and it's not "FAILURE", it means this node is an unfinished leaf (or a solution).
+            # If this node has no children and it's not "FAILURE", it is an unfinished leaf (or a solution).
             return False
 
         if self.type == "OR":
@@ -175,9 +176,10 @@ class Node:
 
 
 class Transform(ABC):
-    "An integral transform -- base class"
+    """An integral transform -- base class
 
-    # forward and backward modify the nodetree directly. check is a pure function
+    The methods forward and backward modify the nodetree directly; check is a pure function.
+    """
 
     def __init__(self):
         pass
@@ -211,6 +213,7 @@ class Transform(ABC):
 class USub(Transform, ABC):
     """Base class for u-substituion transforms."""
 
+    # u (new var) written in terms of x (old var)
     _u: Expr = None
 
     def backward(self, node: Node) -> None:
@@ -362,23 +365,15 @@ def _get_last_heuristic_transform(node: Node, tup=(PullConstant, Additivity)):
     tup: tuple of transform classes to exclude from the search.
     """
     if isinstance(node.transform, tup):
-        # We'll let polynomial division go because it changes things sufficiently that
-        # we actually sorta make progress towards the integral.
-        # PullConstant and Additivity are like fake, they dont make any substantial changes.
-        # Expand is also like, idk, if we do A and then expand we dont rlly wanna do A again.
+        # We're not including PolynomialDivision because it changes the structure of exprs sufficiently.
+        # PullConstant and Additivity are fake; they dont make any substantial changes.
 
-        # Alternatively, we could just make sure that the last transform didnt have the same
-        # key. (but no the lecture example has B tan then polydiv then C tan)
-
-        # Idk this thing rn is a lil messy and there might be a better way to do it.
-
-        # 05/13/2024: no more expand bc it's not even a "safe transform" anymore lwk.
+        # 05/13/2024: We're not including expand because it's not a "safe transform" anymore.
+        # (See note at bottom of this file.)
         return _get_last_heuristic_transform(node.parent, tup)
     return node.transform
 
 
-# Let's just add all the transforms we've used for now.
-# and we will make this shit good and generalized later.
 class TrigUSub2(USub):
     """
     u-sub of a trig function
@@ -410,8 +405,8 @@ class TrigUSub2(USub):
         if super().check(node) is False:
             return False
 
-        # Since B and C essentially undo each other, we want to make sure that the last
-        # heuristic transform wasn't C.
+        # Since TrigUSub2 and InverseTrigUSub essentially undo each other, we want to make sure that the last
+        # heuristic transform wasn't InverseTrigUSub.
 
         t = _get_last_heuristic_transform(node)
         if isinstance(t, InverseTrigUSub):
@@ -471,9 +466,9 @@ class RewriteTrig(Transform):
         if super().check(node) is False:
             return False
 
-        # make sure that this node didn't get here by this transform
-        # lots of time, rewriting trig would make it naturally expand.
-        # without this including expand, csc^2 did not get solved depth-first.
+        # make sure that this node didn't get here by RewriteTrig
+        # oftentimes, rewriting trig would make expr naturally expand.
+        # without this including Expand, csc^2 did not get solved depth-first.
         t = _get_last_heuristic_transform(node, (Additivity, PullConstant, Expand))
         if isinstance(t, RewriteTrig):
             return False
@@ -506,8 +501,8 @@ class InverseTrigUSub(USub):
         node.add_child(new_node)
         self._u = var_change(node.var)
 
-        # I feel like you already know that it's gonna be pythagorean-simplified so why not just tack
-        # that on right now
+        # We already know that the end result will have to be pythagorean-simplified, so why not just tack
+        # that on right now?
         second_transform = Simplify()
         if second_transform.check(new_node):
             second_transform.forward(new_node)
@@ -518,8 +513,7 @@ class InverseTrigUSub(USub):
 
         t = _get_last_heuristic_transform(node)
         if isinstance(t, TrigUSub2):
-            # If it just went through B, C is guaranteed to have a match.
-            # going through C will just undo B.
+            # going through InverseTrigUSub will just undo TrigUSub2.
             return False
 
         for k, v in self._table.items():
@@ -638,8 +632,7 @@ class LinearUSub(USub):
                 self._u = u
 
                 # If u_inverse exists, set it.
-                # it must be the same as any prev u_inverse because the same u implies the same
-                # u_inverse
+                # it must be the same as any prev u_inverse because the same u implies the same u_inverse
                 if u_inverse is not None:
                     self._inverse_var_change = u_inverse
                 return True
@@ -733,7 +726,6 @@ class ByParts(Transform):
             return False
 
         # check for more layers above -- if any of the integrands is the same, factor = 1 and it's a nogo.
-        # honestly this is a bit sad; why don't we just always check that a node doesn't appear in its parents?
         byparts_parents = ByParts._get_all_byparts_parents(node)
         old_byparts_integrands = [node.expr for node in byparts_parents]
         if integrand2 in old_byparts_integrands:
@@ -817,7 +809,6 @@ class ByParts(Transform):
             ###
 
             ### special case: when parent is same as you 2 layers above
-            # this isnt the most elegant but it works lol
             parent_byparts = self._get_last_byparts_parent(node)
             if parent_byparts:
                 second_factor = integrand2 / parent_byparts.expr
@@ -901,8 +892,7 @@ class PartialFractions(Transform):
                 return False
             denom = new
 
-        # ok im stupid so im gonna only do the case for 2 factors for now
-        # shouldnt be hard to generalize
+        # I'm gonna only do the case for 2 factors for now
         if len(denom.terms) != 2:
             return False
 
@@ -966,6 +956,112 @@ class GenericUSub(USub):
         self._u = self._u
 
 
+asec = lambda x: acos(1 / x)
+
+
+class TrigUSub(USub):
+    """This is the substitution of the form x = 4*cos(theta)
+
+    If the integrand contains sqrt(a^2 - x^2), sqrt(a^2 + x^2), or sqrt(-a^2 + x^2),
+    you can do this trig sub.
+    3 cases:
+    1. sqrt(a^2 - x^2): x = a*sin(theta)
+    2. sqrt(a^2 + x^2): x = a*tan(theta)
+    3. sqrt(-a^2 + x^2): x = a*sec(theta)
+    """
+
+    _a: Rat = None  # constant in the square root
+    _exponent: Rat = None  # exponent of the square root (includes the square root, is a fraction w denom = 2)
+    _case: int = None  # 0 for sqrt(a^2 - x^2), 1 for sqrt(a^2 + x^2), 2 for sqrt(-a^2 + x^2)
+
+    def check(self, node: Node):
+        """Check if node.expr contains sqrt(a^2 - x^2) or sqrt(a^2 + x^2) or sqrt(-a^2 + x^2) where a is a constant."""
+        if super().check(node) is False:
+            return False
+
+        # If there's no square root, we just abort. This should kill the majority of things tbh.
+        if not general_contains(
+            node.expr,
+            lambda expr: isinstance(expr, Power) and isinstance(expr.exponent, Rat) and expr.exponent.denominator == 2,
+        ):
+            return False
+
+        def squared_integer_condition(expr: Expr) -> bool:
+            return isinstance(expr, Rat) and isinstance(sqrt(expr), Rat)
+
+        a_squared = Any_("squared_integer", squared_integer_condition, is_constant=True)
+        any_square_root_exponent = Any_(
+            "square_root_exponent", lambda expr: isinstance(expr, Rat) and expr.denominator == 2, is_constant=True
+        )
+        queries = [
+            (a_squared - node.var**2) ** any_square_root_exponent,
+            (node.var**2 + a_squared) ** any_square_root_exponent,
+            (node.var**2 - a_squared) ** any_square_root_exponent,
+        ]
+        for i, query in enumerate(queries):
+            out = contains(node.expr, query)
+            if out["success"]:
+                self._a = sqrt(out["matches"]["squared_integer"])
+                self._exponent = out["matches"]["square_root_exponent"]
+                self._case = i
+                return True
+
+        return False
+
+    def forward(self, node: Node) -> None:
+        theta = generate_intermediate_var()
+        a = self._a
+        x = node.var
+        if self._case == 0:
+            # in the case of sqrt(a^2 - x^2):
+            # x = a * sin(theta)
+            # dx = a * cos(theta) d(theta)
+            dx_dtheta = a * cos(theta)
+
+            # so we replace x = a * sin(theta), this effectively leads to
+            # replacing sqrt(a^2 - x^2) = a * cos^2(theta)
+            theta_expr = replace(
+                node.expr,
+                (a**2 - x**2) ** self._exponent,
+                (a * cos(theta)) ** self._exponent.numerator,
+            )
+            if theta_expr.contains(x):
+                theta_expr = replace(theta_expr, x, a * sin(theta))
+            self._u = asin(x / a)  # theta in terms of x
+
+        elif self._case == 1:
+            # in th cas of sqrt(a^2 + x^2)
+            # x = a * tan(theta)
+            # dx = a * sec(theta) ** 2 * d(theta)
+            dx_dtheta = self._a * sec(theta) ** 2
+
+            # sqrt(a^2 + x^2) = a * sec(theta)
+            theta_expr = replace(
+                node.expr,
+                (a**2 + x**2) ** self._exponent,
+                (a * sec(theta)) ** self._exponent.numerator,
+            )
+            if theta_expr.contains(node.var):
+                theta_expr = replace(theta_expr, x, a * tan(theta))
+            self._u = atan(x / a)  # theta in terms of x
+
+        else:
+            # x = a * sec(theta)
+            dx_dtheta = a * sec(theta) * tan(theta)
+            # sqrt(a^2 + x^2) = a * tan(theta)
+            theta_expr = replace(
+                node.expr,
+                (-(a**2) + x**2) ** self._exponent,
+                (a * tan(theta)) ** self._exponent.numerator,
+            )
+            if theta_expr.contains(x):
+                theta_expr = replace(theta_expr, x, a * sec(theta))
+            self._u = asec(x / a)  # theta in terms of x
+
+        new_integrand = theta_expr * dx_dtheta
+        node.add_child(Node(new_integrand, theta, self, node))
+
+
 class CompleteTheSquare(Transform):
     """Integration via completing the square"""
 
@@ -978,7 +1074,7 @@ class CompleteTheSquare(Transform):
         # 1 / quadratic
         # 1 / sqrt(quadratic)
         def condition(expr: Expr) -> bool:
-            # 1 / xyz should be epxressed as a power so i omit prod check
+            # 1 / xyz should be expressed as a power so I omit Prod check
             if not isinstance(expr, Power):
                 return False
             if expr.exponent != Fraction(-1, 2) and expr.exponent != -1:
@@ -988,8 +1084,7 @@ class CompleteTheSquare(Transform):
             except AssertionError:
                 return False
 
-            # hmm completing the square could work on non-quadratics in some cases no?
-            # but I'll just limit it to quadratics for now
+            # I'll limit it to quadratics for now
             return poly.size == 3 and poly[1] != 0
             # poly[1] = 0 implies that there's no bx term
             # which means that there's no square to complete.
@@ -1106,8 +1201,8 @@ class Simplify(Transform):
         node.parent.solution = node.solution
 
 
-# Leave RewriteTrig, InverseTrigUSub near the end bc they are deprioritized
-# and more fucky
+# Leave RewriteTrig, InverseTrigUSub near the end because they are deprioritized
+# and more funky
 # Do not include Simplify because it only is needed after InverseTrigUSub, and we just manually
 # trigger it.
 # Not including CompoundAngle because no integral has actually been solved with it (backwards is never called)
@@ -1120,6 +1215,7 @@ HEURISTICS: List[Type[Transform]] = [
     RewriteTrig,
     RewritePythagorean,
     InverseTrigUSub,
+    TrigUSub,
     CompleteTheSquare,
     GenericUSub,
 ]
@@ -1128,7 +1224,7 @@ SAFE_TRANSFORMS: List[Type[Transform]] = [
     PullConstant,
     PartialFractions,
     PolynomialDivision,
-    Expand,  # expanding a fraction is not safe bc it destroys partialfractions. but if you put it after polynomial division & partial fractions, it doesn't cause any issues. more robust solution is to refactor & put expanding a fraction seperately as a heuristic transform, but idt this is necessary right now.
+    Expand,  # expanding a fraction is not safe because it destroys PartialFractions. But if you put Expand after PolynomialDivision & PartialFractions, it doesn't cause any issues.
     LinearUSub,
 ]
 

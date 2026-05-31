@@ -1,0 +1,69 @@
+Integrand: time taken (s)
+
+-5*x^4/(-x^2 + 1)^(5/2): 0.04475522041320801
+sec(x)^4*tan(x)^5: 0.03736710548400879
+1/sqrt(-x^2 + 10*x + 11): 0.03586149215698242
+5*csc(x)^2: 0.024890422821044922
+x^2/sqrt(-x^3 + 1): 0.018315792083740234
+cos(2*x)*sin(2*x)*sin(x): 0.01829838752746582
+sin(x)^5: 0.01635146141052246
+sec(2*x)*tan(2*x): 0.01612257957458496
+sin(x)^2*cos(x)^3: 0.015673398971557617
+asin(x): 0.015305519104003906
+sin(pi*x)*x^2: 0.013110876083374023
+cos(w*x)*cos(w*x - phi): 0.012760639190673828
+ln(x + 6)/x^2: 0.011552810668945312
+sin(2*x)/cos(2*x): 0.011282205581665039
+tan(x)^4: 0.010342836380004883
+2*cot(x)*csc(x): 0.00965428352355957
+cos(x)^2: 0.009435415267944336
+cos(w*x)*sin(w*x): 0.007549285888671875
+e^x/(e^x + 1): 0.007300615310668945
+sin(x)^2: 0.00646519660949707
+x*e^(-x): 0.004161834716796875
+x*cos(x): 0.003970623016357422
+(2*x - 5)^10: 0.0015900135040283203
+(x - 5)/(-2*x + 2): 0.0001361370086669922
+(x + 8)/(x*(x + 6)): 0.00010752677917480469
+6*e^x: 8.130073547363281e-05
+
+
+
+Solution tree of the integral with most time spent: 
+[0]  {5} -5*x^4/(-x^2 + 1)^(5/2)                             -5*(x^3/(3*(-x^2 + 1)^(3/2)) - x/sqrt(-x^2 + 1)...  (NoneType) (solved)
+[1]  {5} x^4/(-x^2 + 1)^(5/2)                                x^3/(3*(-x^2 + 1)^(3/2)) - x/sqrt(-x^2 + 1) + a...  (PullConstant) (solved)
+[2]  {6} cos(u_2)*sin(u_2)^4/(-sin(u_2)^2 + 1)^(5/2)         tan(u_2)^3/3 - tan(u_2) + u_2                       (InverseTrigUSub) (solved)
+[3]  {4} sin(u_2)^4/cos(u_2)^4                               tan(u_2)^3/3 - tan(u_2) + u_2                       (Simplify) (solved)
+[4]  {3} tan(u_2)^4                                          tan(u_2)^3/3 - tan(u_2) + u_2                       (RewriteTrig) (solved)
+[5]  {4} (u_3)^4/((u_3)^2 + 1)                               (u_3)^3/3 + atan(u_3) - u_3                         (TrigUSub2) (solved)
+[6]  {4} 1/((u_3)^2 + 1) + (u_3)^2 - 1                       (u_3)^3/3 + atan(u_3) - u_3                         (PolynomialDivision) (solved)
+[7]  {4} 1/((u_3)^2 + 1)                                     atan(u_3)                                           (Additivity) (solved)
+[8]  {5} sec(u_4)^2/(tan(u_4)^2 + 1)                         u_4                                                 (InverseTrigUSub) (solved)
+[9]  {0} 1                                                   u_4                                                 (Simplify) (SOLUTION)
+
+[7]  {2} (u_3)^2                                             (u_3)^3/3                                           (Additivity) (SOLUTION)
+
+[7]  {0} -1                                                  -(u_3)                                              (Additivity) (SOLUTION)
+
+
+
+
+[0]  {5} -5*x^4/(-x^2 + 1)^(5/2)                               (NoneType) (solved)
+[1]  {5} x^4/(-x^2 + 1)^(5/2)                                  (PullConstant) (solved)
+[2]  {6} cos(u_2)*sin(u_2)^4/(-sin(u_2)^2 + 1)^(5/2)           (InverseTrigUSub) (solved)
+[3]  {4} sin(u_2)^4/cos(u_2)^4                                 (Simplify) (solved)
+[4]  {3} tan(u_2)^4                                            (RewriteTrig) (solved)
+[5]  {4} (u_3)^4/((u_3)^2 + 1)                                 (TrigUSub2) (solved)
+[6]  {4} 1/((u_3)^2 + 1) + (u_3)^2 - 1                         (PolynomialDivision) (solved)
+[7]  {4} 1/((u_3)^2 + 1)                                       (Additivity) (solved)
+[8]  {5} sec(u_4)^2/(tan(u_4)^2 + 1)                           (InverseTrigUSub) (solved)
+[9]  {0} 1                                                     (Simplify) (SOLUTION)
+
+[7]  {2} (u_3)^2                                               (Additivity) (SOLUTION)
+
+[7]  {0} -1                                                    (Additivity) (SOLUTION)
+
+[4]  {3} 1/cot(u_2)^4                                          (RewriteTrig) (FAILURE)
+
+[2]  {4} sin(u_5)^4/cos(u_5)^4                                 (TrigUSub) (stale) (UNSET)
+

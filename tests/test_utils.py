@@ -35,14 +35,14 @@ def _assert_eq_plusc(a, b, *vars) -> Tuple[bool, Expr]:
     diff = a - b
     if len(diff.symbols()) == 0 or vars and all(var not in diff.symbols() for var in vars):
         return True, None
-    diff = simplify_to_same_standard(diff)
+    diff = _simplify_to_same_standard(diff)
     if not vars:
         return len(diff.symbols()) == 0, diff
     else:
         return all(var not in diff.symbols() for var in vars), diff
 
 
-def simplify_to_same_standard(expr: Expr) -> Expr:
+def _simplify_to_same_standard(expr: Expr) -> Expr:
     if expr.expandable():
         expr2 = expr.expand()
     else:
@@ -62,8 +62,8 @@ def assert_eq_value(a: Expr, b: Expr):
     """Tests that the values of a & b are the same in spirit, regardless of how they are represented with the Expr data structures."""
     if a == b:
         return
-    diff = simplify_to_same_standard(a - b)
-    assert diff == 0, f"a != b, {simplify_to_same_standard(a)} != {simplify_to_same_standard(b)}"
+    diff = _simplify_to_same_standard(a - b)
+    assert diff == 0, f"a != b, {_simplify_to_same_standard(a)} != {_simplify_to_same_standard(b)}"
 
 
 @cast
