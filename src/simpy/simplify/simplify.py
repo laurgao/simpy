@@ -129,14 +129,6 @@ def _pythagorean_perform(sum: Expr) -> Optional[Expr]:
             rest = result["rest"]
             return factor * perform(inner) + rest
 
-    # right now we are doing the sec/tan simplification in a separate function because its implementation is a bit more
-    # complex?
-    # but i feel like maybe ideally it should be in this function along with cos^2(x) + sin^2(x) = 1 and we can have
-    # them both done together with more advanced regex. but for now, this is fine!
-    # other_table = [
-    #     (r"^sec\((.+)\)\^2$", r"^-tan\((.+)\)\^2$", Const(1)),
-    # ]
-
 
 def _pythagorean_complex_perform(sum: Expr) -> Optional[Expr]:
     """Assumes sum.has(TrigFunction is true.)"""
